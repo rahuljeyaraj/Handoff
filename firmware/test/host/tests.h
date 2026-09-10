@@ -12,7 +12,6 @@ void test_vcard(void);
 void test_frag(void);
 void test_store(void);
 void test_carousel(void);
-void test_elect(void);
 void test_beacon(void);
 void test_link(void);
 void test_vectors(void);

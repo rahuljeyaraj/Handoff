@@ -32,9 +32,10 @@ void test_link(void)
     }
 
     /*
-     * The headline: two nodes, one simulated channel, injected time and
-     * injected randomness. Roles elect, the carousel runs both ways, and both
-     * ends end up holding the other's card. No hardware, at M1.
+     * The headline: two nodes, one simulated channel, injected time. The
+     * carousel runs both ways and both ends end up holding the other's card.
+     * No hardware, at M1. Who talks first is given here rather than
+     * discovered — see sim_twonode.h, and test_beacon.c for the discovery.
      */
     hf_begin("link: a clean handshake exchanges both cards");
     {
@@ -52,8 +53,8 @@ void test_link(void)
         HF_CHECK(r.a_has_b);
         HF_CHECK(r.b_has_a);
 
-        /* Exactly one initiator and one target — never two of either. */
-        HF_CHECK_MSG((r.role_a == ELECT_ROLE_INITIATOR) != (r.role_b == ELECT_ROLE_INITIATOR),
+        /* Exactly one sender and one receiver — never two of either. */
+        HF_CHECK_MSG((r.role_a == LINK_ROLE_SENDER) != (r.role_b == LINK_ROLE_SENDER),
                      "roles %d / %d", (int)r.role_a, (int)r.role_b);
 
         sim_card_a_sees(&s, seen, sizeof seen);
@@ -70,7 +71,8 @@ void test_link(void)
     /*
      * Development plan M14's exit criteria, run here rather than there:
      * 50 handshakes, both parties end up with each other's contact. Seeds
-     * differ, so the election lands differently each time.
+     * differ, so the channel noise and the direction of the first turn differ
+     * each time.
      */
     hf_begin("link: 50 handshakes, both ends always get the card");
     {
@@ -98,16 +100,17 @@ void test_link(void)
         int i, usable = 0;
 
         /*
-         * One turn of contact. Only the TARGET can have heard anything by then
-         * — the initiator talks first and does not listen until its turn ends
-         * — so the assertion follows the role rather than the letter, which is
-         * the difference between testing the protocol and testing the seed.
+         * One turn of contact. Only the RECEIVER can have heard anything by
+         * then — the sender talks first and does not listen until its turn
+         * ends — so the assertion follows the role rather than the letter,
+         * which is the difference between testing the protocol and testing
+         * the seed.
          */
         for (i = 0; i < 20; i++) {
             const sim_result_t r =
                 (sim_init(&s, k_ada, k_bo, NULL, (uint64_t)i * 131u + 5u),
                  sim_run(&s, (uint64_t)(FRAME_AIRTIME_US * 3u)));
-            const bool a_is_target = (r.role_a == ELECT_ROLE_TARGET);
+            const bool a_is_target = (r.role_a == LINK_ROLE_RECEIVER);
             const size_t n = a_is_target ? sim_card_a_sees(&s, seen, sizeof seen)
                                          : sim_card_b_sees(&s, seen, sizeof seen);
             const char *want_fn  = a_is_target ? "FN:Bo Tester" : "FN:Ada Lovelace";
@@ -155,8 +158,8 @@ void test_link(void)
         cfg.contact_budget_us = FRAME_AIRTIME_US * 3u;
         sim_init(&s, k_ada, k_bo, &cfg, 4242);
 
-        link_sm_begin(&s.sm_a, s.clock_us);
-        link_sm_begin(&s.sm_b, s.clock_us);
+        link_sm_begin(&s.sm_a, s.clock_us, LINK_ROLE_SENDER);
+        link_sm_begin(&s.sm_b, s.clock_us, LINK_ROLE_RECEIVER);
 
         for (t = 0; t < FRAME_AIRTIME_US * 10u; t += step) {
             link_sm_poll(&s.sm_a, s.clock_us);
@@ -182,6 +185,63 @@ void test_link(void)
         HF_CHECK_MSG(t < FRAME_AIRTIME_US * 9u, "took %u us to give up", (unsigned)t);
     }
 
+    /*
+     * simple-trigger-spec §4.5 and §4.4 together. Two silent receive turns send
+     * the exchange back through the trigger rather than through an election
+     * redraw, and the half-built record has to survive that trip — it is still
+     * that person's card, and architecture §8.4's whole argument is that half a
+     * card is worth showing. Getting this wrong is silent: the handshake still
+     * terminates, it just hands the wearer nothing.
+     */
+    hf_begin("link: a record survives falling back into the trigger");
+    {
+        sim_t s;
+        link_cfg_t cfg;
+        uint64_t t;
+        const uint64_t step = HANDOFF_CHIP_US;
+        const uint8_t *blob = NULL;
+        size_t held;
+        int broke = 0;
+
+        link_cfg_default(&cfg);
+        cfg.contact_budget_us = FRAME_AIRTIME_US * 12u;
+        sim_init(&s, k_ada, k_bo, &cfg, 4242);
+
+        link_sm_begin(&s.sm_a, s.clock_us, LINK_ROLE_SENDER);
+        link_sm_begin(&s.sm_b, s.clock_us, LINK_ROLE_RECEIVER);
+
+        for (t = 0; t < FRAME_AIRTIME_US * 30u; t += step) {
+            link_sm_poll(&s.sm_a, s.clock_us);
+            link_sm_poll(&s.sm_b, s.clock_us);
+
+            /* Long enough in that fragments have landed, then hands part. */
+            if (!broke && t > FRAME_AIRTIME_US * 5u) {
+                s.node_a.chan.energy_on = s.node_a.chan.energy_off;
+                s.node_b.chan.energy_on = s.node_b.chan.energy_off;
+                broke = 1;
+            }
+            halh_advance(&s.node_a, &s.node_b, step);
+
+            if ((s.sm_a.state == LINK_COMPLETE || s.sm_a.state == LINK_ABORT) &&
+                (s.sm_b.state == LINK_COMPLETE || s.sm_b.state == LINK_ABORT))
+                break;
+        }
+
+        /* The path has to have been taken, or the rest of this proves nothing. */
+        HF_CHECK_MSG(s.sm_b.retries > 0,
+                     "B never fell back into the trigger, so nothing was tested");
+        HF_CHECK_MSG(s.sm_b.trig.shouts > 0,
+                     "B fell back but never actually re-armed the trigger");
+
+        held = link_sm_received(&s.sm_b, &blob);
+        HF_CHECK_MSG(held > 0,
+                     "B threw away the card it had already received when it"
+                     " went back through the trigger");
+
+        HF_CHECK_MSG(s.sm_b.state == LINK_COMPLETE || s.sm_b.state == LINK_ABORT,
+                     "B stuck in %s", link_state_name(s.sm_b.state));
+    }
+
     /* §7.2: one end reset mid-exchange while the other keeps talking. */
     hf_begin("link: one end restarting mid-exchange does not wedge the other");
     {
@@ -191,15 +251,17 @@ void test_link(void)
         int reset_done = 0;
 
         sim_init(&s, k_ada, k_bo, NULL, 31337);
-        link_sm_begin(&s.sm_a, s.clock_us);
-        link_sm_begin(&s.sm_b, s.clock_us);
+        link_sm_begin(&s.sm_a, s.clock_us, LINK_ROLE_SENDER);
+        link_sm_begin(&s.sm_b, s.clock_us, LINK_ROLE_RECEIVER);
 
         for (t = 0; t < FRAME_AIRTIME_US * 40u; t += step) {
             link_sm_poll(&s.sm_a, s.clock_us);
             link_sm_poll(&s.sm_b, s.clock_us);
 
             if (!reset_done && t > FRAME_AIRTIME_US + FRAME_AIRTIME_US / 4u) {
-                link_sm_begin(&s.sm_b, s.clock_us);   /* B reboots */
+                /* B reboots, and comes back believing it is the sender —
+                 * the worst version of this case, since it talks over A. */
+                link_sm_begin(&s.sm_b, s.clock_us, LINK_ROLE_SENDER);
                 reset_done = 1;
             }
             halh_advance(&s.node_a, &s.node_b, step);

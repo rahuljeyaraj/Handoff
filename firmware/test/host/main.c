@@ -47,7 +47,6 @@ static const suite_t k_suites[] = {
     { "frag",       test_frag },
     { "store",      test_store },
     { "carousel",   test_carousel },
-    { "elect",      test_elect },
     { "beacon",     test_beacon },
     { "link",       test_link },
     { "vectors",    test_vectors },

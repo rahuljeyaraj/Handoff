@@ -3,8 +3,7 @@
 #include <string.h>
 
 static const char *const k_names[LINK_STATE_COUNT] = {
-    "IDLE", "BACKOFF", "LISTEN", "TX_FRAME", "TURNAROUND",
-    "RX_FRAME", "EXCHANGE", "COMPLETE", "ABORT"
+    "IDLE", "TX_FRAME", "TURNAROUND", "RX_FRAME", "EXCHANGE", "COMPLETE", "ABORT"
 };
 
 const char *link_state_name(link_state_t s)
@@ -33,50 +32,108 @@ void link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
     sm->own = own;
     if (cfg) sm->cfg = *cfg; else link_cfg_default(&sm->cfg);
 
-    elect_init(&sm->elect, hal);
-    beacon_init(&sm->beacon, hal);
+    trig_init(&sm->trig, hal);
     carrier_init(&sm->carrier);
     frame_rx_init(&sm->framer);
     frag_rx_init(&sm->rx);
     carousel_init(&sm->car, own ? own->count : 1u, sm->cfg.carousel_weight);
     sm->state = LINK_IDLE;
+    sm->role = LINK_ROLE_NONE;
 }
 
-void link_sm_begin(link_sm_t *sm, uint64_t now_us)
+/* ---- forward declarations, so the entry points can read top-down -------- */
+
+static void queue_frame(link_sm_t *sm);
+static void enter_rx(link_sm_t *sm, uint64_t now_us, bool reset_framer);
+
+/*
+ * A new contact begins here: the previous person's record is dropped and the
+ * budget restarts. Deliberately NOT called when the exchange falls back into
+ * the trigger to recover from a collision — that keeps what it has, which is
+ * the whole of architecture §8.4's argument.
+ */
+static void open_contact(link_sm_t *sm, uint64_t now_us)
 {
-    frame_rx_init(&sm->framer);
     frag_rx_init(&sm->rx);
     carousel_init(&sm->car, sm->own ? sm->own->count : 1u, sm->cfg.carousel_weight);
-
-    /*
-     * The carrier detector IS reset, and on the beacon path that matters more
-     * than it looks. A band that woke from a beacon has just spent BEACON_HOLD
-     * feeding the far end's full-power carrier into the floor EMA, which leaves
-     * the floor several times the true ambient. Carried into the exchange, that
-     * floor makes real frames fail the presence test, and handover — which runs
-     * on carrier_present and last_carrier_us — starts talking over the reply it
-     * asked for. Leaving it primed was measured at 1137 frames sent for the
-     * same 300 delivered, against 376 with the reset.
-     *
-     * The cost is that the election's listen-before-talk spends its window
-     * re-priming and cannot see an already-running carrier. That is why
-     * elect_assume() takes only the INITIATOR hint, which is sound on its own:
-     * two ends cannot both hear the other's beacon from a sniff, because a band
-     * is deaf while its own beacon plays.
-     */
-    carrier_reset(&sm->carrier);
 
     sm->started_us = now_us;
     sm->turn_frames = 0;
     sm->rx_turn_frames = 0;
     sm->barren_turns = 0;
+    sm->retries = 0;
     sm->peer_has_ours = false;
     sm->sent_ack = false;
     sm->chips_len = 0;
+    sm->exchange_open = true;
+}
 
-    beacon_stop(&sm->beacon);
-    elect_start(&sm->elect, now_us);
-    sm->state = LINK_BACKOFF;
+/*
+ * Take up the role the trigger handed out and start the exchange.
+ *
+ * THE CARRIER DETECTOR. A band arriving here has spent its whole listen window
+ * feeding either silence or a peer's full-power shout into the floor EMA, so
+ * the floor is not necessarily anywhere near true ambient. Carried into the
+ * exchange, a floor several times ambient makes real frames fail the presence
+ * test, and handover — which runs on carrier_present() and last_carrier_us —
+ * starts talking over the reply it asked for.
+ *
+ * On the SENDER path it is reset, and unlike the design this replaces, there
+ * is nothing for the reset to blind: no listen-before-talk follows it. Strictly
+ * simpler than it was.
+ *
+ * On the RECEIVER path it is NOT reset, and that was the open question in
+ * §5.1, which asked for a test rather than an argument. Both were built and
+ * measured, over 60 triggered handshakes and 50 host-triggered ones:
+ *
+ *                  frames sent   turnarounds   polls with both ends
+ *                                              clocking out a frame
+ *   no reset           482           663              0
+ *   reset              482           663              0
+ *
+ * Bit-identical, because handover during a receive turn is driven by counting
+ * decoded frames and the framer is untouched either way. So end to end the
+ * reset buys nothing — and one layer down it costs something real:
+ *
+ *   carrier.c re-primes level and floor from the very next chip it is given.
+ *   Land that on a LOW Manchester chip and presence returns one chip later.
+ *   Land it on a HIGH one and the floor primes at the carrier's own level,
+ *   where the >>7 floor EMA falls about two LSB per chip pair — measured, the
+ *   detector never regains presence for the whole remaining 624-chip frame.
+ *
+ * Which chip it lands on is a coin flip. carrier_present() and last_carrier_us
+ * are what drive handover, so half the time the reset would blind the thing
+ * deciding whose turn it is, for the rest of the frame, to buy nothing. It is
+ * therefore not done. test_beacon.c pins the asymmetry so a future change to
+ * carrier.c's floor cannot quietly make this the wrong answer.
+ *
+ * The framer is not reset on this path either, and that one is not a
+ * preference — the lock IS the reason we are here.
+ */
+static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role)
+{
+    sm->role = role;
+
+    if (role == LINK_ROLE_SENDER) {
+        frame_rx_init(&sm->framer);
+        carrier_reset(&sm->carrier);
+        sm->turn_frames = 0;
+        sm->state = LINK_TX_FRAME;
+        queue_frame(sm);
+        return;
+    }
+
+    enter_rx(sm, now_us, false);
+}
+
+void link_sm_begin(link_sm_t *sm, uint64_t now_us, link_role_t role)
+{
+    /* The carrier detector is deliberately NOT reset here — enter_exchange()
+     * owns that decision and it is not the same on both paths. */
+    frame_rx_init(&sm->framer);
+    trig_stop(&sm->trig);
+    open_contact(sm, now_us);
+    enter_exchange(sm, now_us, role);
 }
 
 void link_sm_idle(link_sm_t *sm, uint64_t now_us)
@@ -89,10 +146,14 @@ void link_sm_idle(link_sm_t *sm, uint64_t now_us)
      * The received record is NOT cleared. A contact that ended early left a
      * partial card in frag_rx, and architecture §8.4's whole argument is that
      * a partial card is worth something; throwing it away on the way back to
-     * idle would discard exactly what the wearer is about to be shown.
+     * idle would discard exactly what the wearer is about to be shown. It goes
+     * when the NEXT contact opens, in open_contact().
      */
     sm->chips_len = 0;
-    beacon_start(&sm->beacon, now_us);
+    sm->role = LINK_ROLE_NONE;
+    sm->exchange_open = false;
+    sm->idle_syncs = sm->framer.syncs;
+    trig_start(&sm->trig, now_us);
     sm->state = LINK_IDLE;
 }
 
@@ -174,9 +235,9 @@ static bool have_their_record(const link_sm_t *sm)
  * strands the other one a fragment short, and in marginal conditions that was
  * costing a third of all handshakes.
  *
- * The bounds are elsewhere and they are real: two silent receive turns trigger
- * a redraw (see suspect_collision), the election gives up after
- * ELECT_MAX_REDRAWS, and the contact budget ends it regardless — reporting
+ * The bounds are elsewhere and they are real: two silent receive turns send the
+ * exchange back through the trigger (see suspect_collision), that is capped at
+ * LINK_MAX_RETRIES, and the contact budget ends it regardless — reporting
  * COMPLETE if their record is in hand, because that is what the wearer sees.
  */
 static bool we_are_done(const link_sm_t *sm)
@@ -187,8 +248,8 @@ static bool we_are_done(const link_sm_t *sm)
      * sent_ack is not redundant with peer_has_ours. Without it, the end that
      * finishes first completes the instant it hears their acknowledgement and
      * goes silent BEFORE ever sending one of its own — so the other end never
-     * learns it can stop, redraws until the election gives up, and burns the
-     * whole contact. Sending the last acknowledgement is the cheap half of the
+     * learns it can stop, retries until it runs out, and burns the whole
+     * contact. Sending the last acknowledgement is the cheap half of the
      * two-army problem, and it is the half that is actually solvable.
      */
     return carousel_full_pass(&sm->car) && sm->peer_has_ours && sm->sent_ack;
@@ -205,7 +266,7 @@ static void queue_frame(link_sm_t *sm)
     h.frag_count = sm->own ? sm->own->count : 1u;
     h.record_id  = sm->own ? sm->own->record_id : 0u;
     h.flags      = (uint8_t)(have_their_record(sm) ? FRAME_FLAG_HAVE_YOURS : 0u);
-    if (elect_role(&sm->elect) == ELECT_ROLE_TARGET) h.flags |= FRAME_FLAG_REPLY;
+    if (sm->role == LINK_ROLE_RECEIVER) h.flags |= FRAME_FLAG_REPLY;
 
     sm->chips_len = frame_encode(&h, payload, len, sm->chips, sizeof sm->chips);
 
@@ -226,11 +287,15 @@ static void enter_turnaround(link_sm_t *sm, uint64_t now_us, uint32_t settle_us)
     sm->state = LINK_TURNAROUND;
 }
 
-static void enter_rx(link_sm_t *sm, uint64_t now_us)
+/*
+ * reset_framer is false on exactly one path: arriving from TRIG_RECEIVE, where
+ * the framer is mid-frame and that is the point. Everywhere else it discards
+ * whatever the framer half-collected while our own transmitter was saturating
+ * the amplifier.
+ */
+static void enter_rx(link_sm_t *sm, uint64_t now_us, bool reset_framer)
 {
-    /* Discard whatever the framer half-collected while our own transmitter was
-     * saturating the amplifier. */
-    frame_rx_reset(&sm->framer);
+    if (reset_framer) frame_rx_reset(&sm->framer);
     sm->turn_frames = 0;
     sm->rx_turn_frames = 0;
     sm->last_carrier_us = now_us;
@@ -261,19 +326,22 @@ static void take_channel(link_sm_t *sm, uint64_t now_us)
 }
 
 /*
- * Two receive turns in a row with nothing heard at all. Three ways that
- * happens, and the same answer serves all three:
+ * Two receive turns in a row with nothing heard at all. Two ways that happens
+ * now that the roles cannot both land the same way round:
  *
  *  - contact broke
- *  - both ends elected themselves initiator, the tie listen-before-talk
- *    cannot catch, because each is deaf while its own transmitter drives the
- *    shared pad
  *  - the two fell into lockstep, transmitting and listening in step with each
  *    other, so neither ever hears the other despite both talking
  *
- * design §9.6's answer to all of them is the same: redraw and listen again.
- * The redraw is what breaks lockstep. The half-built record is kept — it is
- * still that person's card.
+ * The answer to both is to stop talking and go back to the trigger, which is
+ * the one thing in the system that can tell the two ends apart. It draws a
+ * fresh listen window, so lockstep cannot survive it. The half-built record is
+ * kept — it is still that person's card — and so is the contact budget, which
+ * is what actually bounds this.
+ *
+ * The retry count bounds it a second time: a pair wedged in a way the trigger
+ * cannot fix terminates in COMPLETE or ABORT rather than looping until the
+ * budget runs out with nothing reported.
  */
 static void suspect_collision(link_sm_t *sm, uint64_t now_us)
 {
@@ -281,55 +349,96 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
     frame_rx_reset(&sm->framer);
     carrier_reset(&sm->carrier);
     sm->barren_turns = 0;
+    sm->chips_len = 0;
 
-    elect_collision(&sm->elect, now_us);
+    if (++sm->retries > LINK_MAX_RETRIES) {
+        /* Out of retries. Still a successful handshake if their card is in
+         * hand — that is what the wearer sees. */
+        sm->state = have_their_record(sm) ? LINK_COMPLETE : LINK_ABORT;
+        return;
+    }
 
-    if (!elect_gave_up(&sm->elect)) { sm->state = LINK_BACKOFF; return; }
-
-    /* Out of redraws. Still a successful handshake if their card is in hand. */
-    sm->state = have_their_record(sm) ? LINK_COMPLETE : LINK_ABORT;
+    sm->role = LINK_ROLE_NONE;
+    sm->idle_syncs = sm->framer.syncs;
+    trig_start(&sm->trig, now_us);
+    sm->state = LINK_IDLE;
 }
 
 /*
- * IDLE is not a parked state. It runs the beacon cycle of beacon.h, which is
- * what actually starts a handshake on a wrist: there is no button and no touch
- * sensor, so the band advertises into the channel and listens for the same,
- * and hearing anything at all means a body has closed the loop.
+ * IDLE is not a parked state. It runs the trigger of beacon.h, which is what
+ * actually starts a handshake on a wrist: there is no button and no touch
+ * sensor, so the band shouts into the channel and listens for the same, and
+ * hearing anything at all means a body has closed the loop.
  *
- * The carrier detector is fed ONLY in the listening phases. Feeding it while
- * our own amplifier is driving is the drain_discard() problem below, and here
- * it has a sharper edge: the band would wake on its own beacon, every period,
- * for ever. Its level and floor are deliberately NOT reset between windows —
- * the ambient floor of a room does not change in the 8 ms we are deaf, and
- * re-priming it against a beacon that is already on would hide that beacon.
+ * The carrier detector and the framer are fed ONLY in the listening phases.
+ * Feeding them while our own amplifier is driving is the drain_discard()
+ * problem below, and here it has a sharper edge: the band would trigger on its
+ * own shout, every cycle, for ever. The detector's level and floor are
+ * deliberately NOT reset between cycles — the ambient floor of a room does not
+ * change in the 11 ms we are deaf, and re-priming it against a shout that is
+ * already on would hide that shout.
  */
 static void poll_idle(link_sm_t *sm, uint64_t now_us)
 {
-    const bool listening = beacon_listening(&sm->beacon);
-    beacon_state_t bs;
+    const bool listening = trig_listening(&sm->trig);
+    const bool waiting   = (sm->trig.state == TRIG_WAIT);
+    bool locked;
+    trig_state_t ts;
 
-    if (listening) drain_rx(sm, false); else drain_discard(sm);
+    /*
+     * A retry is still inside the same contact, so the budget still applies —
+     * and link_sm_poll() does not check it here, because a band idling on a
+     * shelf between handshakes has no budget to run out of.
+     */
+    if (sm->exchange_open &&
+        (uint64_t)(now_us - sm->started_us) > sm->cfg.contact_budget_us) {
+        hal_tx_drive(sm->hal, false);
+        trig_stop(&sm->trig);
+        sm->state = have_their_record(sm) ? LINK_COMPLETE : LINK_ABORT;
+        return;
+    }
 
-    bs = beacon_poll(&sm->beacon, now_us,
-                     listening && carrier_present(&sm->carrier));
+    if (listening) {
+        drain_rx(sm, true);
+    } else {
+        drain_discard(sm);
+        /* A framer half-way through a hunt on our own amplifier is worse than
+         * no framer at all. */
+        frame_rx_reset(&sm->framer);
+    }
 
-    if (beacon_take_burst(&sm->beacon)) {
-        sm->chips_len = beacon_fill(sm->chips, sizeof sm->chips);
+    /*
+     * Only a sync that happened while we were ALREADY waiting answers the
+     * question TRIG_WAIT is asking. Noise can drag the framer through a false
+     * marker during a long listen — rarely, but this runs continuously — and
+     * reading that stale lock as "a card is arriving" would turn a band that
+     * should send into one that waits for a frame nobody is sending. Outside
+     * WAIT the baseline just follows, so such a sync is absorbed rather than
+     * remembered.
+     */
+    locked = waiting && (sm->framer.syncs != sm->idle_syncs);
+    if (!waiting) sm->idle_syncs = sm->framer.syncs;
+
+    ts = trig_poll(&sm->trig, now_us,
+                   listening && carrier_present(&sm->carrier), locked);
+
+    /* §4.3: the quiet-wait cap expired, so the floor may genuinely have moved
+     * under the detector. Re-prime it rather than stay deaf to a real peer. */
+    if (trig_take_carrier_reset(&sm->trig)) carrier_reset(&sm->carrier);
+
+    if (trig_take_burst(&sm->trig)) {
+        sm->chips_len = trig_fill(sm->chips, sizeof sm->chips);
         hal_tx_drive(sm->hal, true);
         hal_tx_chips(sm->hal, sm->chips, sm->chips_len);
-    } else if (bs != BEACON_TX) {
+    } else if (ts != TRIG_SHOUT) {
         hal_tx_drive(sm->hal, false);
     }
 
-    if (bs == BEACON_CONTACT) {
-        link_sm_begin(sm, now_us);
-        /*
-         * The beacon already knows which end we are — see elect_assume(). It
-         * is not merely faster than re-drawing: holding for the beacon to
-         * clear releases both ends at the same instant, and a random draw is
-         * at its worst exactly then.
-         */
-        elect_assume(&sm->elect, now_us, beacon_wake_role(&sm->beacon));
+    if (ts == TRIG_SEND || ts == TRIG_RECEIVE) {
+        trig_stop(&sm->trig);
+        if (!sm->exchange_open) open_contact(sm, now_us);
+        enter_exchange(sm, now_us,
+                       ts == TRIG_SEND ? LINK_ROLE_SENDER : LINK_ROLE_RECEIVER);
     }
 }
 
@@ -349,31 +458,6 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
     }
 
     switch (sm->state) {
-    case LINK_BACKOFF:
-    case LINK_LISTEN: {
-        /* Listen-before-talk needs the carrier detector but must not feed the
-         * framer: a frame that starts before we have a role belongs to the
-         * exchange, not to the election. */
-        elect_state_t es;
-        drain_rx(sm, false);
-        es = elect_poll(&sm->elect, now_us, carrier_present(&sm->carrier));
-
-        sm->state = (es == ELECT_BACKOFF) ? LINK_BACKOFF
-                  : (es == ELECT_LISTEN)  ? LINK_LISTEN
-                  : LINK_EXCHANGE;
-
-        if (sm->state == LINK_EXCHANGE) {
-            sm->turn_frames = 0;
-            if (elect_role(&sm->elect) == ELECT_ROLE_INITIATOR) {
-                sm->state = LINK_TX_FRAME;
-                queue_frame(sm);
-            } else {   /* target: listen first, design §9.6 */
-                enter_rx(sm, now_us);
-            }
-        }
-        break;
-    }
-
     case LINK_TX_FRAME:
         drain_discard(sm);
         if (!hal_tx_busy(sm->hal))
@@ -390,7 +474,7 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
         if (now_us >= sm->deadline_us) {
             if (sm->turn_frames >= sm->cfg.frames_per_turn) {
                 if (we_are_done(sm)) { sm->state = LINK_COMPLETE; break; }
-                enter_rx(sm, now_us);
+                enter_rx(sm, now_us, true);
             } else {
                 sm->state = LINK_TX_FRAME;
                 queue_frame(sm);
@@ -448,7 +532,7 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
     return sm->state;
 }
 
-elect_role_t link_sm_role(const link_sm_t *sm) { return elect_role(&sm->elect); }
+link_role_t link_sm_role(const link_sm_t *sm) { return sm->role; }
 
 size_t link_sm_received(const link_sm_t *sm, const uint8_t **blob)
 {

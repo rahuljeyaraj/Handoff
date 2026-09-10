@@ -2,7 +2,7 @@
 
 void carrier_init(carrier_t *c)
 {
-    c->fast_shift = 2;    /* ~4 chips, which is what sets ELECT_DETECT_US */
+    c->fast_shift = 2;    /* ~4 chips, which is what sets HANDOFF_DETECT_US */
     c->slow_shift = 7;    /* ~128 chips: far slower than a 32-chip preamble */
     c->ratio_num  = 24;   /* present at 3x the ambient floor (24/8)        */
     c->min_delta  = 24;   /* ...and at least this far above it, in LSB     */

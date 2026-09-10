@@ -75,26 +75,6 @@
  */
 #define HANDOFF_DETECT_US         (4 * HANDOFF_CHIP_US)
 
-/*
- * Role-election backoff range. DERIVED, and deliberately NOT design §9.6's
- * flat 0-5 ms.
- *
- * Two ends collide when their draws land within the detection latency of each
- * other, because until then neither can hear the other. So the collision rate
- * is 1 - (1 - detect/range)^2 — a function of the ratio, not of the range. A
- * fixed 5 ms therefore means something quite different at one Goertzel window
- * length than at another, and measurably so: at HANDOFF_GZ_N 25 a flat 5 ms
- * gives a 1-in-3 first-attempt collision, and at 50 it gives 2 in 3.
- *
- * Sixteen times the latency holds that near 12 % whatever the chip rate, for a
- * mean backoff of eight chips — well under 1 % of R1's one-second contact.
- * Ties still resolve by redraw exactly as §9.6 specifies; only the range it
- * draws from is now a property of the link rather than a constant.
- */
-#ifndef HANDOFF_BACKOFF_MAX_US
-#define HANDOFF_BACKOFF_MAX_US    (16 * HANDOFF_DETECT_US)
-#endif
-
 /* Windows actually summed into a chip energy, after guarding. */
 #define HANDOFF_CHIP_INTEGRATE    (HANDOFF_WINDOWS_PER_CHIP - 2 * HANDOFF_CHIP_GUARD)
 
@@ -142,9 +122,5 @@ HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % (2 * HANDOFF_CARRIER_HZ) == 0,
 
 HANDOFF_STATIC_ASSERT(HANDOFF_FRAG_PAYLOAD >= 8 && HANDOFF_FRAG_PAYLOAD <= 255,
     "fragment payload out of range");
-
-/* A backoff range narrower than the detection latency is not a backoff. */
-HANDOFF_STATIC_ASSERT(HANDOFF_BACKOFF_MAX_US >= 8 * HANDOFF_DETECT_US,
-    "backoff range too narrow for the carrier detector to break a tie");
 
 #endif /* HANDOFF_CONFIG_H */

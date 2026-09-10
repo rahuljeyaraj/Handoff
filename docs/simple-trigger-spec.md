@@ -1,6 +1,6 @@
 # Simplified contact trigger — implementation spec
 
-Status: **approved for implementation, not yet implemented.**
+Status: **implemented.** See §10 for what the implementation measured, and firmware-architecture §13.3 for the divergence record.
 Written 2026-09-10. Supersedes `beacon.h`/`elect.h` and architecture §7.3, §7.6.
 
 Owner decision: this is v1 on a bench. **Power is explicitly not a concern.**
@@ -98,8 +98,9 @@ except during one's own shout.
 A repeat requires the two next-shout times to land within ~1 ms of each other.
 Over a 50 ms draw range that is roughly 4 % per round, 0.2 % over two rounds.
 
-**These figures are arithmetic, not simulated. §6.3 requires them measured
-before this is considered done.**
+~~These figures are arithmetic, not simulated.~~ **Measured** (§6.3, 400
+forced simultaneous starts): 0.5 % needed a third shout round, worst case
+three. The arithmetic above was pessimistic by roughly eight times.
 
 ### 4.2 Shouts overlap partially
 
@@ -200,6 +201,30 @@ floor EMA, leaving the floor several times ambient. That is still true here.
 reasoning. If a reset on the receive path destabilises handover, the fallback
 is to reset the floor only, or to let it decay naturally.
 
+> **Settled: the receive path does NOT reset the carrier detector.**
+>
+> End to end the two choices are bit-identical — same frames sent, same
+> turnarounds, same rendezvous, over 60 triggered handshakes and 50
+> host-triggered ones — because handover during a receive turn counts decoded
+> frames and the framer is untouched either way. So the reset buys nothing.
+>
+> One layer down it costs something. `carrier.c` re-primes level and floor from
+> the next chip after a reset, and during a frame that chip is a Manchester chip
+> — high half the time. Primed on a high one, the floor sits at the carrier's
+> own level and the slow EMA cannot fall back inside the frame: measured,
+> presence never returns across the whole remaining 624 chips. Which chip it
+> lands on is a coin flip, and `carrier_present()` is what drives handover.
+>
+> Nothing for a 50 % chance of blinding handover mid-frame is a bad trade, so
+> it is not done. `test_beacon.c` pins the asymmetry, so a change to
+> `carrier.c`'s floor constants cannot quietly make this the wrong answer.
+>
+> The same edge bit the two-node simulator, which used to start both ends in
+> the same microsecond: the receiving end then primed on the frame's first
+> preamble chip, which is high, and lost the whole first frame. `sim_twonode.c`
+> now gives the receiver a millisecond of quiet first, which is what a band on a
+> wrist has.
+
 ## 6. Tests — definition of done
 
 `firmware/test/host/test_beacon.c`, rewritten. All must pass.
@@ -262,17 +287,21 @@ can; the observed failure was one end waiting for a card that was never coming.
 The design decision it justified was correct, but the reason given was
 overstated. Do not repeat it.
 
-## 10. What is unverified in this spec
+## 10. What was unverified in this spec, and what it measured
 
-Stated plainly so the next session does not inherit them as facts:
+The spec stated these plainly so they would not be inherited as facts. Three of
+the four are now measured; the fourth still is not.
 
-- All probability figures (§4.1) are arithmetic, not simulation.
-- The duty-cycle figures (§7) are arithmetic from cycle lengths.
-- The power comparison behind the "sniffing is not worth it for v1" decision
-  (~10.8 mA against ~3.9 mA, ~39 h against ~85 h on 500 mAh) comes from the
-  existing docs and is **estimated from datasheets, pending measurement**.
-- The §2 proof is timing algebra over the constants in §3. It has not been
-  machine-checked. Test 6.2 is what turns it into evidence.
+| claim | as written | as measured |
+|---|---|---|
+| §4.1 repeat rate after a simultaneous shout | ~4 % per round, ~0.2 % over two — arithmetic | **0.5 %** of 400 forced collisions needed a third round; worst case three rounds |
+| §2 no-tie proof | timing algebra, not machine-checked | holds at **all 112** phase offsets and all 400 forced collisions; no pair ever both-sent or both-listened |
+| rendezvous latency | one cycle, by construction | worst **108 ms**; no offset needed a second cycle |
+| §7 duty-cycle and power figures (~10.8 mA against ~3.9 mA, ~39 h against ~85 h on 500 mAh) | arithmetic from cycle lengths; datasheet estimates | **still unmeasured.** Carried into firmware-architecture §13's open items rather than presented as a result |
+
+One thing the spec did not anticipate, found while settling §5.1: a `carrier_t`
+re-primed on a high Manchester chip stays blind for the rest of the frame. See
+the note in §5.1.
 
 ## 11. Visual reference
 

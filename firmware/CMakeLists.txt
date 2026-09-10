@@ -27,7 +27,6 @@ add_library(handoff_lib STATIC
     lib/record/store.c
 
     lib/proto/carousel.c
-    lib/proto/elect.c
     lib/proto/beacon.c
     lib/proto/link_sm.c
 

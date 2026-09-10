@@ -61,7 +61,6 @@ LIB_SOURCES = [
     LIB / "record" / "frag.c",
     LIB / "record" / "store.c",
     LIB / "proto" / "carousel.c",
-    LIB / "proto" / "elect.c",
     LIB / "proto" / "beacon.c",
     LIB / "proto" / "link_sm.c",
 ]
@@ -72,7 +71,7 @@ TEST_SOURCES = [HOST / n for n in (
     "main.c", "test_crc.c", "test_manchester.c", "test_goertzel.c", "test_sync.c",
     "test_frame.c", "test_chunk.c", "test_compact.c", "test_vcard.c",
     "test_frag.c", "test_store.c",
-    "test_carousel.c", "test_elect.c", "test_beacon.c", "test_link.c",
+    "test_carousel.c", "test_beacon.c", "test_link.c",
     "test_vectors.c",
     "test_channel.c", "test_budget.c",
 )]

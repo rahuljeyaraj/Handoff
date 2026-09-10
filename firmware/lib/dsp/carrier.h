@@ -1,9 +1,15 @@
 /*
  * Handoff — carrier presence. Running energy against a tracked noise floor.
  *
- * Two consumers: listen-before-talk during role election (§7.3), and the
- * turnaround guard that must not mistake the tail of our own transmission
- * for the other end starting to talk (§9.7).
+ * Two consumers: the contact trigger, which asks whether anyone is on the
+ * channel (beacon.h), and the turnaround guard that must not mistake the tail
+ * of our own transmission for the other end starting to talk (§9.7).
+ *
+ * A note that cost a day: push() re-primes level and floor from the next chip
+ * after a reset. Reset it in the middle of a frame and that chip is a Manchester
+ * chip — high half the time — and a floor primed at the carrier's own level
+ * cannot fall back inside the frame. See enter_exchange() in link_sm.c and the
+ * test that pins it.
  */
 #ifndef HANDOFF_CARRIER_H
 #define HANDOFF_CARRIER_H

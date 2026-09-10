@@ -34,16 +34,22 @@ Two consequences worth stating plainly:
 
 ## 2. What changed from the design document
 
-Two requirements moved. Both are recorded here and flagged in the design doc.
+Three requirements moved. All are recorded here and flagged in the design doc.
 
 | Design doc | Now | Why |
 |---|---|---|
 | R1 / §9.4 — "40-byte contact record", single packet | **Full vCard**, fragmented across frames | 40 bytes cannot hold a real contact |
 | §10.6 — Web Bluetooth | **Native Android app**, no web client | a backgrounded browser tab drops the BLE GATT link, and the phone is pocketed during a handshake; see §11 |
+| §9.6 — listen-before-talk role election, 0–5 ms backoff, ties broken by redraw | **No election at all**; the contact trigger decides who sends | the trigger has to exist anyway (§7.6), and once it does, its timing geometry already names one sender — the draw would only be re-deriving it, and re-deriving it badly |
 
 The first change is not cosmetic. A 40-byte payload fits one packet and needs no
 sequencing, no reassembly and no transfer strategy. A vCard needs all three. §8
 is the consequence, and it is the largest new part of this architecture.
+
+The third is a deletion rather than an addition, and it is the larger
+simplification: `elect.c`, its tests, its backoff constant, its tie-and-redraw
+path and the wake-role hint that fed it are all gone, and §7.6's rule replaces
+them with three states and three timeouts.
 
 ---
 
@@ -133,7 +139,7 @@ firmware/
       store.h/.c           own record in flash, provisioning (§9)
     proto/
       link_sm.h/.c       ○ half-duplex link state machine    (§7)
-      elect.h/.c         ○ role election, backoff            (§7.3)
+      beacon.h/.c        ○ the contact trigger                (§7.6)
       carousel.h/.c      ○ which fragment to send next       (§8.4)
     hal/
       hal.h                the seam. interface only, no code (§5)
@@ -275,9 +281,7 @@ actions. No blocking, no sleeping, no hardware access except through `hal_iface_
 
 | State | Meaning | Exits on |
 |---|---|---|
-| `IDLE` | no contact: beaconing and sniffing, §7.6 | a peer's carrier is heard |
-| `BACKOFF` | random 0–5 ms draw, §9.6 | timer |
-| `LISTEN` | measuring carrier | carrier heard → `TARGET`; silence → `INITIATOR` |
+| `IDLE` | no contact: running the trigger, §7.6 | trigger says send → `TX_FRAME`; trigger says receive → `RX_FRAME` |
 | `TX_FRAME` | clocking chips out | DMA complete |
 | `TURNAROUND` | amplifier recovering, §9.7 | settling timer (1 ms budget) |
 | `RX_FRAME` | receiving | frame CRC pass/fail, or timeout |
@@ -285,79 +289,96 @@ actions. No blocking, no sleeping, no hardware access except through `hal_iface_
 | `COMPLETE` | done, notify phone | — |
 | `ABORT` | contact lost / unrecoverable | — |
 
-`INITIATOR` and `TARGET` are a role flag, not states — they select which
-transitions `EXCHANGE` takes, so the same state graph serves both ends.
+`SENDER` and `RECEIVER` are a role flag, not states — they select which
+transitions the exchange takes, so the same state graph serves both ends. They
+are **not an election result**: the trigger hands them out, and §7.6 is the
+argument that exactly one band can get `SENDER`.
+
+`BACKOFF` and `LISTEN` are gone. They were the two halves of the role election
+that `IDLE` used to exit into, and there is no election any more. Two receive
+turns with nothing heard put the exchange back into `IDLE` — keeping the
+half-built record and the contact budget — with a bounded retry count.
 
 ### 7.6 What takes a band out of `IDLE`
 
-`lib/proto/beacon.c`. An earlier draft of this table said `IDLE` exits on
-"carrier detected, or host says go", which is not a mechanism: if every band
-waits to hear a carrier, no band emits one and no handshake ever starts. The
-board has no button, no accelerometer and no touch sensor — design §6 gives it
-a drive electrode, a sense electrode and an ADC — so the trigger has to be
-built out of the link itself.
+`lib/proto/beacon.c` — the filename is historical; the module is the trigger.
+The specification is `docs/simple-trigger-spec.md`, with diagrams in
+`docs/simple-trigger/`. This section is the summary and the divergence record.
+
+An earlier draft of §7.1 said `IDLE` exits on "carrier detected, or host says
+go", which is not a mechanism: if every band waits to hear a carrier, no band
+emits one and no handshake ever starts. The board has no button, no
+accelerometer and no touch sensor — design §6 gives it a drive electrode, a
+sense electrode and an ADC — so the trigger has to be built out of the link
+itself.
 
 It can be. **Before two wearers touch there is no channel at all**: a band's
 transmission is simply inaudible to the other. The instant skin meets skin a
 channel exists. So a transmission *being heard* is itself the contact signal,
 and no separate sensor is needed. The channel is the sensor.
 
-Each band therefore free-runs an unsynchronised cycle: a plain carrier burst of
-`HANDOFF_BEACON_ON_US`, a turnaround, a listen long enough to catch a peer that
-woke on that burst, and then short sniff windows until the next beacon slot —
-`HANDOFF_BEACON_PERIOD_US` away, plus a random jitter.
+Every band free-runs this loop, unsynchronised with any other:
 
-Rendezvous is **deterministic, not probabilistic**. A band is deaf for at most
-`SNIFF_PERIOD - SNIFF_ON` between sniff windows, so a beacon longer than that
-gap plus the detector's latency cannot fall entirely inside it. That inequality
-is a `_Static_assert` in `beacon.h`, not a comment, and `test_beacon` sweeps the
-relative phase across a whole period to show it holds at every offset rather
-than at the one the author happened to try.
+| phase | length | ears |
+|---|---|---|
+| `SHOUT` | 10 ms of flat carrier | deaf — own amplifier driving |
+| `SETTLE` | 1 ms | deaf — own amplifier recovering |
+| `LISTEN` | 50–100 ms, drawn per cycle | open, continuously |
 
-The single hole is that a band cannot hear a peer while its own amplifier is
-driving, so two bands that beacon at the same instant miss each other. That is
-the same shape as the election tie in §7.3 and takes the same answer: the
-jitter decorrelates the next slot, and a repeat needs both draws to land within
-a beacon of each other. Measured over the phase sweep, 2 contacts in 100 need a
-second round; worst-case rendezvous is ~293 ms against a ~214 ms clean bound.
+While listening, anything heard is one of exactly two things. A flat carrier
+the framer never locks to is somebody's shout: wait for silence, then send our
+card. An alternating preamble the framer does lock to is a card already
+arriving: receive it. Nothing at all for the whole drawn window means nobody is
+there: shout again. **The listen timer counts silent time only** — it is held
+while a carrier is present, or a band would shout over a card in flight.
 
-**Why sniff rather than simply listen the whole time.** Listening continuously
-between beacons would work and would be simpler — no deaf gap, so the guarantee
-holds trivially and the beacon could shrink to about two detection latencies.
-It is rejected on power, and the trade runs the opposite way to a radio's.
+**There is nothing to elect, and this is the load-bearing claim.** To hear the
+other band's shout you must open your ears before their shout ends, and your
+ears open 11 ms after your own shout began. For shouts at `t_A < t_B`: B's ears
+are already open at `t_A`, so B always hears A; A's ears open at `t_A + 11`, by
+which time A's own shout is long over, and A hears B only if B is still
+shouting — which needs `t_B > t_A + 2`, but a B that heard A has already
+stopped shouting. The earlier shouter is always too late and the later one is
+always in time, so **at most one band can hear the other's shout**. Both-send
+and both-listen are unreachable, not merely unlikely.
 
-There is no PA in this design. §6.3 of the design document makes the
-transmitter a GPIO through a 1 MΩ resistor into a capacitive pad drawing
-~12 µA, and §3.3 above keeps core 1 out of the transmit path entirely — DMA and
-one PIO state machine do it. Receiving is the expensive half: the ADC
-free-running at 500 ksps, its DMA, and core 1 running the Goertzel flat out.
+That is timing algebra, not a machine-checked proof, so `test_beacon.c` sweeps
+the relative phase across a whole worst-case cycle at 1 ms resolution and
+asserts on every one of the 112 offsets both that the pair rendezvous and that
+exactly one end comes out a sender. Measured: every offset rendezvous, worst
+case 108 ms, none needing more than one cycle.
 
-| | RX duty | TX duty | mean current, excl. AFE |
-|---|---|---|---|
-| sniffing (chosen) | 29 % | 6.7 % | ~3.9 mA |
-| listening always | 98 % | 1.3 % | ~10.8 mA |
+The one degenerate case is two shouts within about a detector latency of each
+other, where neither hears. Both draw a fresh listen window and whichever
+shouts first next round is heard, because the other is listening continuously.
+Forced over 400 seeds, **398 resolve within two rounds and the worst case is
+three** — which replaces an arithmetic estimate of ~4 % per round with a
+measured 0.5 % needing a third.
 
-Estimated from datasheets pending measurement at M2, taking RX as ~11 mA
-(core 1 ~10, ADC and DMA ~1), TX as ~0.3 mA, idle ~1 mA. Sniffing wins by about
-2.2×: on a 500 mAh cell, roughly 85 hours of idle against 39. **The longer
-beacon that sniffing forces is nearly free; the listening it avoids is what
-costs.**
+Three timeouts are the entire error handling. A carrier that never stops is
+capped at 30 ms, after which the band resets its carrier detector (the ambient
+floor may genuinely have moved), returns to listening, and **does not send** —
+transmitting into a channel that is provably busy is worse than losing a cycle.
+Contact lost mid-card keeps the partial record, per §8.4. Two barren receive
+turns drop back into the trigger, which is the one thing in the system that can
+tell the two ends apart.
 
-Pushing further does not pay. A lower sniff duty needs a longer beacon to cover
-the bigger gap, and the carrier detector's floor tracking caps the beacon under
-~16 ms, which caps sniff duty above ~12 %. The default 20 % is within ~12 % of
-the best that constraint allows, and taking it would leave the beacon sitting on
-the assertion with no margin. The real remaining headroom is elsewhere: the
-20 ms post-beacon listen, and the MCP6292 pair, which design §6.1 powers from
-3V3 with no way for firmware to gate it.
+**Two decisions re-examined and kept.** The shout is a **flat carrier, not a
+preamble**: an alternating burst *is* a preamble under §8.3, and would drag
+every listening band's framer into a half-locked state ten times a second, with
+a decaying tail able to supply a false marker. A flat carrier has no
+transitions at all, so it is unambiguous by construction rather than by
+timeout. And the shout stays **short rather than sending the card blind**: a
+156 ms transmission every cycle makes a band deaf most of the time instead of a
+small fraction of it, and the proof above depends on a short deaf window.
 
-Two smaller decisions worth recording. The beacon is **constant-on rather than
-alternating**, because an alternating burst *is* a preamble under §8.3 and
-would manufacture false syncs in any band that happened to be framing; a
-constant burst has no transitions, so the framer can never lock to it. And the
-beacon is **short**, because `carrier.c` tracks the ambient floor with a slow
-EMA over ~128 chips and a burst that outlasted it would be absorbed into the
-floor and stop reading as a carrier.
+**Power is explicitly not a concern for v1.** The duty-cycled sniffing this
+replaces was estimated from datasheets at ~3.9 mA against ~10.8 mA — roughly
+85 hours of idle against 39 on a 500 mAh cell — and that estimate has never
+been measured. Always-on listening is a deliberate bench decision rather than
+an oversight: the no-tie proof depends on there being no deaf gap outside a
+band's own shout. Duty-cycled receiving can be reintroduced later without
+changing the rule.
 
 ### 7.2 Why this is a table, not `if` statements
 
@@ -365,19 +386,28 @@ The transition table is data. `sim_twonode.c` runs two instances against a
 simulated channel with injected time and injected randomness, which makes the
 following testable at M1, with no hardware:
 
-- both ends draw the same backoff (the tie), redraw, and converge
 - contact breaks mid-exchange and both ends return to `IDLE` cleanly
 - a frame is lost during turnaround and the carousel recovers
 - one end is reset mid-exchange while the other keeps talking
+- an exchange falls back into the trigger and keeps the record it had
 
-### 7.3 Role election
+The first case this list used to carry — both ends drawing the same backoff,
+redrawing, and converging — no longer exists to test. `test_beacon.c` tests the
+thing that replaced it, and the two are not the same shape: an election tie is
+a probability to be bounded, whereas §7.6's claim is that a tie is unreachable,
+which is a sweep rather than a sample.
 
-`lib/proto/elect.c`, per design §9.6. Listen-before-talk: draw 0–5 ms, listen; a
-carrier heard means become target, silence means become initiator; ties break by
-redraw. The draw comes from `hal->random`, so tests force collisions directly.
+### 7.3 Role election — removed
 
-Design §9.6's rejection of burned-in priority IDs stands — body coupling has no
-dominant/recessive state, so there is no collision detection to arbitrate with.
+There is no role election. It was `lib/proto/elect.c`, per design §9.6: draw
+0–5 ms, listen, carrier heard means target and silence means initiator, ties
+broken by redraw. §7.6 replaces the whole of it — the trigger's timing geometry
+decides who sends, so there is nothing left to arbitrate and no tie to break.
+The module, its tests and `HANDOFF_BACKOFF_MAX_US` are deleted.
+
+Design §9.6's rejection of burned-in priority IDs still stands, and for the same
+reason: body coupling has no dominant/recessive state, so there is no collision
+detection to arbitrate with.
 
 ---
 
@@ -527,12 +557,16 @@ than to code:
 #define HANDOFF_WINDOWS_PER_CHIP  5
 #define HANDOFF_FRAG_PAYLOAD      32
 #define HANDOFF_TURNAROUND_US     1000    /* §9.7, measured at M8           */
-#define HANDOFF_BACKOFF_MAX_US    5000    /* §9.6                           */
 ```
 
 Derived rates are `static_assert`ed, not commented — if `HANDOFF_CARRIER_HZ` is
 set to something that is not an exact PIO divider or not on a Goertzel bin
 centre, the build fails rather than the link quietly degrading.
+
+`HANDOFF_BACKOFF_MAX_US` was here and is deleted with the election (§7.3). The
+trigger's own constants — the shout, the listen draw range, the quiet-wait cap
+— live in `lib/proto/beacon.h` next to the assertions that bound them, because
+each one is a property of the link rather than a milestone knob.
 
 ---
 
@@ -680,7 +714,7 @@ already list.
 | M8–M11 | nothing new; constants in `config.h`, plots in `tools/plot.py` | — |
 | M12 | wires `rx_vcard` notify to the real receive path | — |
 | M13 | `link_sm.c` turnaround transitions — header already exists from M1 | — |
-| M14 | `elect.c` binding only; logic was written and tested at M1 | — |
+| M14 | `beacon.c` binding only; logic was written and tested at M1 | — |
 
 M6 through M11 add **no new firmware modules at all**. That is the intended
 result: six milestones of measurement against code that already exists. If a
@@ -701,6 +735,7 @@ revised here first.
 | Carousel weighting `0,1,0,2,…` | **settled: plain round robin, weight 0** — the sweep contradicted §8.4, see below | M1 ✅ |
 | `PHOTO` handling | §8.2 — rejected at encode, with an explicit error | when someone asks |
 | Turnaround real settling time | §7.1 — 1 ms is a budget, not a measurement | M8 |
+| Contact trigger power | §7.6 — **v1 listens continuously, deliberately.** The ~2.2× saving from duty-cycled sniffing is a datasheet estimate that has never been measured, and always-on is what makes the no-tie proof hold | M8 / when a battery matters |
 | Two-way exchange sequencing | **implemented and tested at M1** against two simulated nodes; only the hardware binding is left | M1 / M14 |
 | Phone-link chunk framing | **settled at M2**: `lib/link/chunk.c`, 2-byte `seq \| total`, every chunk but the last payload-full. Host-tested at every capacity from the ATT floor to 244 | M2 ✅ |
 | Record sector placement | **settled at M2: NOT the last sector** — the SDK reserves it on RP2350 for the E10 workaround and BTstack's bond bank takes the two below it. `flash.c` static-asserts against `PICO_FLASH_BANK_STORAGE_OFFSET` | M2 ✅ |
@@ -717,9 +752,12 @@ fragment 0 half the airtime. Measured, that is the worst option available:
 
 | weight | order | fields @250 ms | @1 s | complete @1 s |
 |---|---|---|---|---|
-| **0** | **round robin** | **1.6** | **4.9** | **54 %** |
-| 1 | `0,1,0,2` (§8.4) | 1.4 | 4.5 | 0 % |
-| 3 | `0,0,0,1` | 0.9 | 3.2 | 0 % |
+| **0** | **round robin** | **1.5** | **5.0** | **50 %** |
+| 1 | `0,1,0,2` (§8.4) | 1.5 | 4.5 | 0 % |
+| 3 | `0,0,0,1` | 1.5 | 3.5 | 0 % |
+
+Re-measured after §13.3 removed the election from the two-node simulator's
+start-up; the columns moved by a tenth or so and the conclusion did not.
 
 ### 13.2 What M2 changed in this document
 
@@ -806,3 +844,45 @@ tolerates one flipped chip anywhere. See `lib/link/frame.h`.
 a ~1 ms carrier-detect latency gives roughly a one-in-three collision on the
 first attempt. Eight redraws leave a 1-in-10 000 handshake that never elects a
 role — visible over a demo afternoon. Sixteen costs at most 112 ms.
+
+### 13.3 What the simplified contact trigger changed in this document
+
+Recorded here for the same reason as §13.1 and §13.2: the change deletes a
+design-document requirement, and deleting one quietly is worse than having
+implemented it wrong.
+
+**The role election is gone**, and with it `lib/proto/elect.h/.c`,
+`test_elect.c`, `HANDOFF_BACKOFF_MAX_US`, the `LINK_BACKOFF` and `LINK_LISTEN`
+states, and the beacon's wake-role hint. Design §9.6 specified it and §7.3 used
+to describe it. §7.6's trigger replaces it: the sender is decided by which band
+could physically hear the other's shout, which is a property of the timing
+rather than a draw, so there is no tie to break and nothing to redraw. The full
+specification is `docs/simple-trigger-spec.md`.
+
+**Three claims in that spec were arithmetic and are now measured.** The spec was
+explicit that they were estimates and should not be inherited as facts:
+
+| claim | was | measured |
+|---|---|---|
+| repeat rate after a simultaneous shout | ~4 % per round, ~0.2 % over two | 0.5 % of 400 forced collisions needed a third round; worst case three |
+| rendezvous latency | one cycle, by construction | worst 108 ms over all 112 phase offsets; none needed a second cycle |
+| exactly one sender | timing algebra, unproven | holds at all 112 offsets and all 400 forced collisions |
+
+The power comparison behind "listen continuously" — ~10.8 mA against ~3.9 mA,
+~39 h against ~85 h on a 500 mAh cell — is **still** a datasheet estimate and
+is still unmeasured. It is in §13's open items rather than presented as a
+result.
+
+**One thing the spec flagged as its main risk turned out to have a sharp edge
+underneath it.** §5.1 asked whether the receive path should reset the carrier
+detector, and asked for a test rather than an argument. End to end the two
+choices are bit-identical — same frames sent, same turnarounds, same
+rendezvous — because handover during a receive turn counts decoded frames and
+the framer is untouched either way. One layer down they are not: `carrier.c`
+re-primes its level and floor from the next chip after a reset, and during a
+frame that chip is high half the time. Primed on a high chip, the floor sits at
+the carrier's own level and the slow EMA cannot fall back inside the frame —
+measured, presence never returns across the whole remaining 624 chips. So the
+reset is a coin flip on blinding the thing that drives handover, for no gain,
+and the receive path does not do it. `test_beacon.c` pins the asymmetry so that
+a future change to `carrier.c` cannot quietly make this the wrong answer.

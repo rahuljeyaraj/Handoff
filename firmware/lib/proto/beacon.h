@@ -1,125 +1,91 @@
 /*
- * Handoff — contact detection. What takes a band out of LINK_IDLE.
+ * Handoff — the contact trigger. What takes a band out of LINK_IDLE.
+ * docs/simple-trigger-spec.md, superseding architecture §7.3 and §7.6.
  *
- * THE PROBLEM. architecture §7.1 lists IDLE as exiting on "carrier detected,
- * or host says go", which is not a mechanism: if every band waits to hear a
- * carrier, no band ever emits one and no handshake ever starts. The hardware
- * has no button, no accelerometer and no touch sensor — design §6 gives it one
- * drive electrode, one sense electrode and an ADC. So the trigger has to be
- * built out of the link itself.
+ * The filename still says "beacon" to limit churn; the module is the trigger.
  *
- * THE OBSERVATION. Before two wearers touch there is no channel: a band's
- * transmission is inaudible to the other one. The moment skin meets skin a
- * channel exists. So a transmission BEING HEARD is itself the contact signal,
- * and no separate sensor is needed — the channel is the sensor. Nothing else
- * on this board has that property.
+ * THE PROBLEM. architecture §7.1 once listed IDLE as exiting on "carrier
+ * detected, or host says go", which is not a mechanism: if every band waits to
+ * hear a carrier, no band ever emits one and no handshake ever starts. The
+ * hardware has no button, no accelerometer and no touch sensor — design §6
+ * gives it one drive electrode, one sense electrode and an ADC. So the trigger
+ * has to be built out of the link itself.
  *
- * THE CYCLE. Each band free-runs, unsynchronised with any other:
+ * THE OBSERVATION, unchanged from the design this replaces. Before two wearers
+ * touch there is no channel: a band's transmission is inaudible to the other
+ * one. The moment skin meets skin a channel exists. So a transmission BEING
+ * HEARD is itself the contact signal, and no separate sensor is needed — the
+ * channel is the sensor. Nothing else on this board has that property.
  *
- *   BEACON   drive a plain carrier for BEACON_ON_US
- *   SETTLE   deaf, HANDOFF_TURNAROUND_US, while our own amplifier recovers
- *   LISTEN   listen for BEACON_LISTEN_US, long enough to cover a peer that
- *            woke on that beacon and is now backing off before it replies
- *   SNIFF    listen SNIFF_ON_US out of every SNIFF_PERIOD_US until the next
- *            beacon slot, which is BEACON_PERIOD_US away plus a random jitter
+ * THE RULE. Every band free-runs this loop, unsynchronised with any other:
  *
- * THE GUARANTEE. A band is deaf for at most SNIFF_PERIOD_US - SNIFF_ON_US
- * between sniff windows, so a beacon longer than that gap plus the detector's
- * latency cannot fall entirely inside it:
+ *   SHOUT    HANDOFF_SHOUT_US of flat carrier      (deaf — own amp driving)
+ *   SETTLE   HANDOFF_TURNAROUND_US                 (deaf — own amp recovering)
+ *   LISTEN   50-100 ms, drawn per cycle            (ears open, continuously)
  *
- *   BEACON_ON_US >= (SNIFF_PERIOD_US - SNIFF_ON_US) + ELECT_DETECT_US
+ * While listening, anything heard is one of exactly two things:
  *
- * That is asserted below. It makes rendezvous deterministic rather than lucky:
- * whatever the phase between two free-running bands, a beacon lands in a sniff
- * window, and worst-case latency is one beacon period rather than a tail that
- * only shows up on a demo day.
+ *   flat carrier, framer never locks   somebody's shout   wait for silence,
+ *                                                         then send our card
+ *   alternating preamble, framer locks a card arriving    receive it
+ *   nothing, for the whole drawn window nobody there      shout again
  *
- * ANSWERING AT THE RIGHT MOMENT, WHICH IS NOT THE SAME ON BOTH SIDES.
+ * THE LISTEN TIMER COUNTS SILENT TIME ONLY. It is held while a carrier is
+ * present. Without that a band would shout over a card already in flight.
  *
- * A band that hears a beacon in a SNIFF has caught it near its start, and the
- * far end is still transmitting and still deaf. Answering immediately loses the
- * front of our own preamble, so a sniff wake goes through BEACON_HOLD and
- * elects only once the channel is quiet. carrier.c's hysteresis lands that
- * about 2 ms after the beacon truly ends — which is when the far end has
- * finished its turnaround and is listening for exactly this.
+ * That is the entire trigger. There is no election, no backoff draw, no
+ * listen-before-talk, no role hint, no redraw, no tie.
  *
- * A band that hears something in its own post-beacon LISTEN is in the opposite
- * position: what it hears is a FRAME, not a beacon, because the only reason
- * anyone is transmitting into that window is that they woke on our beacon. It
- * must wake NOW. Holding for quiet there means waiting out their whole 156 ms
- * frame, and the preamble it needs is in the first 8 ms of it.
+ * WHY THERE IS NOTHING TO ELECT. To hear the other band's shout you must have
+ * your ears open before their shout ends. Your own ears open SHOUT_US +
+ * TURNAROUND_US after your own shout began — 11 ms here.
  *
- * Getting this asymmetry wrong is expensive and it is not obvious from the
- * state machine, so the numbers are worth keeping. Against a host-triggered
- * start over 60 seeds, mean time to a completed exchange:
+ * For two shouts starting at t_A and t_B, with t_A < t_B:
  *
- *   host call, no beacon at all              973 ms    376 frames sent
- *   answer immediately on both sides        1452 ms          -   (20 bad CRC)
- *   hold on both sides                      1930 ms    935 frames sent
- *   hold on sniff, answer at once on listen 1061 ms    396 frames sent
+ *   - B's ears are open at t_A, so B always hears A.
+ *   - A's ears open at t_A + 11, by which time A's own shout is long over. A
+ *     hears B only if B is still shouting then, i.e. t_B + 10 > t_A + 12,
+ *     which needs t_B > t_A + 2. But if B heard A first, B stops shouting and
+ *     waits.
  *
- * The last is the rendezvous cost and nothing else.
+ * The earlier shouter is always too late; the later shouter is always in time.
+ * At most one band can hear the other's shout, so THE SENDER IS DECIDED BY
+ * PHYSICS. Both-send and both-listen are unreachable states. That is timing
+ * algebra over the constants below, not a machine-checked proof — the phase
+ * sweep in test_beacon.c is what turns it into evidence, and it is the single
+ * most important test in that file.
  *
- * THE ELECTION STILL RUNS, AND IT IS NOT REDUNDANT. The wake reason is an
- * asymmetry the beacon gets for free, so elect_assume() takes it rather than
- * re-deriving it with a draw — and re-deriving is not free, because waiting for
- * a beacon to clear releases both ends at the SAME instant, which is the worst
- * case for a random draw. But only the INITIATOR half of the hint is sound; see
- * elect_assume() for why the TARGET half is not, and falls back to the draw.
+ * The one degenerate case is |t_A - t_B| smaller than the detector latency,
+ * where neither hears. Both then draw a fresh listen duration and whichever
+ * shouts first next round is heard, because the other is listening
+ * continuously — there are no deaf gaps except during one's own shout. The
+ * draw range is what decorrelates the retry, which is why it is asserted
+ * against the detector latency below. test_beacon.c measures the repeat rate;
+ * do not carry an arithmetic estimate of it forward.
  *
- * THE ONE HOLE, AND THE JITTER. The guarantee covers every deaf gap except our
- * own beacon: a band cannot hear a peer while its own amplifier is driving. So
- * two bands that beacon at the same instant miss each other, and the sniff
- * cycle cannot fix that because neither is sniffing. This is the same shape as
- * the election tie in elect.h and takes the same answer — decorrelate and
- * retry. The next slot is BEACON_PERIOD_US plus a draw from 0..JITTER_US, so a
- * repeat collision needs the draws to land within a beacon of each other,
- * about one round in five, and two rounds in a row is one in twenty-five.
+ * WHY THE SHOUT IS A FLAT CARRIER AND NOT A PREAMBLE. A preamble shout works —
+ * the listener sees no marker follow and concludes it was a shout — but it
+ * buys nothing, because a flat tone already says a band is present and about
+ * to listen, and the listener must wait for silence either way. The cost is
+ * real: a preamble is exactly the pattern frame.c hunts for, so every shout
+ * would drag the peer's framer into a half-locked state ~10 times a second,
+ * and a decaying burst tail can supply a false marker. A flat carrier has no
+ * transitions at all, so it cannot be mistaken for a frame — unambiguous by
+ * construction rather than by timeout.
  *
- * WHY A PLAIN CARRIER AND NOT AN ALTERNATING PATTERN. frame.c hunts for a run
- * of alternating chips followed by a 00, so a beacon of 1010... IS a preamble
- * and would manufacture false syncs in any band that happened to be framing. A
- * constant-on burst contains no transitions at all, so the framer can never
- * mistake it for a frame. Beacon and frame are unambiguous by construction
- * rather than by a length check.
+ * WHY THE SHOUT IS SHORT, RATHER THAN SENDING THE CARD BLIND. Transmitting the
+ * whole 156 ms card every cycle would remove a round trip, but it makes a band
+ * deaf most of the time instead of a small fraction of it, so two bands would
+ * frequently transmit over each other and lose both cards — and the proof
+ * above, which depends on a short deaf window, would collapse. The election
+ * would have to come back.
  *
- * WHY THE BEACON IS SHORT. carrier.c tracks the ambient floor with a slow
- * symmetric EMA, ~128 chips. A burst that ran much past that would be absorbed
- * into the floor and stop reading as a carrier — the detector would lose the
- * very signal it is being shown. BEACON_ON_US is asserted well inside that.
- *
- * WHY SNIFF AT ALL, RATHER THAN JUST LISTENING CONTINUOUSLY. Listening the
- * whole time between beacons would work and would be simpler — there would be
- * no deaf gap, so the guarantee above would hold trivially and the beacon could
- * shrink to about two detection latencies. It is rejected on power, and the
- * direction of that trade is the opposite of a radio's.
- *
- * There is no PA here. design §6.3 makes the transmitter a GPIO through a 1 M
- * resistor into a capacitive pad drawing ~12 uA, and architecture §3.3 keeps
- * core 1 out of the transmit path entirely — DMA and one PIO state machine do
- * it. Receiving is the expensive half: the ADC free-running at 500 ksps, its
- * DMA, and core 1 running the Goertzel flat out at 150 MHz.
- *
- * Estimated from the datasheets, pending measurement at M2:
- *
- *              RX duty   TX duty   mean current (excl. AFE)
- *   sniffing     29 %      6.7 %      ~3.9 mA
- *   always on    98 %      1.3 %     ~10.8 mA
- *
- * taking RX as ~11 mA (core 1 ~10, ADC+DMA ~1), TX as ~0.3 mA and idle ~1 mA.
- * Sniffing wins by about 2.2x — on a 500 mAh cell, roughly 85 hours of idle
- * against 39. So the longer beacon that sniffing forces is nearly free, and
- * the listening it avoids is what actually costs.
- *
- * HOW MUCH FURTHER THIS COULD GO, AND WHY IT DOES NOT. If receiving dominates,
- * the obvious move is a lower sniff duty and a longer beacon to cover the
- * bigger gap. The carrier detector caps that: the floor-tracking limit above
- * holds the beacon under ~16 ms, which holds the sniff duty above ~12 %. The
- * default 20 % is within about 12 % of the best current-draw that constraint
- * allows, and taking it would leave the beacon sitting on the assert with no
- * margin. The remaining headroom is not here — it is the 20 ms post-beacon
- * listen, and the MCP6292 pair, which design §6.1 leaves powered from 3V3 with
- * no way for firmware to gate them.
+ * WHY LISTENING IS CONTINUOUS. It costs power, and the duty-cycled sniffing
+ * this replaces costs about 2.2x less by an estimate from datasheets that has
+ * never been measured. That is a deliberate v1 decision on a bench, not an
+ * oversight: the proof above depends on there being no deaf gap outside one's
+ * own shout, and duty-cycled receiving can be reintroduced later without
+ * changing the rule.
  */
 #ifndef HANDOFF_BEACON_H
 #define HANDOFF_BEACON_H
@@ -128,158 +94,149 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "elect.h"
 #include "hal.h"
 
 /*
- * Listening duty cycle while idle. SNIFF_ON_US is two detection latencies, so
- * a beacon overlapping the window has time to raise the flag inside it rather
- * than just after it.
+ * The shout. Long enough that a peer can raise its presence flag and still see
+ * the burst end, short enough to stay well inside carrier.c's floor tracking.
  */
-#ifndef HANDOFF_SNIFF_ON_US
-#define HANDOFF_SNIFF_ON_US      (2u * ELECT_DETECT_US)
-#endif
-
-#ifndef HANDOFF_SNIFF_PERIOD_US
-#define HANDOFF_SNIFF_PERIOD_US  (10u * ELECT_DETECT_US)
-#endif
-
-/* Long enough to satisfy the guarantee above, short enough to stay well inside
- * the carrier detector's floor time constant. */
-#ifndef HANDOFF_BEACON_ON_US
-#define HANDOFF_BEACON_ON_US     (10u * ELECT_DETECT_US)
+#ifndef HANDOFF_SHOUT_US
+#define HANDOFF_SHOUT_US          (10u * HANDOFF_DETECT_US)
 #endif
 
 /*
- * How long we listen after our own beacon. A peer that woke on it holds until
- * our beacon clears, then waits out a draw of up to HANDOFF_BACKOFF_MAX_US and
- * an election listen before it transmits — so this window has to cover the
- * carrier detector's hold, the draw and the listen, or we hang up on the reply
- * we asked for. The slack is deliberate: a few more milliseconds of receiving
- * is cheap, and missing the reply costs a whole frame.
+ * The listen window, drawn fresh every cycle from [MIN, MAX). The range is not
+ * a latency budget — it is the decorrelator: two bands that shouted at the same
+ * instant repeat only if their next two draws land within a detector latency of
+ * each other, so the range has to be many latencies wide.
  */
-#ifndef HANDOFF_BEACON_LISTEN_US
-#define HANDOFF_BEACON_LISTEN_US (HANDOFF_BACKOFF_MAX_US + ELECT_LISTEN_US + \
-                                  6u * ELECT_DETECT_US)
+#ifndef HANDOFF_LISTEN_MIN_US
+#define HANDOFF_LISTEN_MIN_US     50000u
+#endif
+
+#ifndef HANDOFF_LISTEN_MAX_US
+#define HANDOFF_LISTEN_MAX_US     100000u
 #endif
 
 /*
- * Cap on BEACON_HOLD. A carrier that never clears is a stuck transmitter or a
- * noise floor that has moved, and waiting on it for ever would take the band
- * off the air; electing anyway is the same answer §7.3 gives to an election
- * that will not settle. Sized past the longest legitimate beacon.
+ * Cap on TRIG_WAIT. A carrier that never clears is a stuck transmitter, noise,
+ * or a floor that has moved, and waiting on it for ever would take the band off
+ * the air. On expiry the band resets its carrier detector — the floor may
+ * genuinely have moved — returns to listening, and DOES NOT SEND. That last
+ * part is the difference from the beacon design this replaces, which elected
+ * anyway: sending into a channel that is provably busy is worse than waiting a
+ * cycle.
  */
-#ifndef HANDOFF_BEACON_HOLD_MAX_US
-#define HANDOFF_BEACON_HOLD_MAX_US (HANDOFF_BEACON_ON_US + 8u * ELECT_DETECT_US)
+#ifndef HANDOFF_QUIET_WAIT_MAX_US
+#define HANDOFF_QUIET_WAIT_MAX_US 30000u
 #endif
 
-/*
- * Beacon spacing. This is the whole rendezvous latency budget, and what it
- * trades against is receive duty cycle, not transmit: a longer period means
- * more sniffing between beacons and a longer wait to be found. Worst case is
- * one period plus jitter — roughly 200 ms of R1's one-second contact.
- */
-#ifndef HANDOFF_BEACON_PERIOD_US
-#define HANDOFF_BEACON_PERIOD_US 100000u
-#endif
+/* carrier.c's floor is a slow EMA over ~128 chips; a shout that outlasted it
+ * would be absorbed into the floor and stop reading as a carrier — the
+ * detector would lose the very signal it is being shown. */
+HANDOFF_STATIC_ASSERT(HANDOFF_SHOUT_US <= 64u * HANDOFF_CHIP_US,
+    "shout outlasts the carrier detector's noise floor tracking");
 
-/* Draw range for the anti-collision jitter. Comparable to the period, so two
- * bands that collided once are very unlikely to collide again. */
-#ifndef HANDOFF_BEACON_JITTER_US
-#define HANDOFF_BEACON_JITTER_US HANDOFF_BEACON_PERIOD_US
-#endif
-
-/* The rendezvous guarantee, as a build failure rather than a comment. */
-HANDOFF_STATIC_ASSERT(
-    HANDOFF_BEACON_ON_US >= (HANDOFF_SNIFF_PERIOD_US - HANDOFF_SNIFF_ON_US)
-                            + ELECT_DETECT_US,
-    "a beacon can fall entirely inside the peer's deaf gap: rendezvous is not "
-    "guaranteed");
-
-HANDOFF_STATIC_ASSERT(HANDOFF_SNIFF_ON_US >= 2u * ELECT_DETECT_US,
-    "sniff window too short for the carrier detector to raise its flag");
-
-HANDOFF_STATIC_ASSERT(HANDOFF_SNIFF_PERIOD_US > HANDOFF_SNIFF_ON_US,
-    "sniff window cannot be longer than its period");
-
-/* carrier.c's floor is a slow EMA over ~128 chips; a beacon that outlasts it
- * is absorbed into the floor and stops reading as a carrier. */
-HANDOFF_STATIC_ASSERT(HANDOFF_BEACON_ON_US <= 64u * HANDOFF_CHIP_US,
-    "beacon outlasts the carrier detector's noise floor tracking");
+HANDOFF_STATIC_ASSERT(HANDOFF_SHOUT_US >= 4u * HANDOFF_DETECT_US,
+    "shout too short for a peer to raise its flag and still see it end");
 
 HANDOFF_STATIC_ASSERT(
-    HANDOFF_BEACON_LISTEN_US >= HANDOFF_BACKOFF_MAX_US + ELECT_LISTEN_US,
-    "post-beacon listen is shorter than the reply it is waiting for");
+    HANDOFF_LISTEN_MIN_US > HANDOFF_SHOUT_US + HANDOFF_TURNAROUND_US,
+    "listen window can be shorter than the deaf phase: some cycles never listen");
+
+/* The draw range is what decorrelates a simultaneous-shout collision. */
+HANDOFF_STATIC_ASSERT(
+    (HANDOFF_LISTEN_MAX_US - HANDOFF_LISTEN_MIN_US) >= 16u * HANDOFF_DETECT_US,
+    "listen draw range too narrow to decorrelate a simultaneous shout");
 
 HANDOFF_STATIC_ASSERT(
-    HANDOFF_BEACON_PERIOD_US > HANDOFF_BEACON_ON_US + HANDOFF_BEACON_LISTEN_US,
-    "beacon slots overlap: there is no idle time left to sniff in");
+    HANDOFF_QUIET_WAIT_MAX_US > HANDOFF_SHOUT_US + 8u * HANDOFF_CHIP_US,
+    "quiet-wait cap can truncate a legal shout plus the detector's hysteresis");
 
-#define BEACON_BURST_CHIPS (HANDOFF_BEACON_ON_US / HANDOFF_CHIP_US)
+#define TRIG_SHOUT_CHIPS (HANDOFF_SHOUT_US / HANDOFF_CHIP_US)
 
 typedef enum {
-    BEACON_OFF = 0,    /* not armed                                        */
-    BEACON_TX,         /* driving a plain carrier burst                    */
-    BEACON_SETTLE,     /* deaf, our own amplifier recovering               */
-    BEACON_LISTEN,     /* listening for a peer that woke on our beacon     */
-    BEACON_SNIFF,      /* short listening window                           */
-    BEACON_GAP,        /* deaf, between sniff windows                      */
-    BEACON_HOLD,       /* heard something: waiting for it to finish        */
-    BEACON_CONTACT     /* heard a peer: there is a channel, so there is a  */
-                       /* body in it                                       */
-} beacon_state_t;
+    TRIG_OFF = 0,   /* not armed                                            */
+    TRIG_SHOUT,     /* driving a flat carrier burst — deaf                  */
+    TRIG_SETTLE,    /* deaf, our own amplifier recovering                   */
+    TRIG_LISTEN,    /* ears open, counting down silent time                 */
+    TRIG_WAIT,      /* heard something: shout, or card? whichever comes     */
+                    /* first — the carrier clearing, or the framer locking  */
+    TRIG_SEND,      /* terminal: it was a shout, the channel is ours        */
+    TRIG_RECEIVE    /* terminal: it was a card, and it is already arriving  */
+} trig_state_t;
 
 typedef struct {
     const hal_iface_t *hal;
-    beacon_state_t state;
-    uint64_t       deadline_us;   /* end of the current phase              */
-    uint64_t       next_tx_us;    /* start of the next beacon slot         */
-    bool           burst_due;     /* chips not yet handed to the HAL       */
-    elect_role_t   wake_role;     /* what the wake reason implies          */
+    trig_state_t state;
+
+    uint64_t deadline_us;    /* end of the current timed phase              */
+    uint32_t listen_us;      /* the duration drawn for this listen          */
+    uint32_t silent_left_us; /* of it, how much silence is still owed       */
+    uint64_t last_poll_us;   /* to charge elapsed time to the right bucket  */
+
+    bool     burst_due;      /* chips not yet handed to the HAL             */
+    bool     reset_due;      /* the caller owes the carrier detector a reset*/
 
     /* counters — telemetry, and the assertions in the tests */
-    uint32_t       beacons;
-    uint32_t       sniffs;
-    uint32_t       holds;
-    uint32_t       wakes;
-} beacon_t;
+    uint32_t shouts;
+    uint32_t waits;
+    uint32_t quiet_timeouts;
+    uint32_t sends;
+    uint32_t receives;
+} trig_t;
 
-void           beacon_init(beacon_t *b, const hal_iface_t *hal);
+void         trig_init(trig_t *t, const hal_iface_t *hal);
 
-/* Arm the cycle. Starts with a beacon, so a band that has just been put on a
- * wrist announces itself rather than waiting out a period first. */
-void           beacon_start(beacon_t *b, uint64_t now_us);
+/* Arm the cycle. Starts with a shout, so a band that has just been put on a
+ * wrist announces itself rather than listening out a whole window first. */
+void         trig_start(trig_t *t, uint64_t now_us);
 
-void           beacon_stop(beacon_t *b);
+void         trig_stop(trig_t *t);
 
 /*
- * Drive one step. carrier_heard is meaningful only while beacon_listening() is
- * true; the caller must not feed the carrier detector at all in the deaf
+ * Drive one step.
+ *
+ * carrier_heard and framer_locked are meaningful only while trig_listening()
+ * is true; the caller must not feed the carrier detector at all in the deaf
  * phases, for the reason drain_discard() gives in link_sm.c.
  *
- * Returns BEACON_CONTACT exactly once per wake, at which point the caller
- * should start the election.
+ * framer_locked means the framer has taken a preamble AND its marker — not
+ * that it is merely hunting. It is the answer to "flat or preamble?", which
+ * cannot be answered when the carrier first appears: presence arrives about a
+ * detector latency in, and the framer needs a whole preamble and marker. So
+ * the question is settled by which happens first, a lock or silence, and the
+ * caller must poll often enough not to step over the lock — the body of a
+ * frame lasts far longer than any sane poll interval, so this is not tight.
+ *
+ * Returns TRIG_SEND or TRIG_RECEIVE exactly once per contact, at which point
+ * the caller transmits or receives and stops polling this.
  */
-beacon_state_t beacon_poll(beacon_t *b, uint64_t now_us, bool carrier_heard);
+trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
+                       bool framer_locked);
+
+/* True while the receive path should be feeding the carrier detector and the
+ * framer. False in the two deaf phases, and in the two terminal states. */
+bool         trig_listening(const trig_t *t);
 
 /*
- * The role the wake implies, valid once beacon_poll returns BEACON_CONTACT.
- * Woke in a sniff — we heard their beacon and they are now listening for an
- * answer — means INITIATOR. Woke in our own post-beacon listen means someone
- * answered us, so TARGET. See elect_assume().
- */
-elect_role_t   beacon_wake_role(const beacon_t *b);
-
-/* True while the receive path should be feeding the carrier detector. */
-bool           beacon_listening(const beacon_t *b);
-
-/*
- * True once per beacon, when the burst needs queueing. Clears on read, so the
+ * True once per shout, when the burst needs queueing. Clears on read, so the
  * caller queues the chips exactly once rather than every poll.
  */
-bool           beacon_take_burst(beacon_t *b);
+bool         trig_take_burst(trig_t *t);
 
-/* Chips of a beacon burst: all 1, no transitions. Returns chips written. */
-size_t         beacon_fill(uint8_t *chips, size_t max);
+/*
+ * True once when the quiet-wait cap expired and the carrier detector should be
+ * reset. Clears on read. Kept as a request rather than done here because the
+ * detector belongs to the caller — the trigger is given a bool, not a carrier_t.
+ */
+bool         trig_take_carrier_reset(trig_t *t);
+
+/* The listen duration currently being counted down. Telemetry, and what the
+ * simultaneous-start test inspects to know a redraw really happened. */
+uint32_t     trig_listen_us(const trig_t *t);
+
+/* Chips of a shout: all 1, no transitions. Returns chips written. */
+size_t       trig_fill(uint8_t *chips, size_t max);
 
 #endif /* HANDOFF_BEACON_H */

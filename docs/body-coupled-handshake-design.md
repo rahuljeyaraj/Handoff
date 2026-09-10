@@ -385,6 +385,14 @@ Half duplex, single carrier, listen-before-talk, following the collision avoidan
 
 On contact, each wristband waits a random 0–5 ms and then listens. If a carrier is heard it becomes the target and only responds. If silence is heard it becomes the initiator and drives the exchange. Ties are broken by redraw and retry, as in Ethernet backoff.
 
+> **Superseded by the firmware. This paragraph no longer describes what is built.**
+>
+> There is no election and no backoff. The firmware needs a *contact trigger* regardless — this document gives the board no button and no touch sensor, so the only thing that can tell a wristband a handshake has started is hearing a transmission — and once that trigger exists, it has already named a sender. Each band shouts a short flat carrier and then listens continuously; a band is deaf only during its own shout, so of any two shouts only the later one can be heard, and the band that hears a shout is the one that sends. Both-send and both-listen are unreachable rather than improbable, so there is nothing left for a draw to arbitrate.
+>
+> `HANDOFF_BACKOFF_MAX_US` and `lib/proto/elect.c` are deleted. See firmware-architecture §7.6, §13.3 and `docs/simple-trigger-spec.md`.
+>
+> The rejection of burned-in priority IDs below is unaffected and still stands.
+
 After roles are settled, the link switches to master/slave polling with stop-and-wait: initiator sends its record, target acknowledges, initiator requests the target's record, target sends, initiator acknowledges.
 
 **Rejected: burned-in priority IDs.** Static arbitration in the style of CAN bus requires a wired-AND bus so a losing node can detect its loss mid-bit. Body coupling has no dominant/recessive state, so this degenerates into hoping, and the lowest-numbered device starves the rest.

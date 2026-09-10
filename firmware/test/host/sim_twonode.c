@@ -28,27 +28,58 @@ void sim_init(sim_t *s, const char *card_a, const char *card_b,
     build_record(card_a, &s->rec_a, 11);
     build_record(card_b, &s->rec_b, 22);
 
+    s->a_sends = ((seed & 1u) == 0u);
+
     halh_pair(&s->node_a, &s->node_b, &s->clock_us, seed);
     link_sm_init(&s->sm_a, &s->node_a.iface, &s->cfg, &s->rec_a);
     link_sm_init(&s->sm_b, &s->node_b.iface, &s->cfg, &s->rec_b);
 }
 
+/*
+ * Quiet handed to the receiving end before the sender starts.
+ *
+ * Not a fudge, and not tuning. On a wrist the receiving end has been listening
+ * for a whole window before a card arrives, so carrier.c's floor is primed on
+ * ambient silence and the frame reads as three times that floor. Start both
+ * ends in the same microsecond and the detector primes instead on the frame's
+ * first preamble chip, which is a HIGH one: the floor sits at the carrier's own
+ * level and, measured, never recovers inside the frame. Handover then decides
+ * the channel is idle and talks over it. Costed at 650 frames for the same 50
+ * handshakes against 450 with the lead-in — and the first frame of a contact,
+ * which is the one a brief contact has.
+ *
+ * One millisecond is four chips; the floor primes on the first. It stays well
+ * inside rx_idle_us, so the receiver cannot mistake the lead-in for the far end
+ * having gone quiet.
+ */
+#define SIM_RX_PRIME_US 1000u
+
 sim_result_t sim_run(sim_t *s, uint64_t contact_us)
 {
     sim_result_t r;
     const uint64_t step = HANDOFF_CHIP_US;
+    link_sm_t *const tx = s->a_sends ? &s->sm_a : &s->sm_b;
+    link_sm_t *const rx = s->a_sends ? &s->sm_b : &s->sm_a;
+    bool sending = false;
     uint64_t t;
 
     memset(&r, 0, sizeof r);
 
-    link_sm_begin(&s->sm_a, s->clock_us);
-    link_sm_begin(&s->sm_b, s->clock_us);
+    link_sm_begin(rx, s->clock_us, LINK_ROLE_RECEIVER);
 
     for (t = 0; t < contact_us; t += step) {
-        const link_state_t sa = link_sm_poll(&s->sm_a, s->clock_us);
-        const link_state_t sb = link_sm_poll(&s->sm_b, s->clock_us);
+        link_state_t sa, sb;
 
-        if ((sa == LINK_COMPLETE || sa == LINK_ABORT) &&
+        if (!sending && t >= SIM_RX_PRIME_US) {
+            link_sm_begin(tx, s->clock_us, LINK_ROLE_SENDER);
+            sending = true;
+        }
+
+        sa = link_sm_poll(&s->sm_a, s->clock_us);
+        sb = link_sm_poll(&s->sm_b, s->clock_us);
+
+        if (sending &&
+            (sa == LINK_COMPLETE || sa == LINK_ABORT) &&
             (sb == LINK_COMPLETE || sb == LINK_ABORT))
             break;
 

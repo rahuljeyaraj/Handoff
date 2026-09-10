@@ -20,7 +20,7 @@ This plan reorders around one rule:
 > Hardware is added only when a milestone genuinely cannot proceed without it.
 
 The consequence is that most of the firmware — modulation, framing, timing
-recovery, packet protocol, role election — is written and proven with **no
+recovery, packet protocol, contact trigger — is written and proven with **no
 hardware at all**, on the host PC. What is left for the board is only what the
 board alone can answer: does the ADC keep up, does the amplifier have the gain
 the link budget assumed, does a body actually carry the signal.
@@ -44,7 +44,7 @@ be tested without hardware are physically unable to depend on hardware.
 |---|---|---|---|
 | `lib/dsp` | Goertzel, chip integration, threshold and timing recovery | host unit tests + channel simulator | none |
 | `lib/link` | Manchester encode/decode, preamble sync, framing, CRC | host unit tests + golden vectors | none |
-| `lib/proto` | Role election, stop-and-wait, turnaround timing | host tests, two simulated nodes in one process | none |
+| `lib/proto` | Contact trigger, stop-and-wait, turnaround timing | host tests, two simulated nodes in one process | none |
 | `lib/record` | 40-byte contact record codec, vCard mapping | host unit tests | none |
 | `lib/hal` | the interface only — no code, implemented twice | compiles everywhere | none |
 | `lib/hal_pico` | PIO carrier, ADC + DMA ring, pad high-Z, BLE, flash | on-board self-test apps | board |
@@ -110,7 +110,7 @@ android/            native Android app (own project, not built by the Pico SDK)
 | M11 | Validation campaign §14.1 | battery + isolation | + LiPo / TP4056 |
 | M12 | Body → BLE → phone, end to end, one way | none | 〃 |
 | M13 | Half-duplex turnaround on one board | none | 〃 |
-| M14 | Role election, two-way handshake | none | 2 wristbands |
+| M14 | Contact trigger, two-way handshake | none | 2 wristbands |
 
 ### 3.1 Mapping to your version
 
@@ -484,17 +484,24 @@ data only after the settling window (§9.7).
 Exit criteria: 10 000 turnarounds with no false carrier detection during the
 recovery window, and measured settling time against the 1 ms budget.
 
-### M14 — Role election and two-way
+### M14 — Contact trigger and two-way
 
 **Hardware: none added** — two complete wristbands, which by now you have.
 
-The state machine was written and tested at M1 against two simulated nodes,
-including the tie case, the redraw and the backoff. Only its binding to real
-hardware is new here.
+The state machine was written and tested at M1 against two simulated nodes.
+Only its binding to real hardware is new here.
 
-Exit criteria: 50 handshakes; both parties end up with each other's contact; role
-collisions resolve within the backoff budget; the tie case is forced deliberately
-(start both units from a synchronised trigger) and still resolves.
+There is no role election to bring up: it was removed and replaced by the
+contact trigger of firmware-architecture §7.6. What has to hold on hardware is
+that trigger's one claim — a band is deaf only during its own 10 ms shout, so
+of any two shouts only the later one can be heard, and the band that hears a
+shout is the one that sends.
+
+Exit criteria: 50 handshakes; both parties end up with each other's contact; two
+units started from a synchronised trigger still resolve to exactly one sender
+(the deliberately forced case, which in simulation needs a second shout round
+about once in two hundred); and no pair is ever observed transmitting frames
+simultaneously.
 
 ---
 
@@ -535,7 +542,8 @@ Carried from design §17, plus what this plan adds:
 | 500 ksps + DMA + Goertzel on core 1 | M4 | budget looks like 2–5 % core load; the risk is overrun handling, not maths |
 | Preamp input capacitance in situ | M7 | decides whether 200 kHz survives |
 | USB instrumentation vs §13 safety | M4 | resolved: continuous score stream, triggered raw bursts, BLE during body tests |
-| Role election implementation | **M1 done (logic)** / M14 (hardware) | `lib/proto/elect.c`, tested against two simulated nodes with injected randomness so the tie is forced rather than waited for. Measured first-attempt collision rate ~1 in 3, which is what design §9.6's 0–5 ms range gives against a ~1 ms carrier-detect latency; redraws converge, and `ELECT_MAX_REDRAWS` was raised from 8 to 16 so a handshake that never elects a role is 1 in 30 million rather than 1 in 10 000 |
+| Role election implementation | **removed** | There is no election. `lib/proto/elect.c` and its 0–5 ms backoff were deleted and replaced by the contact trigger, which decides the sender by timing geometry rather than by a draw — see firmware-architecture §7.6 and §13.3, and `docs/simple-trigger-spec.md` |
+| Contact trigger implementation | **M1 done (logic)** / M14 (hardware) | `lib/proto/beacon.c`. Swept across all 112 relative phase offsets: every one rendezvous, worst case 108 ms, and every one produces exactly one sender. Forced simultaneous starts over 400 seeds: 398 resolve within two shout rounds, worst case three. Power is deliberately not optimised for v1 — the band listens continuously |
 | RP2350-E9 vs the GP2 high-Z requirement | M3 | §6.3 requires GP2 high-Z while receiving, and the erratum affects high-Z bank-0 pads. Through R1's 1 MΩ it should be harmless — **confirm by measurement**, do not assume |
 | Enclosure and strap | not scheduled | not on the critical path |
 

@@ -6,10 +6,11 @@
  * protocol, not re-run the Goertzel a million times. DSP tests inject one
  * layer lower, through chan.h.
  *
- * Time is virtual and advanced by hand, so a 5 ms backoff and a 150 ms frame
- * cost no wall-clock time and role election runs thousands of handshakes per
- * second. Randomness is injectable, so an election tie is forced rather than
- * waited for.
+ * Time is virtual and advanced by hand, so a 100 ms listen window and a 150 ms
+ * frame cost no wall-clock time and the trigger's phase sweep runs a full
+ * rendezvous per millisecond of offset. Randomness is injectable, so the
+ * simultaneous-shout case of the trigger — two bands drawing listen windows
+ * close enough that neither hears the other — is forced rather than waited for.
  */
 #ifndef HANDOFF_HAL_HOST_H
 #define HANDOFF_HAL_HOST_H
@@ -55,8 +56,10 @@ struct halh_node {
     halh_chan_t   chan;
     rng_t         rng;
 
-    /* Injected randomness for elect.c. When forced_len is non-zero these
-     * values are handed out in order and then repeat, so a tie is exact. */
+    /* Injected randomness for the trigger's listen draw. When forced_len is
+     * non-zero these values are handed out in order and then repeat, so two
+     * bands can be given identical windows and the degenerate case of
+     * simple-trigger-spec §4.1 becomes exact rather than rare. */
     uint32_t      forced[8];
     uint8_t       forced_len;
     uint8_t       forced_pos;
@@ -102,7 +105,7 @@ void halh_advance(halh_node_t *a, halh_node_t *b, uint64_t us);
  */
 void halh_set_coupled(halh_node_t *a, halh_node_t *b, bool on);
 
-/* Force the next election draws. Call with n = 0 to return to the RNG. */
+/* Force the next listen draws. Call with n = 0 to return to the RNG. */
 void halh_force_random(halh_node_t *n, const uint32_t *values, size_t count);
 
 #endif /* HANDOFF_HAL_HOST_H */
