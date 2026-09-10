@@ -78,6 +78,27 @@ typedef struct {
 void          elect_init(elect_t *e, const hal_iface_t *hal);
 void          elect_start(elect_t *e, uint64_t now_us);
 
+/*
+ * Start from a role the caller already knows, instead of from a draw.
+ *
+ * beacon.c knows it: a band that woke in its own post-beacon listen was
+ * answered and is the TARGET, and a band that woke in a sniff heard someone
+ * else's beacon and is the INITIATOR. Those two cases cannot both happen to
+ * both ends, because a band is deaf while its own beacon is playing — so the
+ * wake reason is an asymmetry the draw would only be re-deriving.
+ *
+ * It is not re-derived for free, either. Waiting for the beacon to clear
+ * releases both ends at the SAME instant, which is the worst case for a random
+ * draw and made election ties markedly more likely than the 12 % §7.3 sizes
+ * for. Taking the role that is already known removes the tie instead of
+ * re-rolling it.
+ *
+ * TARGET settles immediately. INITIATOR still listens before talking, because
+ * a hint is not a measurement: if the channel turns out to be busy it becomes
+ * the target after all, exactly as a drawn election would.
+ */
+void          elect_assume(elect_t *e, uint64_t now_us, elect_role_t role);
+
 /* Drive the election. carrier_heard is the listen-before-talk observation for
  * this instant, normally hal_rx_carrier_level() against a threshold. */
 elect_state_t elect_poll(elect_t *e, uint64_t now_us, bool carrier_heard);

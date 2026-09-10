@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="560" fill="#ffffff"/>
+
+  <text x="450" y="36" text-anchor="middle" font-size="21" font-weight="700" fill="#1a1a1a">Which costs more — talking or listening?</text>
+  <line x1="50" y1="52" x2="850" y2="52" stroke="#d0d0d0" stroke-width="1"/>
+
+  <text x="70" y="82" font-size="14" font-weight="700" fill="#4066c0">A.  On this board, transmitting is almost nothing</text>
+
+  <rect x="90" y="98" width="340" height="108" rx="8" fill="#eaf3ea" stroke="#2e7d32"/>
+  <text x="260" y="122" text-anchor="middle" font-size="13" font-weight="700" fill="#2e7d32">TRANSMIT</text>
+  <text x="110" y="146" font-size="12" fill="#3a6b3c">one GPIO → 1 MΩ → a metal pad</text>
+  <text x="110" y="166" font-size="12" fill="#3a6b3c">DMA + one PIO block. No CPU at all.</text>
+  <text x="110" y="192" font-size="15" font-weight="700" fill="#2e7d32">≈ 0.3 mA</text>
+
+  <rect x="470" y="98" width="340" height="108" rx="8" fill="#fbeae8" stroke="#c0392b"/>
+  <text x="640" y="122" text-anchor="middle" font-size="13" font-weight="700" fill="#c0392b">RECEIVE</text>
+  <text x="490" y="146" font-size="12" fill="#8a5a52">ADC at 500,000 samples/sec + DMA</text>
+  <text x="490" y="166" font-size="12" fill="#8a5a52">a whole CPU core at 150 MHz, flat out</text>
+  <text x="490" y="192" font-size="15" font-weight="700" fill="#c0392b">≈ 11 mA</text>
+
+  <text x="90" y="232" font-size="13" font-weight="700" fill="#1a1a1a">Listening costs about 35× more than talking. There is no power amplifier to pay for.</text>
+  <text x="90" y="252" font-size="12" fill="#888">That is backwards from a normal radio — and it decides the question.</text>
+
+  <line x1="50" y1="270" x2="850" y2="270" stroke="#e5e5e5"/>
+
+  <text x="70" y="298" font-size="14" font-weight="700" fill="#8a6d1f">B.  So the two options come out like this</text>
+
+  <text x="150" y="326" font-size="12" font-weight="700" fill="#555">average current while idle</text>
+
+  <text x="90" y="360" font-size="13" font-weight="700" fill="#2e7d32">sniff</text>
+  <rect x="180" y="344" width="152" height="24" fill="#2e7d32"/>
+  <text x="345" y="362" font-size="14" font-weight="700" fill="#2e7d32">3.9 mA</text>
+  <text x="440" y="362" font-size="12" fill="#666">listens 29% of the time, beacon 10 ms</text>
+
+  <text x="90" y="404" font-size="13" font-weight="700" fill="#c0392b">always on</text>
+  <rect x="180" y="388" width="421" height="24" fill="#c0392b"/>
+  <text x="614" y="406" font-size="14" font-weight="700" fill="#c0392b">10.8 mA</text>
+  <text x="690" y="406" font-size="12" fill="#666">listens 98%</text>
+
+  <text x="90" y="444" font-size="13" fill="#1a1a1a">On a 500 mAh battery, sitting idle:</text>
+  <text x="360" y="444" font-size="13" font-weight="700" fill="#2e7d32">85 hours</text>
+  <text x="440" y="444" font-size="13" fill="#888">vs</text>
+  <text x="475" y="444" font-size="13" font-weight="700" fill="#c0392b">39 hours</text>
+
+  <line x1="50" y1="464" x2="850" y2="464" stroke="#e5e5e5"/>
+
+  <text x="70" y="492" font-size="14" font-weight="700" fill="#2e7d32">C.  Decision: keep sniffing. My earlier guess was wrong.</text>
+  <text x="90" y="514" font-size="12" fill="#555">The long beacon sniffing forces is nearly free. The listening it avoids is the whole cost.</text>
+  <text x="90" y="532" font-size="12" fill="#888">Figures are from datasheets, not a meter. Worth confirming on the bench at M2.</text>
+
+  <line x1="50" y1="542" x2="850" y2="542" stroke="#d0d0d0"/>
+  <text x="450" y="555" text-anchor="middle" font-size="11" fill="#888">Handoff — M1 walkthrough — 11d/13</text>
+</svg>

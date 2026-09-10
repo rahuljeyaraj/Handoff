@@ -119,6 +119,17 @@ void halh_pair(halh_node_t *a, halh_node_t *b, uint64_t *clock_us, uint64_t seed
     halh_init(b, "B", clock_us, seed ^ 0xA5A5A5A5A5A5A5A5ull);
     a->peer = b;
     b->peer = a;
+    /* Paired means touching. Every test that predates beacon.c is testing what
+     * happens during a contact, not how one starts, so contact is the default
+     * and a rendezvous test switches it off and back on. */
+    a->coupled = true;
+    b->coupled = true;
+}
+
+void halh_set_coupled(halh_node_t *a, halh_node_t *b, bool on)
+{
+    if (a) a->coupled = on;
+    if (b) b->coupled = on;
 }
 
 void halh_force_random(halh_node_t *n, const uint32_t *values, size_t count)
@@ -184,6 +195,10 @@ static void carry(halh_node_t *src, halh_node_t *dst, size_t chips)
             src->chips_tx++;
         }
         if (!dst) continue;
+
+        /* No contact, no channel. The chip was still transmitted — it just had
+         * nowhere to go. */
+        if (!src->coupled || !dst->coupled) on = 0;
 
         /* A node mid-transmission hears its own amplifier, not the far end. */
         if (dst->driving && dst->tx_sent < dst->tx_len)

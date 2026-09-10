@@ -321,6 +321,36 @@ jitter decorrelates the next slot, and a repeat needs both draws to land within
 a beacon of each other. Measured over the phase sweep, 2 contacts in 100 need a
 second round; worst-case rendezvous is ~293 ms against a ~214 ms clean bound.
 
+**Why sniff rather than simply listen the whole time.** Listening continuously
+between beacons would work and would be simpler — no deaf gap, so the guarantee
+holds trivially and the beacon could shrink to about two detection latencies.
+It is rejected on power, and the trade runs the opposite way to a radio's.
+
+There is no PA in this design. §6.3 of the design document makes the
+transmitter a GPIO through a 1 MΩ resistor into a capacitive pad drawing
+~12 µA, and §3.3 above keeps core 1 out of the transmit path entirely — DMA and
+one PIO state machine do it. Receiving is the expensive half: the ADC
+free-running at 500 ksps, its DMA, and core 1 running the Goertzel flat out.
+
+| | RX duty | TX duty | mean current, excl. AFE |
+|---|---|---|---|
+| sniffing (chosen) | 29 % | 6.7 % | ~3.9 mA |
+| listening always | 98 % | 1.3 % | ~10.8 mA |
+
+Estimated from datasheets pending measurement at M2, taking RX as ~11 mA
+(core 1 ~10, ADC and DMA ~1), TX as ~0.3 mA, idle ~1 mA. Sniffing wins by about
+2.2×: on a 500 mAh cell, roughly 85 hours of idle against 39. **The longer
+beacon that sniffing forces is nearly free; the listening it avoids is what
+costs.**
+
+Pushing further does not pay. A lower sniff duty needs a longer beacon to cover
+the bigger gap, and the carrier detector's floor tracking caps the beacon under
+~16 ms, which caps sniff duty above ~12 %. The default 20 % is within ~12 % of
+the best that constraint allows, and taking it would leave the beacon sitting on
+the assertion with no margin. The real remaining headroom is elsewhere: the
+20 ms post-beacon listen, and the MCP6292 pair, which design §6.1 powers from
+3V3 with no way for firmware to gate it.
+
 Two smaller decisions worth recording. The beacon is **constant-on rather than
 alternating**, because an alternating burst *is* a preamble under §8.3 and
 would manufacture false syncs in any band that happened to be framing; a

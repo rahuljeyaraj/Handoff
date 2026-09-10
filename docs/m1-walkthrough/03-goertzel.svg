@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="470" viewBox="0 0 900 470" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="470" fill="#ffffff"/>
+
+  <text x="450" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#1a1a1a">Goertzel — raw samples into one "is the tone here?" number</text>
+  <line x1="50" y1="55" x2="850" y2="55" stroke="#d0d0d0" stroke-width="1"/>
+
+  <!-- input samples -->
+  <text x="150" y="90" text-anchor="middle" font-size="13" fill="#555">25 raw ADC samples  (50 microseconds)</text>
+  <polyline points="55,150 65,120 75,110 85,140 95,180 105,195 115,165 125,125 135,108 145,130 155,175 165,198 175,190 185,150 195,115 205,110 215,145 225,185 235,196 245,160" fill="none" stroke="#4066c0" stroke-width="2"/>
+  <line x1="50" y1="150" x2="250" y2="150" stroke="#bbb" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <!-- arrow -->
+  <line x1="265" y1="150" x2="320" y2="150" stroke="#333" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- goertzel box -->
+  <rect x="325" y="105" width="180" height="90" rx="8" fill="#f6f8ff" stroke="#4066c0" stroke-width="2"/>
+  <text x="415" y="135" text-anchor="middle" font-size="14" font-weight="700" fill="#4066c0">Goertzel</text>
+  <text x="415" y="156" text-anchor="middle" font-size="12" fill="#555">only bin 10 = 200 kHz</text>
+  <text x="415" y="174" text-anchor="middle" font-size="12" fill="#555">a few adds/mults</text>
+  <text x="415" y="190" text-anchor="middle" font-size="12" fill="#555">per sample</text>
+
+  <!-- arrow -->
+  <line x1="510" y1="150" x2="565" y2="150" stroke="#333" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- output score -->
+  <rect x="600" y="110" width="70" height="80" rx="6" fill="#eaf3ea" stroke="#2e7d32" stroke-width="2"/>
+  <text x="635" y="155" text-anchor="middle" font-size="15" font-weight="700" fill="#2e7d32">score</text>
+  <text x="635" y="205" text-anchor="middle" font-size="11" fill="#555">1 number</text>
+  <text x="720" y="150" font-size="12" fill="#555">bigger = more</text>
+  <text x="720" y="166" font-size="12" fill="#555">200 kHz energy</text>
+
+  <line x1="50" y1="240" x2="850" y2="240" stroke="#e5e5e5" stroke-width="1"/>
+
+  <!-- score train -->
+  <text x="70" y="270" font-size="13" fill="#555">20,000 scores per second. 5 scores = 1 chip.</text>
+  <g>
+    <!-- carrier ON group: tall -->
+    <rect x="70"  y="300" width="26" height="90" fill="#2e7d32"/>
+    <rect x="104" y="295" width="26" height="95" fill="#2e7d32"/>
+    <rect x="138" y="305" width="26" height="85" fill="#2e7d32"/>
+    <rect x="172" y="298" width="26" height="92" fill="#2e7d32"/>
+    <rect x="206" y="302" width="26" height="88" fill="#2e7d32"/>
+    <!-- carrier OFF group: short -->
+    <rect x="252" y="368" width="26" height="22" fill="#c0392b"/>
+    <rect x="286" y="372" width="26" height="18" fill="#c0392b"/>
+    <rect x="320" y="366" width="26" height="24" fill="#c0392b"/>
+    <rect x="354" y="370" width="26" height="20" fill="#c0392b"/>
+    <rect x="388" y="369" width="26" height="21" fill="#c0392b"/>
+    <!-- ON -->
+    <rect x="434" y="300" width="26" height="90" fill="#2e7d32"/>
+    <rect x="468" y="304" width="26" height="86" fill="#2e7d32"/>
+    <rect x="502" y="297" width="26" height="93" fill="#2e7d32"/>
+    <rect x="536" y="303" width="26" height="87" fill="#2e7d32"/>
+    <rect x="570" y="299" width="26" height="91" fill="#2e7d32"/>
+    <!-- OFF -->
+    <rect x="616" y="370" width="26" height="20" fill="#c0392b"/>
+    <rect x="650" y="367" width="26" height="23" fill="#c0392b"/>
+    <rect x="684" y="371" width="26" height="19" fill="#c0392b"/>
+    <rect x="718" y="368" width="26" height="22" fill="#c0392b"/>
+    <rect x="752" y="372" width="26" height="18" fill="#c0392b"/>
+  </g>
+  <line x1="70" y1="390" x2="790" y2="390" stroke="#333" stroke-width="1"/>
+  <!-- chip brackets -->
+  <path d="M70 400 V408 H232 V400" fill="none" stroke="#333" stroke-width="1"/>
+  <text x="151" y="422" text-anchor="middle" font-size="11" fill="#333">chip = ON</text>
+  <path d="M252 400 V408 H414 V400" fill="none" stroke="#333" stroke-width="1"/>
+  <text x="333" y="422" text-anchor="middle" font-size="11" fill="#333">chip = OFF</text>
+  <path d="M434 400 V408 H596 V400" fill="none" stroke="#333" stroke-width="1"/>
+  <text x="515" y="422" text-anchor="middle" font-size="11" fill="#333">chip = ON</text>
+  <path d="M616 400 V408 H778 V400" fill="none" stroke="#333" stroke-width="1"/>
+  <text x="697" y="422" text-anchor="middle" font-size="11" fill="#333">chip = OFF</text>
+
+  <line x1="50" y1="438" x2="850" y2="438" stroke="#d0d0d0" stroke-width="1"/>
+  <text x="450" y="459" text-anchor="middle" font-size="12" fill="#888">Handoff — M1 walkthrough — 3/…   |   firmware/lib/dsp/goertzel.c</text>
+
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 z" fill="#333"/></marker>
+  </defs>
+</svg>

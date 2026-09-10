@@ -19,6 +19,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "beacon.h"
 #include "carousel.h"
 #include "carrier.h"
 #include "elect.h"
@@ -27,7 +28,7 @@
 #include "hal.h"
 
 typedef enum {
-    LINK_IDLE = 0,     /* no contact                                       */
+    LINK_IDLE = 0,     /* no contact: beaconing and sniffing, see beacon.h */
     LINK_BACKOFF,      /* random draw, design §9.6                         */
     LINK_LISTEN,       /* measuring carrier                                */
     LINK_TX_FRAME,     /* clocking chips out                               */
@@ -80,6 +81,7 @@ typedef struct {
     link_state_t state;
 
     elect_t      elect;
+    beacon_t     beacon;
     carousel_t   car;
     carrier_t    carrier;
     frame_rx_t   framer;
@@ -111,6 +113,16 @@ void         link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
 
 /* Contact detected (or the host said go). Starts the election. */
 void         link_sm_begin(link_sm_t *sm, uint64_t now_us);
+
+/*
+ * Arm the idle beacon cycle: the band looks for someone to talk to and calls
+ * link_sm_begin() itself when it finds one. This, not link_sm_begin(), is how
+ * a band on a wrist starts a handshake — see beacon.h for why the trigger has
+ * to be built out of the link rather than out of a sensor.
+ *
+ * Also how a band returns to service after LINK_COMPLETE or LINK_ABORT.
+ */
+void         link_sm_idle(link_sm_t *sm, uint64_t now_us);
 
 /* Drive one step. Drains received chips, advances the machine, queues chips
  * to transmit. Call as often as convenient; it is edge-free. */

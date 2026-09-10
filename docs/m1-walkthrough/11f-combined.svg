@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="640" viewBox="0 0 900 640" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="640" fill="#ffffff"/>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#333"/>
+    </marker>
+  </defs>
+
+  <text x="450" y="36" text-anchor="middle" font-size="21" font-weight="700" fill="#1a1a1a">Beacon and election, properly joined</text>
+  <line x1="50" y1="52" x2="850" y2="52" stroke="#d0d0d0" stroke-width="1"/>
+
+  <text x="70" y="82" font-size="14" font-weight="700" fill="#c0392b">You were right: they were doing overlapping work, and fighting.</text>
+
+  <line x1="50" y1="98" x2="850" y2="98" stroke="#e5e5e5"/>
+
+  <text x="70" y="126" font-size="14" font-weight="700" fill="#4066c0">A.  The two sides are NOT symmetric — that was the bug</text>
+
+  <rect x="90" y="142" width="340" height="150" rx="8" fill="#f4f7fc" stroke="#4066c0"/>
+  <text x="260" y="166" text-anchor="middle" font-size="13" font-weight="700" fill="#4066c0">heard it while sniffing</text>
+  <text x="110" y="192" font-size="12" fill="#555">What I hear is a <tspan font-weight="700">beacon</tspan>, near its start.</text>
+  <text x="110" y="212" font-size="12" fill="#555">They are still shouting, and still deaf.</text>
+  <rect x="110" y="226" width="300" height="30" rx="5" fill="#dde6f5"/>
+  <text x="260" y="246" text-anchor="middle" font-size="12" font-weight="700" fill="#2a4a90">WAIT for it to finish, then talk</text>
+  <text x="110" y="278" font-size="11" fill="#888">answering early eats my own preamble</text>
+
+  <rect x="470" y="142" width="340" height="150" rx="8" fill="#f0f8f0" stroke="#2e7d32"/>
+  <text x="640" y="166" text-anchor="middle" font-size="13" font-weight="700" fill="#2e7d32">heard it after my own beacon</text>
+  <text x="490" y="192" font-size="12" fill="#555">What I hear is a <tspan font-weight="700">frame</tspan> — my answer.</text>
+  <text x="490" y="212" font-size="12" fill="#555">Nobody else would talk into this window.</text>
+  <rect x="490" y="226" width="300" height="30" rx="5" fill="#d8ecd9"/>
+  <text x="640" y="246" text-anchor="middle" font-size="12" font-weight="700" fill="#2e7d32">WAKE NOW and start receiving</text>
+  <text x="490" y="278" font-size="11" fill="#888">waiting means missing the whole frame</text>
+
+  <line x1="50" y1="308" x2="850" y2="308" stroke="#e5e5e5"/>
+
+  <text x="70" y="336" font-size="14" font-weight="700" fill="#8a6d1f">B.  What the election still does</text>
+
+  <rect x="90" y="352" width="340" height="86" rx="8" fill="#f7f9fc" stroke="#aabbdd"/>
+  <text x="260" y="376" text-anchor="middle" font-size="12" font-weight="700" fill="#2a4a90">"I heard their beacon" → I send</text>
+  <text x="260" y="398" text-anchor="middle" font-size="11" fill="#666">Trustworthy: two bands cannot both</text>
+  <text x="260" y="414" text-anchor="middle" font-size="11" fill="#666">hear each other, since shouting = deaf.</text>
+  <text x="260" y="432" text-anchor="middle" font-size="11" font-weight="700" fill="#2e7d32">no dice needed</text>
+
+  <rect x="470" y="352" width="340" height="86" rx="8" fill="#fbeae8" stroke="#c0392b"/>
+  <text x="640" y="376" text-anchor="middle" font-size="12" font-weight="700" fill="#c0392b">"they answered me" → I receive</text>
+  <text x="640" y="398" text-anchor="middle" font-size="11" fill="#666">NOT trustworthy: overlapping beacons</text>
+  <text x="640" y="414" text-anchor="middle" font-size="11" fill="#666">make both ends believe it, and both wait.</text>
+  <text x="640" y="432" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">dice decides</text>
+
+  <text x="90" y="464" font-size="12" fill="#1a1a1a">A wrong "I send" is caught by listening first. A wrong "I receive" is a deadlock nothing catches.</text>
+  <text x="90" y="482" font-size="12" font-weight="700" fill="#1a1a1a">So the beacon supplies the easy half, and the dice keeps the hard half.</text>
+
+  <line x1="50" y1="500" x2="850" y2="500" stroke="#e5e5e5"/>
+
+  <text x="70" y="526" font-size="14" font-weight="700" fill="#2e7d32">C.  Measured, 60 handshakes</text>
+
+  <g font-size="12">
+    <text x="110" y="550" fill="#888">no beacon at all (baseline)</text>
+    <rect x="380" y="539" width="150" height="14" fill="#ccc"/>
+    <text x="540" y="550" fill="#888">973 ms</text>
+
+    <text x="110" y="572" fill="#c0392b">before this fix</text>
+    <rect x="380" y="561" width="358" height="14" fill="#c0392b"/>
+    <text x="748" y="572" fill="#c0392b" font-weight="700">2320 ms</text>
+
+    <text x="110" y="594" fill="#2e7d32">after</text>
+    <rect x="380" y="583" width="164" height="14" fill="#2e7d32"/>
+    <text x="554" y="594" fill="#2e7d32" font-weight="700">1061 ms</text>
+  </g>
+  <line x1="50" y1="614" x2="850" y2="614" stroke="#d0d0d0"/>
+  <text x="450" y="632" text-anchor="middle" font-size="11" fill="#888">Handoff — M1 walkthrough — 11f/13</text>
+</svg>

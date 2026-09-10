@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="625" viewBox="0 0 900 625" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="625" fill="#ffffff"/>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#333"/>
+    </marker>
+  </defs>
+
+  <text x="450" y="36" text-anchor="middle" font-size="21" font-weight="700" fill="#1a1a1a">The trigger — what starts a handshake</text>
+  <line x1="50" y1="52" x2="850" y2="52" stroke="#d0d0d0" stroke-width="1"/>
+
+  <text x="70" y="82" font-size="14" font-weight="700" fill="#c0392b">A.  The idea: no sensor is needed, because the channel IS the sensor</text>
+
+  <rect x="90" y="98" width="330" height="92" rx="8" fill="#fbeae8" stroke="#c0392b"/>
+  <text x="255" y="122" text-anchor="middle" font-size="13" font-weight="700" fill="#c0392b">not touching</text>
+  <circle cx="150" cy="155" r="16" fill="#c0392b" opacity="0.25"/>
+  <circle cx="360" cy="155" r="16" fill="#c0392b" opacity="0.25"/>
+  <line x1="172" y1="155" x2="240" y2="155" stroke="#c0392b" stroke-width="2" stroke-dasharray="4,4"/>
+  <line x1="270" y1="155" x2="338" y2="155" stroke="#c0392b" stroke-width="2" stroke-dasharray="4,4"/>
+  <text x="255" y="160" text-anchor="middle" font-size="18" fill="#c0392b">✕</text>
+  <text x="255" y="182" text-anchor="middle" font-size="11" fill="#8a5a52">nothing gets through at all</text>
+
+  <rect x="480" y="98" width="330" height="92" rx="8" fill="#eaf3ea" stroke="#2e7d32"/>
+  <text x="645" y="122" text-anchor="middle" font-size="13" font-weight="700" fill="#2e7d32">touching</text>
+  <circle cx="540" cy="155" r="16" fill="#2e7d32" opacity="0.3"/>
+  <circle cx="750" cy="155" r="16" fill="#2e7d32" opacity="0.3"/>
+  <line x1="562" y1="155" x2="728" y2="155" stroke="#2e7d32" stroke-width="3"/>
+  <text x="645" y="182" text-anchor="middle" font-size="11" fill="#3a6b3c">a signal arrives = a body closed the loop</text>
+
+  <text x="90" y="212" font-size="12" font-weight="700" fill="#1a1a1a">So: hearing anything at all IS the contact signal. No button, no touch sensor, nothing extra on the board.</text>
+
+  <line x1="50" y1="228" x2="850" y2="228" stroke="#e5e5e5"/>
+
+  <text x="70" y="256" font-size="14" font-weight="700" fill="#4066c0">B.  Each band free-runs the same cycle: shout briefly, listen often</text>
+
+  <text x="70" y="292" font-size="12" font-weight="700" fill="#4066c0">band A</text>
+  <rect x="140" y="278" width="80" height="26" fill="#4066c0"/>
+  <text x="180" y="296" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">BEACON</text>
+  <rect x="220" y="278" width="120" height="26" fill="#dde6f5" stroke="#4066c0"/>
+  <text x="280" y="296" text-anchor="middle" font-size="10" fill="#2a4a90">listen</text>
+  <g>
+    <rect x="346" y="278" width="16" height="26" fill="#9db8e0"/>
+    <rect x="386" y="278" width="16" height="26" fill="#9db8e0"/>
+    <rect x="426" y="278" width="16" height="26" fill="#9db8e0"/>
+    <rect x="466" y="278" width="16" height="26" fill="#9db8e0"/>
+    <rect x="506" y="278" width="16" height="26" fill="#9db8e0"/>
+    <rect x="546" y="278" width="16" height="26" fill="#9db8e0"/>
+    <rect x="586" y="278" width="16" height="26" fill="#9db8e0"/>
+    <rect x="626" y="278" width="16" height="26" fill="#9db8e0"/>
+  </g>
+  <rect x="666" y="278" width="80" height="26" fill="#4066c0"/>
+  <text x="706" y="296" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">BEACON</text>
+
+  <text x="440" y="322" text-anchor="middle" font-size="10" fill="#5a76a8">short sniff windows — deaf in between</text>
+
+  <line x1="50" y1="340" x2="850" y2="340" stroke="#e5e5e5"/>
+
+  <text x="70" y="368" font-size="14" font-weight="700" fill="#2e7d32">C.  The guarantee: a beacon is longer than the deaf gap, so it cannot be missed</text>
+
+  <text x="70" y="404" font-size="12" font-weight="700" fill="#8a6d1f">B beacons</text>
+  <rect x="180" y="390" width="150" height="26" fill="#8a6d1f"/>
+  <text x="255" y="408" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">10 ms of carrier</text>
+
+  <text x="70" y="446" font-size="12" font-weight="700" fill="#4066c0">A sniffs</text>
+  <g>
+    <rect x="140" y="432" width="26" height="26" fill="#4066c0"/>
+    <rect x="166" y="432" width="104" height="26" fill="#eeeeee" stroke="#ccc" stroke-dasharray="3,3"/>
+    <rect x="270" y="432" width="26" height="26" fill="#4066c0"/>
+    <rect x="296" y="432" width="104" height="26" fill="#eeeeee" stroke="#ccc" stroke-dasharray="3,3"/>
+    <rect x="400" y="432" width="26" height="26" fill="#4066c0"/>
+  </g>
+  <text x="218" y="476" text-anchor="middle" font-size="10" fill="#999">deaf 8 ms</text>
+  <text x="153" y="476" text-anchor="middle" font-size="10" fill="#4066c0">2 ms</text>
+
+  <rect x="270" y="386" width="26" height="76" fill="#2e7d32" opacity="0.2"/>
+  <line x1="283" y1="462" x2="283" y2="486" stroke="#2e7d32" stroke-width="2"/>
+  <text x="283" y="500" text-anchor="middle" font-size="11" font-weight="700" fill="#2e7d32">heard here</text>
+
+  <text x="470" y="404" font-size="12" fill="#555">beacon (10 ms)  &gt;  deaf gap (8 ms) + detect (1 ms)</text>
+  <text x="470" y="426" font-size="12" font-weight="700" fill="#2e7d32">so it can never fall entirely in a gap</text>
+  <text x="470" y="450" font-size="11" fill="#888">This is a build-time assertion, not a comment.</text>
+  <text x="470" y="468" font-size="11" fill="#888">The test sweeps all 100 phase offsets.</text>
+
+  <line x1="50" y1="516" x2="850" y2="516" stroke="#e5e5e5"/>
+
+  <text x="70" y="542" font-size="14" font-weight="700" fill="#c0392b">D.  The one hole — and the same fix as before</text>
+  <text x="90" y="564" font-size="12" fill="#555">A band is deaf while its own beacon is playing, so two bands beaconing at the same instant miss each other.</text>
+  <text x="90" y="582" font-size="12" fill="#555">The next slot is jittered, so they pull apart. Measured: <tspan font-weight="700" fill="#2e7d32">2 contacts in 100</tspan> need a second round.</text>
+
+  <line x1="50" y1="602" x2="850" y2="602" stroke="#d0d0d0"/>
+  <text x="450" y="618" text-anchor="middle" font-size="11" fill="#888">Handoff — M1 walkthrough — 11b/13</text>
+</svg>

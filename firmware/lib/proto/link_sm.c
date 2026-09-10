@@ -34,6 +34,7 @@ void link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
     if (cfg) sm->cfg = *cfg; else link_cfg_default(&sm->cfg);
 
     elect_init(&sm->elect, hal);
+    beacon_init(&sm->beacon, hal);
     carrier_init(&sm->carrier);
     frame_rx_init(&sm->framer);
     frag_rx_init(&sm->rx);
@@ -45,8 +46,25 @@ void link_sm_begin(link_sm_t *sm, uint64_t now_us)
 {
     frame_rx_init(&sm->framer);
     frag_rx_init(&sm->rx);
-    carrier_reset(&sm->carrier);
     carousel_init(&sm->car, sm->own ? sm->own->count : 1u, sm->cfg.carousel_weight);
+
+    /*
+     * The carrier detector IS reset, and on the beacon path that matters more
+     * than it looks. A band that woke from a beacon has just spent BEACON_HOLD
+     * feeding the far end's full-power carrier into the floor EMA, which leaves
+     * the floor several times the true ambient. Carried into the exchange, that
+     * floor makes real frames fail the presence test, and handover — which runs
+     * on carrier_present and last_carrier_us — starts talking over the reply it
+     * asked for. Leaving it primed was measured at 1137 frames sent for the
+     * same 300 delivered, against 376 with the reset.
+     *
+     * The cost is that the election's listen-before-talk spends its window
+     * re-priming and cannot see an already-running carrier. That is why
+     * elect_assume() takes only the INITIATOR hint, which is sound on its own:
+     * two ends cannot both hear the other's beacon from a sniff, because a band
+     * is deaf while its own beacon plays.
+     */
+    carrier_reset(&sm->carrier);
 
     sm->started_us = now_us;
     sm->turn_frames = 0;
@@ -56,8 +74,26 @@ void link_sm_begin(link_sm_t *sm, uint64_t now_us)
     sm->sent_ack = false;
     sm->chips_len = 0;
 
+    beacon_stop(&sm->beacon);
     elect_start(&sm->elect, now_us);
     sm->state = LINK_BACKOFF;
+}
+
+void link_sm_idle(link_sm_t *sm, uint64_t now_us)
+{
+    hal_tx_drive(sm->hal, false);
+    frame_rx_init(&sm->framer);
+    carrier_reset(&sm->carrier);
+
+    /*
+     * The received record is NOT cleared. A contact that ended early left a
+     * partial card in frag_rx, and architecture §8.4's whole argument is that
+     * a partial card is worth something; throwing it away on the way back to
+     * idle would discard exactly what the wearer is about to be shown.
+     */
+    sm->chips_len = 0;
+    beacon_start(&sm->beacon, now_us);
+    sm->state = LINK_IDLE;
 }
 
 /*
@@ -254,9 +290,54 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
     sm->state = have_their_record(sm) ? LINK_COMPLETE : LINK_ABORT;
 }
 
+/*
+ * IDLE is not a parked state. It runs the beacon cycle of beacon.h, which is
+ * what actually starts a handshake on a wrist: there is no button and no touch
+ * sensor, so the band advertises into the channel and listens for the same,
+ * and hearing anything at all means a body has closed the loop.
+ *
+ * The carrier detector is fed ONLY in the listening phases. Feeding it while
+ * our own amplifier is driving is the drain_discard() problem below, and here
+ * it has a sharper edge: the band would wake on its own beacon, every period,
+ * for ever. Its level and floor are deliberately NOT reset between windows —
+ * the ambient floor of a room does not change in the 8 ms we are deaf, and
+ * re-priming it against a beacon that is already on would hide that beacon.
+ */
+static void poll_idle(link_sm_t *sm, uint64_t now_us)
+{
+    const bool listening = beacon_listening(&sm->beacon);
+    beacon_state_t bs;
+
+    if (listening) drain_rx(sm, false); else drain_discard(sm);
+
+    bs = beacon_poll(&sm->beacon, now_us,
+                     listening && carrier_present(&sm->carrier));
+
+    if (beacon_take_burst(&sm->beacon)) {
+        sm->chips_len = beacon_fill(sm->chips, sizeof sm->chips);
+        hal_tx_drive(sm->hal, true);
+        hal_tx_chips(sm->hal, sm->chips, sm->chips_len);
+    } else if (bs != BEACON_TX) {
+        hal_tx_drive(sm->hal, false);
+    }
+
+    if (bs == BEACON_CONTACT) {
+        link_sm_begin(sm, now_us);
+        /*
+         * The beacon already knows which end we are — see elect_assume(). It
+         * is not merely faster than re-drawing: holding for the beacon to
+         * clear releases both ends at the same instant, and a random draw is
+         * at its worst exactly then.
+         */
+        elect_assume(&sm->elect, now_us, beacon_wake_role(&sm->beacon));
+    }
+}
+
 link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
 {
-    if (sm->state == LINK_IDLE || sm->state == LINK_COMPLETE || sm->state == LINK_ABORT)
+    if (sm->state == LINK_IDLE) { poll_idle(sm, now_us); return sm->state; }
+
+    if (sm->state == LINK_COMPLETE || sm->state == LINK_ABORT)
         return sm->state;
 
     if (now_us - sm->started_us > sm->cfg.contact_budget_us) {

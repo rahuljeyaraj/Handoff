@@ -44,6 +44,14 @@ struct halh_node {
     const char   *name;
 
     uint64_t     *clock_us;   /* shared with the peer                        */
+
+    /*
+     * Whether the two wearers are actually touching. FALSE is not "a bad
+     * channel": before skin meets skin there is no channel at all and a
+     * transmission is simply inaudible. beacon.c is built on exactly that, so
+     * a simulator that always couples cannot test the thing it is testing.
+     */
+    bool          coupled;
     halh_chan_t   chan;
     rng_t         rng;
 
@@ -86,6 +94,13 @@ void halh_init(halh_node_t *n, const char *name, uint64_t *clock_us, uint64_t se
  * thing that makes time pass.
  */
 void halh_advance(halh_node_t *a, halh_node_t *b, uint64_t us);
+
+/*
+ * Skin contact between the two wearers. halh_pair() starts them touching,
+ * because every test that predates beacon.c is about what happens during a
+ * contact rather than about how one begins.
+ */
+void halh_set_coupled(halh_node_t *a, halh_node_t *b, bool on);
 
 /* Force the next election draws. Call with n = 0 to return to the RNG. */
 void halh_force_random(halh_node_t *n, const uint32_t *values, size_t count);

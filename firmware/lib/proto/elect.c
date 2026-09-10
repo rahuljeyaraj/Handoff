@@ -32,6 +32,38 @@ void elect_start(elect_t *e, uint64_t now_us)
     e->state = ELECT_BACKOFF;
 }
 
+void elect_assume(elect_t *e, uint64_t now_us, elect_role_t role)
+{
+    /*
+     * Only the INITIATOR hint is taken. The TARGET one is not trustworthy and
+     * it fails in the worst possible direction.
+     *
+     * A band offers TARGET when it woke inside its own post-beacon listen,
+     * which is meant to mean "someone answered me". Two beacons that overlap
+     * only partially make that untrue for both ends at once: each hears the
+     * tail of the other's beacon in its own listen window, and both conclude
+     * they were answered. Both then wait to receive, and nobody transmits —
+     * a hint that is wrong about INITIATOR costs a collision the listen below
+     * catches, but a hint that is wrong about TARGET costs a deadlock that
+     * nothing catches until the barren-turn counter gives up. Measured over the
+     * eight seeds test_beacon uses, that happened twice.
+     *
+     * So a TARGET hint falls through to the drawn election, which is exactly
+     * the case a draw exists for: two ends that cannot tell each other apart.
+     */
+    if (role != ELECT_ROLE_INITIATOR) { elect_start(e, now_us); return; }
+
+    e->redraws = 0;
+    e->gave_up = false;
+    e->draw_us = 0;
+
+    /* Listen-before-talk still runs; only the draw is skipped. That listen is
+     * what makes a wrong INITIATOR hint safe rather than merely unlikely. */
+    e->role = ELECT_ROLE_NONE;
+    e->deadline_us = now_us + ELECT_LISTEN_US;
+    e->state = ELECT_LISTEN;
+}
+
 void elect_collision(elect_t *e, uint64_t now_us)
 {
     if (++e->redraws > ELECT_MAX_REDRAWS) {

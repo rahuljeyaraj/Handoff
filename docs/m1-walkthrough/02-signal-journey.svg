@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="470" viewBox="0 0 900 470" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="470" fill="#ffffff"/>
+
+  <!-- header -->
+  <text x="450" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#1a1a1a">The signal's journey, end to end</text>
+  <line x1="50" y1="55" x2="850" y2="55" stroke="#d0d0d0" stroke-width="1"/>
+
+  <!-- SENDING row -->
+  <text x="60" y="95" font-size="14" font-weight="700" fill="#4066c0">SENDING  (wristband A)</text>
+
+  <g font-size="12" fill="#1a1a1a">
+    <rect x="60"  y="105" width="120" height="60" rx="6" fill="#f6f8ff" stroke="#4066c0"/>
+    <text x="120" y="130" text-anchor="middle">record</text>
+    <text x="120" y="148" text-anchor="middle" fill="#555">pack vCard,</text>
+    <text x="120" y="162" text-anchor="middle" fill="#555">split to chunks</text>
+
+    <rect x="210" y="105" width="120" height="60" rx="6" fill="#f6f8ff" stroke="#4066c0"/>
+    <text x="270" y="130" text-anchor="middle">link</text>
+    <text x="270" y="148" text-anchor="middle" fill="#555">wrap in a frame</text>
+    <text x="270" y="162" text-anchor="middle" fill="#555">+ CRC-16</text>
+
+    <rect x="360" y="105" width="120" height="60" rx="6" fill="#f6f8ff" stroke="#4066c0"/>
+    <text x="420" y="130" text-anchor="middle">link</text>
+    <text x="420" y="148" text-anchor="middle" fill="#555">Manchester:</text>
+    <text x="420" y="162" text-anchor="middle" fill="#555">1 bit -&gt; 2 chips</text>
+
+    <rect x="510" y="105" width="120" height="60" rx="6" fill="#f6f8ff" stroke="#4066c0"/>
+    <text x="570" y="130" text-anchor="middle">dsp / hal</text>
+    <text x="570" y="148" text-anchor="middle" fill="#555">chip on = 200 kHz</text>
+    <text x="570" y="162" text-anchor="middle" fill="#555">chip off = silence</text>
+
+    <rect x="660" y="105" width="120" height="60" rx="6" fill="#fff3f0" stroke="#c0392b"/>
+    <text x="720" y="130" text-anchor="middle">pad</text>
+    <text x="720" y="148" text-anchor="middle" fill="#555">drives the</text>
+    <text x="720" y="162" text-anchor="middle" fill="#555">body</text>
+  </g>
+  <g stroke="#4066c0" stroke-width="1.5" marker-end="url(#ah)">
+    <line x1="180" y1="135" x2="208" y2="135"/>
+    <line x1="330" y1="135" x2="358" y2="135"/>
+    <line x1="480" y1="135" x2="508" y2="135"/>
+    <line x1="630" y1="135" x2="658" y2="135"/>
+  </g>
+
+  <!-- body channel -->
+  <rect x="330" y="205" width="240" height="46" rx="8" fill="#fde7e3" stroke="#c0392b" stroke-width="2"/>
+  <text x="450" y="226" text-anchor="middle" font-size="13" font-weight="700" fill="#c0392b">THE TWO BODIES</text>
+  <text x="450" y="243" text-anchor="middle" font-size="11" fill="#a83224">weak, noisy, drifting channel</text>
+  <line x1="720" y1="165" x2="720" y2="228" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ahr)"/>
+  <line x1="570" y1="228" x2="558" y2="228" stroke="#c0392b" stroke-width="0"/>
+  <line x1="330" y1="228" x2="180" y2="228" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ahr)"/>
+  <line x1="330" y1="228" x2="330" y2="228" stroke="#c0392b"/>
+  <path d="M330 228 H182" stroke="#c0392b" stroke-width="1.5" fill="none"/>
+  <path d="M180 228 V300" stroke="#c0392b" stroke-width="1.5" fill="none" marker-end="url(#ahr)"/>
+
+  <!-- RECEIVING row -->
+  <text x="60" y="325" font-size="14" font-weight="700" fill="#2e7d32">RECEIVING  (wristband B)  — same steps, reversed</text>
+
+  <g font-size="12" fill="#1a1a1a">
+    <rect x="60"  y="335" width="120" height="60" rx="6" fill="#f1f8f1" stroke="#2e7d32"/>
+    <text x="120" y="360" text-anchor="middle">dsp: Goertzel</text>
+    <text x="120" y="378" text-anchor="middle" fill="#555">samples -&gt; one</text>
+    <text x="120" y="392" text-anchor="middle" fill="#555">"score" / 50 us</text>
+
+    <rect x="210" y="335" width="120" height="60" rx="6" fill="#f1f8f1" stroke="#2e7d32"/>
+    <text x="270" y="360" text-anchor="middle">dsp: carrier</text>
+    <text x="270" y="378" text-anchor="middle" fill="#555">+ sync</text>
+    <text x="270" y="392" text-anchor="middle" fill="#555">score -&gt; chip on/off</text>
+
+    <rect x="360" y="335" width="120" height="60" rx="6" fill="#f1f8f1" stroke="#2e7d32"/>
+    <text x="420" y="360" text-anchor="middle">link</text>
+    <text x="420" y="378" text-anchor="middle" fill="#555">Manchester:</text>
+    <text x="420" y="392" text-anchor="middle" fill="#555">2 chips -&gt; 1 bit</text>
+
+    <rect x="510" y="335" width="120" height="60" rx="6" fill="#f1f8f1" stroke="#2e7d32"/>
+    <text x="570" y="360" text-anchor="middle">link</text>
+    <text x="570" y="378" text-anchor="middle" fill="#555">find frame,</text>
+    <text x="570" y="392" text-anchor="middle" fill="#555">check CRC-16</text>
+
+    <rect x="660" y="335" width="120" height="60" rx="6" fill="#f1f8f1" stroke="#2e7d32"/>
+    <text x="720" y="360" text-anchor="middle">record</text>
+    <text x="720" y="378" text-anchor="middle" fill="#555">reassemble,</text>
+    <text x="720" y="392" text-anchor="middle" fill="#555">unpack vCard</text>
+  </g>
+  <g stroke="#2e7d32" stroke-width="1.5" marker-end="url(#ahg)">
+    <line x1="180" y1="365" x2="208" y2="365"/>
+    <line x1="330" y1="365" x2="358" y2="365"/>
+    <line x1="480" y1="365" x2="508" y2="365"/>
+    <line x1="630" y1="365" x2="658" y2="365"/>
+  </g>
+
+  <!-- footer -->
+  <line x1="50" y1="430" x2="850" y2="430" stroke="#d0d0d0" stroke-width="1"/>
+  <text x="450" y="452" text-anchor="middle" font-size="12" fill="#888">Handoff — M1 walkthrough — 2/…   |   4000 chips/s, 2000 bps, 250 us per chip</text>
+
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#4066c0"/></marker>
+    <marker id="ahg" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2e7d32"/></marker>
+    <marker id="ahr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#c0392b"/></marker>
+  </defs>
+</svg>
