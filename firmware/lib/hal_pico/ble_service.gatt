@@ -1,0 +1,59 @@
+//
+// Handoff — the BLE GATT contract. firmware-architecture.md §11.2.
+//
+// Compiled to a C header by the SDK's pico_btstack_make_gatt_header(), which
+// runs BTstack's tool/compile_gatt.py. Nothing here is written by hand into
+// ble.c: the attribute handles come out of the generated ble_service.h.
+//
+// The name is ble_service rather than ble because the generator names its
+// output after this file, and a generated ble.h would shadow the one next
+// door with no diagnostic at all.
+//
+// THIS FILE IS THE CONTRACT WITH android/. Changing a UUID or a property here
+// breaks the app silently — it will connect, find nothing, and report no
+// error. Change both sides in one commit, or neither.
+//
+// The UUID base is 48414e44-xxxx-4f46-9b2c-1e0a7d3f5c81:
+//   48414e44  "HAND" in ASCII, so a nRF Connect dump is readable at a glance
+//   4f46      "OF",  and its leading 4 makes this a well-formed random UUID
+//   xxxx      the characteristic index
+//
+// SECURITY. my_vcard and rx_vcard carry the wearer's identity and someone
+// else's, so both are ENCRYPTION_KEY_SIZE_16 — architecture §11.2's "bonded,
+// encrypted link", which compile_gatt.py turns into READ_ENCRYPTED |
+// WRITE_ENCRYPTED on the value AND on its client configuration descriptor. A
+// bystander can therefore neither read the wearer's card nor enable
+// notifications to harvest one.
+//
+// status, telemetry and control are deliberately NOT encrypted. They carry no
+// identity — a link state, a score, a carrier selection — and leaving them
+// open means a bench session, or a §14.1 body test, needs no pairing dance
+// before it can see anything. ble.c still refuses any control opcode that
+// could disclose or destroy a record unless the link is encrypted.
+//
+
+PRIMARY_SERVICE, GAP_SERVICE
+CHARACTERISTIC, GAP_DEVICE_NAME, READ, "Handoff"
+
+PRIMARY_SERVICE, GATT_SERVICE
+CHARACTERISTIC, GATT_DATABASE_HASH, READ,
+
+// Handoff service
+PRIMARY_SERVICE, 48414e44-0001-4f46-9b2c-1e0a7d3f5c81
+
+// my_vcard — write, chunked. The phone provisions the wristband (§9).
+CHARACTERISTIC, 48414e44-0002-4f46-9b2c-1e0a7d3f5c81, WRITE | DYNAMIC | ENCRYPTION_KEY_SIZE_16,
+
+// rx_vcard — notify, chunked. A received contact, as reconstructed vCard text.
+CHARACTERISTIC, 48414e44-0003-4f46-9b2c-1e0a7d3f5c81, NOTIFY | DYNAMIC | ENCRYPTION_KEY_SIZE_16,
+
+// status — read and notify. Link state, last score, fragment bitmap, errors.
+CHARACTERISTIC, 48414e44-0004-4f46-9b2c-1e0a7d3f5c81, READ | NOTIFY | DYNAMIC,
+
+// telemetry — notify. Decimated score stream for the §14.1 body tests, and
+// from M10 the only legal way measurements leave a wristband someone is
+// holding (design §13).
+CHARACTERISTIC, 48414e44-0005-4f46-9b2c-1e0a7d3f5c81, NOTIFY | DYNAMIC,
+
+// control — write. Carrier select, trigger raw capture, force role.
+CHARACTERISTIC, 48414e44-0006-4f46-9b2c-1e0a7d3f5c81, WRITE | DYNAMIC,

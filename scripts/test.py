@@ -55,12 +55,14 @@ LIB_SOURCES = [
     LIB / "link" / "crc.c",
     LIB / "link" / "manchester.c",
     LIB / "link" / "frame.c",
+    LIB / "link" / "chunk.c",
     LIB / "record" / "compact.c",
     LIB / "record" / "vcard.c",
     LIB / "record" / "frag.c",
     LIB / "record" / "store.c",
     LIB / "proto" / "carousel.c",
     LIB / "proto" / "elect.c",
+    LIB / "proto" / "beacon.c",
     LIB / "proto" / "link_sm.c",
 ]
 
@@ -68,8 +70,10 @@ SIM_SOURCES = [HOST / "chan.c", HOST / "hal_host.c", HOST / "sim_twonode.c"]
 
 TEST_SOURCES = [HOST / n for n in (
     "main.c", "test_crc.c", "test_manchester.c", "test_goertzel.c", "test_sync.c",
-    "test_frame.c", "test_compact.c", "test_vcard.c", "test_frag.c",
-    "test_carousel.c", "test_elect.c", "test_link.c", "test_vectors.c",
+    "test_frame.c", "test_chunk.c", "test_compact.c", "test_vcard.c",
+    "test_frag.c", "test_store.c",
+    "test_carousel.c", "test_elect.c", "test_beacon.c", "test_link.c",
+    "test_vectors.c",
     "test_channel.c", "test_budget.c",
 )]
 

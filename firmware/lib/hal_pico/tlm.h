@@ -2,6 +2,8 @@
  * Handoff — telemetry sinks. development plan M4, design §10.5 and §13.
  *
  * tlm_usb.c is M4. tlm_ble.c is M2 and is what the body tests actually use.
+ * The BLE stream is off until the phone asks for it with BLE_CTRL_TLM_DECIMATE;
+ * see tlm_ble.c for why decimation is mandatory rather than optional.
  *
  * THE FORMAT DECISION, settled at M4, because design §10.5 and §13 are in
  * tension and something had to give:
@@ -38,9 +40,14 @@ void tlm_usb_event(const char *text);
 void tlm_usb_raw_trigger(void);
 bool tlm_usb_raw_busy(void);
 
-/* The only legal path out of a wristband someone is holding (design §13). */
+/* The only legal path out of a wristband someone is holding (design §13).
+ * decimate 0 disables the stream, and is the state a wristband boots in. */
 void tlm_ble_init(uint16_t decimate);
 void tlm_ble_score(uint16_t score);
+
+/* Blocks the controller had no room for. A §14.1 plot with holes in it needs
+ * to say so rather than look like a quiet channel. */
+uint32_t tlm_ble_dropped(void);
 
 /* Route either sink through the HAL, so lib/ never names a transport. */
 void tlm_sink(void *ctx, hal_tlm_kind_t kind, const void *data, size_t len);

@@ -132,11 +132,12 @@ firmware/
     handoff/              M14  the real thing
   lib/
     dsp/                  Goertzel, symbol sync, carrier detection
-    link/                 Manchester, framing, CRC-16
+    link/                 Manchester, framing, CRC-16, phone-link chunking
     record/               vCard codec, compact TLV, fragmentation, store
     proto/                link state machine, role election, carousel
     hal/                  the seam — interface and config only, no code
-    hal_pico/             the RP2350 binding (stubs until M2-M5)
+    hal_pico/             the RP2350 binding (BLE and flash done at M2;
+                          PIO, ADC and IPC still stubs until M3-M5)
   test/
     host/                 unit tests, channel simulator, two-node protocol sim
     vectors/generated/    from tools/gen_vectors.py — derived, git-ignored
@@ -145,7 +146,8 @@ firmware/
 scripts/build.py          build / flash the firmware   (Windows + Linux)
 scripts/test.py           build / run the host tests   (Windows + Linux)
 tools/                    vector generator, reference codec, plotter, replay
-android/                  native Android app — M2, its own project
+android/                  native Android app — pairing, foreground service,
+                          history, provisioning. Its own Gradle project
 docs/                     design, development plan, firmware architecture
 build/, build-host/       generated, git-ignored
 ```
@@ -176,7 +178,7 @@ python scripts/test.py --define HANDOFF_GZ_N=50
 
 A run regenerates the golden vectors from `tools/gen_vectors.py`, cross-checks
 the C vCard codec against `tools/vcf.py` in both directions, and executes every
-suite — currently ~3500 assertions in a couple of seconds.
+suite — currently ~23 700 assertions in a couple of seconds.
 
 Needs any host C compiler: `gcc` or `clang` if one is on `PATH`, otherwise the
 Visual Studio build tools on Windows. This is **separate** from the
@@ -204,7 +206,7 @@ hardware already on the desk. One new variable at a time.
 
 - [x] **M0** — board, toolchain and USB console alive (`firmware/apps/blink`)
 - [x] **M1** — DSP + protocol library, host tested — *no hardware*
-- [ ] **M2** — BLE → phone → contact in the address book — *Pico + phone*
+- [x] **M2** — BLE → phone → contact in the address book — *Pico + phone*
 - [ ] **M3** — carrier generation, self-measured — *no hardware*
 - [ ] **M4** — ADC at 500 ksps + Goertzel real-time budget — *no hardware*
 - [ ] **M5** — full link inside one board — *one jumper wire*
@@ -241,6 +243,32 @@ deliberately instead of by timeout.
 **Cannot prove** — and this matters as much as what it does prove: nothing
 about the ADC, the analogue chain, two independent crystals, or a body. Those
 are M4, M7, M6 and M10 respectively.
+
+
+### What M2 settled
+
+The phone half, and it needed no hardware beyond the board and a handset.
+Firmware in [`lib/hal_pico/ble.c`](firmware/lib/hal_pico/ble.c) and
+[`flash.c`](firmware/lib/hal_pico/flash.c), app in [`android/`](android/), and
+the exit criteria are walked step by step in
+[android/README.md](android/README.md).
+
+| Question | Answer | Because |
+|---|---|---|
+| Where the chunk framing lives | **`lib/link/chunk.c`**, not inside `ble.c` | nothing under `hal_pico/` compiles on the host, so framing that lived there could only be tested with a board and a phone — against an exit criterion specifically about the case a developer's own handset does not exercise |
+| Which flash sector holds the record | **fourth from the end**, not the last | RP2350 reserves the final sector for the E10 erratum workaround and BTstack's bond bank takes the two below it. "The last sector" would have erased the phone bond on every re-provisioning, and would have failed neither at build time nor at first boot |
+| How `store.c` reaches flash | **the backend registers itself from below** | `record/` is inside the layering sandbox and may not name `hal_pico`. Inverting it also made the persistence logic host-testable, which is where the record-id-across-a-power-cycle test lives |
+| Pairing method | **LE Secure Connections, Just Works, bonded** | no display and no keypad, so nothing that authenticates the peer is available. Protected against passive eavesdropping, not against a man in the middle at the one moment of pairing |
+
+M2 also found that putting BTstack on `handoff_lib` cost `apps/blink` 92 KB of
+Bluetooth firmware it never calls — and would have put a Bluetooth stack inside
+`apps/adcbench`, whose whole job at M4 is to measure how much of core 1 is
+left. The BLE binding is its own CMake library for that reason, and for that
+reason only: the source tree still has all of it under `lib/hal_pico/`.
+
+**Cannot prove**: anything about the body link. The card `apps/handoff` notifies
+is a constant in flash. M12 replaces it with a received one, and that is the
+first genuinely demonstrable result.
 
 
 ---

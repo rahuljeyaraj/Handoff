@@ -97,8 +97,8 @@ android/            native Android app (own project, not built by the Pico SDK)
 | # | Milestone | Hardware added | Running total |
 |---|---|---|---|
 | M0 | Board, toolchain, USB console | Pico 2 W | 1 Pico ✅ |
-| M1 | DSP + protocol library, host tested | **none** | 1 Pico |
-| M2 | BLE → phone → contact in address book | phone (have it) | 1 Pico + phone |
+| M1 | DSP + protocol library, host tested | **none** | 1 Pico ✅ |
+| M2 | BLE → phone → contact in address book | phone (have it) | 1 Pico + phone ✅ |
 | M3 | Carrier generation, self-measured | none | 〃 |
 | M4 | ADC at 500 ksps + Goertzel real-time budget | none | 〃 |
 | M5 | Full link, single board, one jumper wire | 1 wire, then 2 resistors | 〃 |
@@ -191,7 +191,7 @@ later:
    Cross-check the C codec against `tools/vcf.py` in both directions — same
    independent-implementation discipline as the modulation vectors.
 
-### M2 — Phone link
+### M2 — Phone link — **built**
 
 **Hardware: Pico 2 W + your Android phone. Nothing else. Fully parallel — start
 it today.**
@@ -228,6 +228,42 @@ Exit criteria:
   OS pairing dialog.
 
 Cannot prove: anything about the body link.
+
+**What M2 built, and where.**
+
+| Piece | Where |
+|---|---|
+| GATT service, five characteristics, LE Secure Connections bonding | `firmware/lib/hal_pico/ble.c`, `ble_service.gatt`, `btstack_config.h` |
+| `seq \| total` chunking, host-tested at every capacity from the ATT floor up | `firmware/lib/link/chunk.c`, `test/host/test_chunk.c` |
+| Record persistence, and the seam that keeps `store.c` host-testable | `firmware/lib/hal_pico/flash.c`, `lib/record/store.c`, `test/host/test_store.c` |
+| Decimated score stream, for the §13 body tests | `firmware/lib/hal_pico/tlm_ble.c` |
+| The flashable image, with the fake card | `firmware/apps/handoff` |
+| Pairing, foreground service, history database, contact promotion | `android/` |
+
+**Two things M2 found that reading would not have.**
+
+1. **The record must not go in the last flash sector**, which is what
+   `flash.h` originally said. On RP2350 the SDK reserves the final sector for
+   the E10 erratum workaround, and BTstack's bond storage takes the two below
+   it — so "the last sector" would have erased the phone bond every time the
+   wearer re-provisioned their card. It is the fourth from the end, and
+   `flash.c` static-asserts that against `PICO_FLASH_BANK_STORAGE_OFFSET`
+   rather than trusting a comment. This would not have failed at build time or
+   at first boot.
+
+2. **The chunk framing had to move out of `ble.c`.** Nothing under `hal_pico/`
+   can be compiled by the host build, so framing that lived there could only be
+   tested with a board and a phone in hand — against an exit criterion that is
+   specifically about the case a developer's own handset does not exercise. It
+   is now `lib/link/chunk.c`, tested at every capacity from 20 bytes to 244,
+   and the Android side runs the same cases against its own implementation.
+   See [firmware-architecture.md §13.2](firmware-architecture.md).
+
+**Not built, deliberately.** The "auto-save new handshakes to Contacts"
+setting of [architecture §11.3](firmware-architecture.md) is off by default and
+is not implemented: it is the only thing that would need `WRITE_CONTACTS`, and
+the app does not declare that permission at all until somebody asks for the
+setting. Promotion goes through the system contact editor, which needs nothing.
 
 ### M3 — Carrier generation
 
@@ -486,7 +522,10 @@ Carried from design §17, plus what this plan adds:
 | Item | Closed at | Note |
 |---|---|---|
 | vCard codec + fragmentation | **M1 — done** | `lib/record/`, cross-checked against `tools/vcf.py` in both directions. A realistic card is 82 compact bytes against 176 of text |
-| Phone client | **settled: native Android app** | [architecture §11](firmware-architecture.md); M2 builds the skeleton |
+| Phone client | **settled: native Android app** | [architecture §11](firmware-architecture.md); **M2 built it** — pairing, foreground service, provisioning, history, contact promotion |
+| Phone-link chunk framing | **M2 — done** | `lib/link/chunk.c`, host-tested at every chunk size from the 23-byte ATT floor to 244. Was going to live inside `ble.c`, where it could not have been tested at all — see [architecture §13.2](firmware-architecture.md) |
+| Record sector placement | **M2 — done, and the header was wrong** | not the last sector: RP2350 reserves it for E10 and BTstack's bond bank takes the two below. Fourth from the end, static-asserted |
+| Phone bond across a power cycle | **M2 — done** | BTstack TLV in flash via `pico_btstack_flash_bank`; the app reconnects on `autoConnect` with no fresh OS dialog |
 | Sync rule, preamble → start marker | **M1 — done** | lock to the alternating run, find the only `00`, verify the seven chips after it, payload starts at the eighth. See `lib/link/frame.h` |
 | Goertzel N = 50 vs 25 | **M1 — settled: 25** | measured. N=50's waterfall is ~2 dB lower, and N=25 halves the frame to 156 ms so a one-second contact carries six frames instead of three. The link budget has tens of dB spare and no time to spare |
 | CRC-8 vs CRC-16 | **M1 — settled: CRC-16** | implemented as CRC-16/CCITT-FALSE. Fragmentation runs the CRC 3–6× per contact, so CRC-8's 1-in-256 is not tolerable |

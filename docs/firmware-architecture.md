@@ -103,7 +103,8 @@ it into the PIO, PIO gates the carrier. TX is essentially free.
 
 ## 4. Directory tree
 
-Complete and final. Files marked ○ are stubs at M1.
+Complete, and amended once — M2 added `link/chunk.h/.c`, and §13.2 records
+why. Files marked ○ were stubs at M1.
 
 ```
 firmware/
@@ -124,11 +125,12 @@ firmware/
       manchester.h/.c      chip energies <-> bits
       frame.h/.c           preamble, marker, header, CRC
       crc.h/.c             CRC-16
+      chunk.h/.c           seq|total framing for the PHONE link  (§11.2)
     record/
       vcard.h/.c           vCard text <-> field list
       compact.h/.c         field list <-> compact TLV        (§8.2)
-      frag.h/.c          ○ TLV blob <-> fragments            (§8.3)
-      store.h/.c         ○ own record in flash, provisioning (§9)
+      frag.h/.c            TLV blob <-> fragments            (§8.3)
+      store.h/.c           own record in flash, provisioning (§9)
     proto/
       link_sm.h/.c       ○ half-duplex link state machine    (§7)
       elect.h/.c         ○ role election, backoff            (§7.3)
@@ -141,16 +143,18 @@ firmware/
       pio_carrier.c/.pio   carrier generation + gating
       adc_ring.c           free-running ADC -> DMA ring
       ipc.c                lock-free SPSC ring, core1 -> core0
-      ble.c              ○ GATT service per §11.2
-      flash.c            ○ record persistence
+      ble.c/.h             GATT service per §11.2
+      ble_service.gatt     the attribute database, compiled by the SDK
+      btstack_config.h     BTstack build configuration
+      flash.c              record persistence
       tlm_usb.c            telemetry sink over USB CDC
-      tlm_ble.c          ○ telemetry sink over BLE
+      tlm_ble.c            telemetry sink over BLE
   test/
     host/
       hal_host.c           the channel simulator implements hal.h
       chan.c               attenuation, noise, offset, drift, dropout
       test_*.c             unit tests per module
-      sim_twonode.c      ○ two link_sm instances, one simulated channel
+      sim_twonode.c        two link_sm instances, one simulated channel
     vectors/
       generated/           from tools/gen_vectors.py
       captures/            from hardware, replayed forever
@@ -160,7 +164,15 @@ tools/
   replay.py                hardware capture -> host decoder
   vcf.py                   reference vCard codec, cross-checks the C
 android/                 native Android app (own project, not built by the Pico SDK)
+  app/src/main/…/ble/    Gatt.kt, Chunk.kt, BandClient.kt, BandService.kt, Pairing.kt
+  app/src/main/…/data/   Room database — the handshake history
+  app/src/main/…/vcard/  vCard 3.0, the phone's half of the codec
+  app/src/test/          Chunk.kt against the same cases as test_chunk.c
 ```
+
+Files marked ○ above are the stubs that remain. M1 filled in `dsp`, `link`,
+`record` and `proto`; M2 filled in `chunk`, `store`, `ble`, `flash`, `tlm_ble`
+and the whole of `android/`.
 
 ---
 
@@ -263,7 +275,7 @@ actions. No blocking, no sleeping, no hardware access except through `hal_iface_
 
 | State | Meaning | Exits on |
 |---|---|---|
-| `IDLE` | no contact | carrier detected, or host says go |
+| `IDLE` | no contact: beaconing and sniffing, §7.6 | a peer's carrier is heard |
 | `BACKOFF` | random 0–5 ms draw, §9.6 | timer |
 | `LISTEN` | measuring carrier | carrier heard → `TARGET`; silence → `INITIATOR` |
 | `TX_FRAME` | clocking chips out | DMA complete |
@@ -275,6 +287,47 @@ actions. No blocking, no sleeping, no hardware access except through `hal_iface_
 
 `INITIATOR` and `TARGET` are a role flag, not states — they select which
 transitions `EXCHANGE` takes, so the same state graph serves both ends.
+
+### 7.6 What takes a band out of `IDLE`
+
+`lib/proto/beacon.c`. An earlier draft of this table said `IDLE` exits on
+"carrier detected, or host says go", which is not a mechanism: if every band
+waits to hear a carrier, no band emits one and no handshake ever starts. The
+board has no button, no accelerometer and no touch sensor — design §6 gives it
+a drive electrode, a sense electrode and an ADC — so the trigger has to be
+built out of the link itself.
+
+It can be. **Before two wearers touch there is no channel at all**: a band's
+transmission is simply inaudible to the other. The instant skin meets skin a
+channel exists. So a transmission *being heard* is itself the contact signal,
+and no separate sensor is needed. The channel is the sensor.
+
+Each band therefore free-runs an unsynchronised cycle: a plain carrier burst of
+`HANDOFF_BEACON_ON_US`, a turnaround, a listen long enough to catch a peer that
+woke on that burst, and then short sniff windows until the next beacon slot —
+`HANDOFF_BEACON_PERIOD_US` away, plus a random jitter.
+
+Rendezvous is **deterministic, not probabilistic**. A band is deaf for at most
+`SNIFF_PERIOD - SNIFF_ON` between sniff windows, so a beacon longer than that
+gap plus the detector's latency cannot fall entirely inside it. That inequality
+is a `_Static_assert` in `beacon.h`, not a comment, and `test_beacon` sweeps the
+relative phase across a whole period to show it holds at every offset rather
+than at the one the author happened to try.
+
+The single hole is that a band cannot hear a peer while its own amplifier is
+driving, so two bands that beacon at the same instant miss each other. That is
+the same shape as the election tie in §7.3 and takes the same answer: the
+jitter decorrelates the next slot, and a repeat needs both draws to land within
+a beacon of each other. Measured over the phase sweep, 2 contacts in 100 need a
+second round; worst-case rendezvous is ~293 ms against a ~214 ms clean bound.
+
+Two smaller decisions worth recording. The beacon is **constant-on rather than
+alternating**, because an alternating burst *is* a preamble under §8.3 and
+would manufacture false syncs in any band that happened to be framing; a
+constant burst has no transitions, so the framer can never lock to it. And the
+beacon is **short**, because `carrier.c` tracks the ambient floor with a slow
+EMA over ~128 chips and a burst that outlasted it would be absorbed into the
+floor and stop reading as a carrier.
 
 ### 7.2 Why this is a table, not `if` statements
 
@@ -484,21 +537,47 @@ Pico SDK toolchain does not build it.
 
 ### 11.2 The BLE contract
 
-| Characteristic | Access | Purpose |
-|---|---|---|
-| `my_vcard` | write, chunked | phone provisions the wristband (§9) |
-| `rx_vcard` | notify, chunked | received contact, reconstructed vCard text |
-| `status` | notify | link state, last score, fragment bitmap, errors |
-| `telemetry` | notify | decimated score stream for §14.1 body tests |
-| `control` | write | carrier select, trigger raw capture, force role |
+Implemented at M2. The authoritative copy is
+`firmware/lib/hal_pico/ble_service.gatt`, which the SDK compiles into the
+attribute database; `android/…/ble/Gatt.kt` is the other side of the same
+contract, and a UUID changed in one place and not the other does not fail
+loudly — the app connects, finds nothing it recognises, and reports nothing.
+
+| Characteristic | UUID `48414e44-xxxx-4f46-9b2c-1e0a7d3f5c81` | Access | Purpose |
+|---|---|---|---|
+| `my_vcard`  | `0002` | write, chunked, **encrypted** | phone provisions the wristband (§9) |
+| `rx_vcard`  | `0003` | notify, chunked, **encrypted** | received contact, reconstructed vCard text |
+| `status`    | `0004` | read + notify | link state, last score, fragment bitmap, errors |
+| `telemetry` | `0005` | notify | decimated score stream for §14.1 body tests |
+| `control`   | `0006` | write | carrier select, trigger raw capture, force role |
+
+The service UUID is `0001` of the same base, and it is in the **advertisement**
+rather than the scan response: `CompanionDeviceManager` filters on what is
+advertised, and a band that only answers an active scan never appears in the
+pairing chooser. That costs 18 of the 31 advertising bytes, so the device name
+goes in the scan response instead.
 
 Chunking: ATT MTU is not guaranteed above 23 bytes, so every chunked
-characteristic carries a 2-byte `seq | total` header and reassembles client-side.
+characteristic carries a 2-byte `seq | total` header and reassembles at the far
+end. The framing is `lib/link/chunk.c` — see §13.2 — and every chunk but the
+last carries a full payload, which is what lets the receiver derive the
+capacity from chunk 0 and never be told the MTU at all.
 
 `my_vcard` and `rx_vcard` require a bonded, encrypted link, so a bystander cannot
 read the wearer's card or inject one. The bond is established once through
 `CompanionDeviceManager` (§11.3) and the app reconnects on it automatically
-afterwards.
+afterwards. Pairing is LE Secure Connections, Just Works — the wristband has no
+display and no keypad, so there is no method available that authenticates the
+peer, and the bond is protected against passive eavesdropping but not against a
+man in the middle *at the moment of pairing*. That is one dialog in a device's
+life, in the wearer's own hand.
+
+`status`, `telemetry` and `control` are deliberately **not** encrypted. They
+carry no identity — a link state, a score, a carrier selection — and leaving
+them open means a bench session or a §14.1 body test needs no pairing dance
+before it can see anything. The two `control` opcodes that touch identity
+(`FAKE_RX`, `FORGET`) are refused on an unencrypted link in `ble.c` rather than
+by the attribute permissions.
 
 `telemetry` exists because design §13 forbids a mains-tethered USB laptop while
 anyone is touching an electrode — during body tests BLE is the *only* legal way
@@ -562,7 +641,7 @@ already list.
 | Milestone | Implements | Stubs it leaves alone |
 |---|---|---|
 | M1 | `dsp/*`, `link/*`, `record/vcard`, `record/compact`, `record/frag`, `proto/*`, `test/host/*`, `tools/gen_vectors`, `tools/vcf` | everything under `hal_pico/` |
-| M2 | `hal_pico/ble.c`, `record/store.c`, `hal_pico/flash.c`, `android/` app skeleton | link, dsp |
+| M2 | `hal_pico/ble.c`, `record/store.c`, `hal_pico/flash.c`, `hal_pico/tlm_ble.c`, **`link/chunk.c` (§13.2)**, `android/` app | link, dsp |
 | M3 | `hal_pico/pio_carrier.c` | adc, ipc |
 | M4 | `hal_pico/adc_ring.c`, `ipc.c`, `tlm_usb.c` | ble |
 | M5 | `hal_pico/hal_pico.c` complete — first time the real HAL binds | — |
@@ -593,6 +672,10 @@ revised here first.
 | `PHOTO` handling | §8.2 — rejected at encode, with an explicit error | when someone asks |
 | Turnaround real settling time | §7.1 — 1 ms is a budget, not a measurement | M8 |
 | Two-way exchange sequencing | **implemented and tested at M1** against two simulated nodes; only the hardware binding is left | M1 / M14 |
+| Phone-link chunk framing | **settled at M2**: `lib/link/chunk.c`, 2-byte `seq \| total`, every chunk but the last payload-full. Host-tested at every capacity from the ATT floor to 244 | M2 ✅ |
+| Record sector placement | **settled at M2: NOT the last sector** — the SDK reserves it on RP2350 for the E10 workaround and BTstack's bond bank takes the two below it. `flash.c` static-asserts against `PICO_FLASH_BANK_STORAGE_OFFSET` | M2 ✅ |
+| Pairing method | **settled at M2: LE Secure Connections, Just Works, bonded.** No display, no keypad, so nothing stronger exists. See §11.2 | M2 ✅ |
+| Where the record store's backend lives | **settled at M2: registered from below.** `hal_pico/flash.c` calls `store_set_backend()`; `store.c` names no transport and stays host-testable | M2 ✅ |
 
 ### 13.1 What M1 changed in this document
 
@@ -607,6 +690,52 @@ fragment 0 half the airtime. Measured, that is the worst option available:
 | **0** | **round robin** | **1.6** | **4.9** | **54 %** |
 | 1 | `0,1,0,2` (§8.4) | 1.4 | 4.5 | 0 % |
 | 3 | `0,0,0,1` | 0.9 | 3.2 | 0 % |
+
+### 13.2 What M2 changed in this document
+
+**A new module, `lib/link/chunk.h/.c`.** §1 says a milestone may not invent a
+seam and that discovering one is an architecture bug to be fixed here first.
+This is that fix, recorded rather than done quietly.
+
+The 2-byte `seq | total` framing was specified in §11.2 and left as a detail of
+`ble.c`. That was wrong, for the reason this whole architecture exists:
+`hal_pico/ble.c` cannot be compiled by the host build, so framing that lives
+inside it cannot be tested without a board and a phone — and development plan
+M2 makes "chunked reassembly works at the 23-byte ATT MTU floor, not just at
+whatever MTU your phone happens to negotiate" an exit criterion precisely
+because that is the case which passes on the developer's own handset and fails
+on someone else's. A seam that puts the framing in `link/` and leaves `ble.c`
+binding it to ATT makes the floor testable in CI, at every capacity from 20 to
+244 bytes, in a couple of milliseconds.
+
+It sits in `link/` and not in a new directory because it *is* link framing,
+just not of the body link. `frame.c` frames what crosses skin; `chunk.c` frames
+what crosses BLE. They share a directory and nothing else, and both header
+comments say so.
+
+**`store.c`'s persistence backend is registered from below.** §9's diagram has
+the arrow pointing `store.c → flash`, which read as a call. It cannot be one:
+`record/` is inside §3.2's sandbox and may not name `hal_pico`. So
+`hal_pico/flash.c` calls `store_set_backend()` at start-up and `store.c` sees
+three function pointers. The dependency still runs the direction §9 draws — it
+is only inverted at the language level — and the side effect is that the
+persistence logic is host-tested against a fake backend, which is where the
+record-id-across-a-power-cycle test lives.
+
+**M2 adds no app, and §4's app list stands.** The phone link is not a bring-up
+instrument like `txgen` or `afe_sweep`; it is half of the finished device, and
+development plan M12 says so outright — "M2's fake record is replaced by the
+real received one". So `apps/handoff` is M2's image with a hardcoded card where
+the body link will later be, and M12 replaces the constant.
+
+**The build gained a second library, and it is not a seam in the source.**
+`handoff_ble` holds `ble.c`, `flash.c` and `tlm_ble.c` — all three still under
+`hal_pico/` in §4. The split is a CMake fact, not an architectural one:
+`CYW43_ENABLE_BLUETOOTH` has to be PUBLIC for the cyw43 driver compiled into
+each executable to agree with it, and PUBLIC on `handoff_lib` measurably put
+92 KB of Bluetooth firmware into `apps/blink`, which is M0's image. It would
+also have put a Bluetooth stack inside `apps/adcbench`, whose entire job at M4
+is to measure how much of core 1 is left.
 
 §8.4 assumed frames were cheap enough to spend half of them on repetition. At
 156 ms a frame, a one-second contact carries about six frames in total, and

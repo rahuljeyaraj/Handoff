@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws everything; this only has to exist and not have an
+         action bar Compose would then have to work around. -->
+    <style name="Theme.Handoff" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

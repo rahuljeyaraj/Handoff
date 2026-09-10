@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Bluetooth. BLUETOOTH_SCAN carries neverForLocation because this app never
+      infers where anybody is: it looks for one companion device by service
+      UUID and nothing else. Declaring it is what stops Android demanding the
+      location permission a scan would otherwise imply.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+        tools:targetApi="s" />
+
+    <!-- Pre-31 devices still gate BLE scanning behind location. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!--
+      The foreground service is the whole reason this is a native app rather
+      than a web page (architecture §11.1): the phone is in a pocket with the
+      screen off when a handshake happens, and nothing else keeps a GATT link
+      alive through that.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      READ_CONTACTS is for provisioning from a contact the wearer picks
+      (architecture §11.3). WRITE_CONTACTS is NOT declared: promoting a
+      received card opens the system contact editor with an Insert intent,
+      which needs no permission at all. It would only be needed by the
+      auto-save setting, which is off by default and deliberately not built
+      at M2.
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+    <uses-feature android:name="android.software.companion_device_setup" android:required="true" />
+
+    <application
+        android:name=".HandoffApp"
+        android:allowBackup="false"
+        android:icon="@android:drawable/ic_menu_share"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Handoff">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.ProvisionActivity"
+            android:exported="false"
+            android:label="@string/provision_title" />
+
+        <service
+            android:name=".ble.BandService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+    </application>
+</manifest>
