@@ -1,0 +1,15 @@
+# Normalise line endings: LF in the repo, LF on checkout everywhere.
+* text=auto eol=lf
+
+# PIO assembly and linker scripts are plain text
+*.pio  text
+*.ld   text
+
+# Never touch binaries
+*.uf2  binary
+*.bin  binary
+*.elf  binary
+*.hex  binary
+*.png  binary
+*.jpg  binary
+*.pdf  binary
