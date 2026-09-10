@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 700" width="900" height="700" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="700" fill="#faf9f7"/>
+  <text x="450" y="38" text-anchor="middle" font-size="23" font-weight="600" fill="#1a1a1a">Corner case 2 — the shouts overlap, and A is fooled</text>
+  <line x1="90" y1="54" x2="810" y2="54" stroke="#d8d4cd" stroke-width="2"/>
+
+  <!-- guides -->
+  <g stroke="#e2ded7" stroke-width="1">
+    <line x1="176" y1="76" x2="176" y2="230"/>
+    <line x1="220" y1="76" x2="220" y2="230"/>
+    <line x1="231" y1="76" x2="231" y2="230"/>
+    <line x1="286" y1="76" x2="286" y2="230"/>
+  </g>
+
+  <!-- A row -->
+  <text x="102" y="112" text-anchor="end" font-size="14" font-weight="600" fill="#2f6f8f">A</text>
+  <rect x="110" y="94" width="660" height="34" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="94" width="110" height="34" fill="#2f6f8f"/>
+  <text x="165" y="116" text-anchor="middle" font-size="12" fill="#ffffff">A SHOUTS</text>
+  <rect x="220" y="94" width="11" height="34" fill="#9a9a9a"/>
+  <rect x="231" y="94" width="264" height="34" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="231" y="94" width="55" height="34" fill="#e8b84b"/>
+  <text x="390" y="116" text-anchor="middle" font-size="12" fill="#1f4a2f">A is listening</text>
+
+  <!-- B row -->
+  <text x="102" y="196" text-anchor="end" font-size="14" font-weight="600" fill="#8f5a2f">B</text>
+  <rect x="110" y="178" width="660" height="34" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="176" y="178" width="110" height="34" fill="#2f6f8f"/>
+  <text x="231" y="200" text-anchor="middle" font-size="12" fill="#ffffff">B SHOUTS</text>
+  <rect x="286" y="178" width="11" height="34" fill="#9a9a9a"/>
+  <rect x="297" y="178" width="264" height="34" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="429" y="200" text-anchor="middle" font-size="12" fill="#1f4a2f">B is listening — hears nothing, A already stopped</text>
+
+  <!-- the trap -->
+  <path d="M 258 178 L 258 132" stroke="#c79a3a" stroke-width="1.6"/>
+  <text x="262" y="152" font-size="12" font-weight="600" fill="#c79a3a">A hears the tail of B's shout</text>
+  <text x="262" y="168" font-size="12" fill="#c79a3a">inside its own listening window</text>
+
+  <rect x="110" y="240" width="660" height="52" rx="10" fill="#fbe9e7" stroke="#c0392b" stroke-width="1.8"/>
+  <text x="440" y="262" text-anchor="middle" font-size="14" font-weight="600" fill="#c0392b">A concludes: “someone answered me — so I am the receiver.”</text>
+  <text x="440" y="282" text-anchor="middle" font-size="13" fill="#c0392b">That is wrong. Nobody answered. B never even heard A.</text>
+
+  <!-- axis -->
+  <g font-size="11" fill="#8a8a8a" text-anchor="middle">
+    <text x="110" y="228">0</text>
+    <text x="220" y="228">10</text>
+    <text x="286" y="228">16 ms</text>
+  </g>
+
+  <line x1="90" y1="316" x2="810" y2="316" stroke="#e2ded7" stroke-width="1.5"/>
+
+  <!-- two outcomes -->
+  <rect x="110" y="336" width="320" height="230" rx="12" fill="#ffffff" stroke="#c0392b" stroke-width="2"/>
+  <text x="270" y="366" text-anchor="middle" font-size="15" font-weight="600" fill="#c0392b">IF we trusted the hint</text>
+  <rect x="140" y="384" width="260" height="26" fill="#a9cdb4" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="270" y="402" text-anchor="middle" font-size="12" fill="#1f4a2f">A waits to receive…</text>
+  <rect x="140" y="418" width="260" height="26" fill="#efece7" stroke="#b8b3aa" stroke-width="1"/>
+  <text x="270" y="436" text-anchor="middle" font-size="12" fill="#8a8a8a">B went back to sniffing</text>
+  <text x="270" y="474" text-anchor="middle" font-size="13" fill="#c0392b">Nobody transmits.</text>
+  <text x="270" y="496" text-anchor="middle" font-size="13" fill="#c0392b">The contact dies of silence.</text>
+  <text x="270" y="530" text-anchor="middle" font-size="12" fill="#8a8a8a">a wrong “receiver” guess</text>
+  <text x="270" y="548" text-anchor="middle" font-size="12" fill="#8a8a8a">has nothing to catch it</text>
+
+  <rect x="470" y="336" width="320" height="230" rx="12" fill="#ffffff" stroke="#3f7f4f" stroke-width="2"/>
+  <text x="630" y="366" text-anchor="middle" font-size="15" font-weight="600" fill="#3f7f4f">WHAT ACTUALLY HAPPENS</text>
+  <text x="630" y="386" text-anchor="middle" font-size="12" fill="#7a7a7a">the hint is thrown away, dice are rolled</text>
+  <rect x="500" y="398" width="120" height="26" fill="#f0e2c8" stroke="#c79a3a" stroke-width="1"/>
+  <text x="560" y="416" text-anchor="middle" font-size="11" fill="#8a6a1a">back off 0–16 ms</text>
+  <rect x="620" y="398" width="50" height="26" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="645" y="416" text-anchor="middle" font-size="11" fill="#1f4a2f">listen</text>
+  <rect x="670" y="398" width="90" height="26" fill="#2f6f8f"/>
+  <text x="715" y="416" text-anchor="middle" font-size="11" fill="#ffffff">A talks</text>
+  <text x="630" y="450" text-anchor="middle" font-size="13" fill="#3a3a3a">Silence during the listen means</text>
+  <text x="630" y="470" text-anchor="middle" font-size="13" font-weight="600" fill="#3f7f4f">“then I will go first.”</text>
+  <text x="630" y="502" text-anchor="middle" font-size="13" fill="#3a3a3a">A's frame runs 156 ms.</text>
+  <text x="630" y="522" text-anchor="middle" font-size="13" fill="#3a3a3a">B sniffs every 10 ms.</text>
+  <text x="630" y="546" text-anchor="middle" font-size="13" font-weight="600" fill="#3f7f4f">B cannot miss it. Recovered.</text>
+
+  <!-- rule -->
+  <rect x="110" y="588" width="680" height="52" rx="10" fill="#ffffff" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="450" y="620" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">A dice roll always ends with somebody talking. A wrong guess does not.</text>
+
+  <text x="450" y="676" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — contact trigger — corner case 2</text>
+</svg>

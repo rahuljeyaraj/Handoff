@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 580" width="900" height="580" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="580" fill="#faf9f7"/>
+  <text x="450" y="40" text-anchor="middle" font-size="24" font-weight="600" fill="#1a1a1a">Corner case — both shout at the same instant</text>
+  <line x1="90" y1="56" x2="810" y2="56" stroke="#d8d4cd" stroke-width="2"/>
+
+  <g stroke="#e2ded7" stroke-width="1">
+    <line x1="176" y1="76" x2="176" y2="252"/>
+    <line x1="598" y1="76" x2="598" y2="252"/>
+    <line x1="664" y1="76" x2="664" y2="252"/>
+    <line x1="678" y1="76" x2="678" y2="252"/>
+  </g>
+
+  <!-- A -->
+  <text x="102" y="122" text-anchor="end" font-size="15" font-weight="600" fill="#2f6f8f">A</text>
+  <rect x="110" y="100" width="660" height="38" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="100" width="66" height="38" fill="#2f6f8f"/>
+  <text x="143" y="124" text-anchor="middle" font-size="11" fill="#ffffff">SHOUT</text>
+  <rect x="176" y="100" width="7" height="38" fill="#9a9a9a"/>
+  <rect x="183" y="100" width="415" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="390" y="124" text-anchor="middle" font-size="13" fill="#1f4a2f">A listens — silence. Its dice said 63 ms.</text>
+  <rect x="598" y="100" width="66" height="38" fill="#2f6f8f"/>
+  <text x="631" y="124" text-anchor="middle" font-size="11" fill="#ffffff">SHOUT</text>
+  <rect x="664" y="100" width="7" height="38" fill="#9a9a9a"/>
+  <rect x="671" y="100" width="99" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="722" y="124" text-anchor="middle" font-size="11" fill="#1f4a2f">receives</text>
+
+  <!-- B -->
+  <text x="102" y="204" text-anchor="end" font-size="15" font-weight="600" fill="#8f5a2f">B</text>
+  <rect x="110" y="182" width="660" height="38" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="182" width="66" height="38" fill="#2f6f8f"/>
+  <text x="143" y="206" text-anchor="middle" font-size="11" fill="#ffffff">SHOUT</text>
+  <rect x="176" y="182" width="7" height="38" fill="#9a9a9a"/>
+  <rect x="183" y="182" width="422" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="390" y="206" text-anchor="middle" font-size="13" fill="#1f4a2f">B listens — its dice said 88 ms, so it is still listening</text>
+  <rect x="605" y="182" width="73" height="38" fill="#f0e2c8" stroke="#c79a3a" stroke-width="1.4"/>
+  <rect x="678" y="182" width="92" height="38" fill="#2f6f8f"/>
+  <text x="724" y="206" text-anchor="middle" font-size="11" fill="#ffffff">B SENDS</text>
+
+  <!-- collision marker -->
+  <rect x="112" y="146" width="62" height="30" rx="6" fill="#fbe9e7" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="143" y="166" text-anchor="middle" font-size="11" fill="#c0392b" font-weight="600">both deaf</text>
+  <text x="200" y="166" font-size="12" fill="#c0392b">they shout straight past each other — nothing heard</text>
+
+  <text x="604" y="166" font-size="11" fill="#c79a3a" font-weight="600">B hears A</text>
+  <text x="604" y="248" font-size="11" fill="#c79a3a">waits for A to stop</text>
+
+  <!-- axis -->
+  <g stroke="#b8b3aa" stroke-width="1.2">
+    <line x1="110" y1="220" x2="110" y2="236"/>
+    <line x1="598" y1="220" x2="598" y2="236"/>
+    <line x1="770" y1="220" x2="770" y2="236"/>
+  </g>
+  <g font-size="11" fill="#8a8a8a" text-anchor="middle">
+    <text x="110" y="252">0</text>
+    <text x="580" y="252">74 ms</text>
+    <text x="770" y="252">100 ms</text>
+  </g>
+
+  <line x1="90" y1="290" x2="810" y2="290" stroke="#e2ded7" stroke-width="1.5"/>
+
+  <!-- why it works -->
+  <rect x="110" y="312" width="320" height="182" rx="12" fill="#ffffff" stroke="#3f7f4f" stroke-width="2"/>
+  <text x="270" y="342" text-anchor="middle" font-size="15" font-weight="600" fill="#3f7f4f">Why the next round works</text>
+  <text x="270" y="374" text-anchor="middle" font-size="13" fill="#3a3a3a">Both bands listen non-stop.</text>
+  <text x="270" y="398" text-anchor="middle" font-size="13" fill="#3a3a3a">There are no deaf gaps at all,</text>
+  <text x="270" y="422" text-anchor="middle" font-size="13" fill="#3a3a3a">except during your own shout.</text>
+  <text x="270" y="456" text-anchor="middle" font-size="14" font-weight="600" fill="#3f7f4f">So whoever shouts second</text>
+  <text x="270" y="478" text-anchor="middle" font-size="14" font-weight="600" fill="#3f7f4f">always hears the first one.</text>
+
+  <rect x="470" y="312" width="320" height="182" rx="12" fill="#ffffff" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="630" y="342" text-anchor="middle" font-size="15" font-weight="600" fill="#2f6f8f">How likely is a repeat?</text>
+  <text x="630" y="376" text-anchor="middle" font-size="13" fill="#3a3a3a">It repeats only if the two dice land</text>
+  <text x="630" y="398" text-anchor="middle" font-size="13" fill="#3a3a3a">within about 1 ms of each other.</text>
+  <text x="630" y="432" text-anchor="middle" font-size="15" font-weight="600" fill="#2f6f8f">1 ms out of a 50 ms range</text>
+  <text x="630" y="456" text-anchor="middle" font-size="14" fill="#3a3a3a">≈ 4 % once,  0.2 % twice</text>
+  <text x="630" y="480" text-anchor="middle" font-size="12" fill="#8a8a8a">estimated, not yet simulated</text>
+
+  <text x="450" y="546" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — simplified trigger — 3/5</text>
+</svg>

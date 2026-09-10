@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="600" fill="#faf9f7"/>
+  <text x="450" y="40" text-anchor="middle" font-size="24" font-weight="600" fill="#1a1a1a">Ideal case — end to end</text>
+  <line x1="90" y1="56" x2="810" y2="56" stroke="#d8d4cd" stroke-width="2"/>
+
+  <text x="110" y="84" font-size="13" font-weight="600" fill="#7a7a7a">THE FIRST 30 ms</text>
+
+  <g stroke="#e2ded7" stroke-width="1">
+    <line x1="132" y1="96" x2="132" y2="268"/>
+    <line x1="330" y1="96" x2="330" y2="268"/>
+    <line x1="374" y1="96" x2="374" y2="268"/>
+    <line x1="396" y1="96" x2="396" y2="268"/>
+  </g>
+
+  <!-- A -->
+  <text x="102" y="130" text-anchor="end" font-size="15" font-weight="600" fill="#2f6f8f">A</text>
+  <rect x="110" y="108" width="660" height="38" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="108" width="220" height="38" fill="#2f6f8f"/>
+  <text x="220" y="132" text-anchor="middle" font-size="13" fill="#ffffff">A SHOUTS — 10 ms</text>
+  <rect x="330" y="108" width="22" height="38" fill="#9a9a9a"/>
+  <rect x="352" y="108" width="44" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="396" y="108" width="374" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="583" y="132" text-anchor="middle" font-size="13" fill="#1f4a2f">A receives B's card</text>
+
+  <!-- B -->
+  <text x="102" y="212" text-anchor="end" font-size="15" font-weight="600" fill="#8f5a2f">B</text>
+  <rect x="110" y="190" width="660" height="38" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="190" width="22" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="132" y="190" width="242" height="38" fill="#f0e2c8" stroke="#c79a3a" stroke-width="1.4"/>
+  <text x="253" y="214" text-anchor="middle" font-size="13" fill="#8a6a1a">B waits for A to stop</text>
+  <rect x="374" y="190" width="396" height="38" fill="#2f6f8f"/>
+  <text x="572" y="214" text-anchor="middle" font-size="13" fill="#ffffff">B SENDS ITS CARD</text>
+
+  <!-- axis -->
+  <g stroke="#b8b3aa" stroke-width="1.2">
+    <line x1="110" y1="228" x2="110" y2="244"/>
+    <line x1="132" y1="228" x2="132" y2="244"/>
+    <line x1="330" y1="228" x2="330" y2="244"/>
+    <line x1="374" y1="228" x2="374" y2="244"/>
+    <line x1="396" y1="228" x2="396" y2="244"/>
+    <line x1="770" y1="228" x2="770" y2="244"/>
+  </g>
+  <g font-size="11" fill="#8a8a8a" text-anchor="middle">
+    <text x="110" y="260">0</text>
+    <text x="132" y="260">1</text>
+    <text x="330" y="260">10</text>
+    <text x="374" y="260">12</text>
+    <text x="404" y="260">13</text>
+    <text x="770" y="260">30 ms</text>
+  </g>
+
+  <!-- callouts -->
+  <text x="138" y="176" font-size="12" fill="#c79a3a" font-weight="600">1 ms — B hears a flat carrier</text>
+  <text x="336" y="176" font-size="12" fill="#8a8a8a">A stops</text>
+  <text x="380" y="288" font-size="12" fill="#2f6f8f" font-weight="600">12 ms — channel quiet, B starts sending</text>
+  <text x="402" y="90" font-size="12" fill="#3f7f4f" font-weight="600">13 ms — A hears it and locks on</text>
+
+  <line x1="90" y1="312" x2="810" y2="312" stroke="#e2ded7" stroke-width="1.5"/>
+
+  <!-- overview -->
+  <text x="110" y="342" font-size="13" font-weight="600" fill="#7a7a7a">THE WHOLE CONTACT</text>
+  <text x="102" y="376" text-anchor="end" font-size="14" font-weight="600" fill="#2f6f8f">A</text>
+  <rect x="110" y="358" width="660" height="28" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="358" width="39" height="28" fill="#2f6f8f"/>
+  <rect x="149" y="358" width="8" height="28" fill="#9a9a9a"/>
+  <rect x="157" y="358" width="613" height="28" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="463" y="377" text-anchor="middle" font-size="12" fill="#1f4a2f">receiving — 156 ms</text>
+
+  <text x="102" y="418" text-anchor="end" font-size="14" font-weight="600" fill="#8f5a2f">B</text>
+  <rect x="110" y="400" width="660" height="28" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="400" width="47" height="28" fill="#f0e2c8" stroke="#c79a3a" stroke-width="1.2"/>
+  <rect x="157" y="400" width="613" height="28" fill="#2f6f8f"/>
+  <text x="463" y="419" text-anchor="middle" font-size="12" fill="#ffffff">sending — 156 ms</text>
+
+  <line x1="157" y1="434" x2="157" y2="450" stroke="#c79a3a" stroke-width="1.5"/>
+  <text x="163" y="464" font-size="13" font-weight="600" fill="#c79a3a">12 ms to find each other</text>
+  <text x="740" y="464" text-anchor="end" font-size="12" fill="#8a8a8a">168 ms</text>
+
+  <!-- result -->
+  <rect x="110" y="486" width="680" height="68" rx="12" fill="#ffffff" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="450" y="512" text-anchor="middle" font-size="16" font-weight="600" fill="#1a1a1a">No dice for who talks. No election. No role hint.</text>
+  <text x="450" y="538" text-anchor="middle" font-size="14" fill="#2f6f8f">Whoever HEARS the shout sends. Whoever SHOUTED listens.</text>
+
+  <text x="450" y="586" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — simplified trigger — 2/5</text>
+</svg>

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="600" fill="#faf9f7"/>
+  <text x="450" y="38" text-anchor="middle" font-size="23" font-weight="600" fill="#1a1a1a">Corner case 1 — both shout at the same instant</text>
+  <line x1="90" y1="54" x2="810" y2="54" stroke="#d8d4cd" stroke-width="2"/>
+
+  <text x="110" y="84" font-size="14" font-weight="600" fill="#c0392b">ROUND 1 — nothing happens</text>
+  <text x="470" y="84" font-size="14" font-weight="600" fill="#3f7f4f">ROUND 2 — the dice have moved them apart</text>
+
+  <!-- panel frames -->
+  <rect x="110" y="96" width="320" height="150" fill="none" stroke="#e2ded7" stroke-width="1.5"/>
+  <rect x="470" y="96" width="320" height="150" fill="none" stroke="#e2ded7" stroke-width="1.5"/>
+
+  <!-- ============ PANEL 1 ============ -->
+  <text x="102" y="126" text-anchor="end" font-size="13" font-weight="600" fill="#2f6f8f">A</text>
+  <rect x="110" y="108" width="320" height="30" fill="#efece7"/>
+  <rect x="110" y="108" width="80" height="30" fill="#2f6f8f"/>
+  <text x="150" y="128" text-anchor="middle" font-size="12" fill="#ffffff">SHOUT</text>
+  <rect x="190" y="108" width="8" height="30" fill="#9a9a9a"/>
+  <rect x="198" y="108" width="192" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="294" y="128" text-anchor="middle" font-size="12" fill="#1f4a2f">listening — silence</text>
+  <rect x="390" y="108" width="16" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+
+  <text x="102" y="216" text-anchor="end" font-size="13" font-weight="600" fill="#8f5a2f">B</text>
+  <rect x="110" y="198" width="320" height="30" fill="#efece7"/>
+  <rect x="110" y="198" width="80" height="30" fill="#2f6f8f"/>
+  <text x="150" y="218" text-anchor="middle" font-size="12" fill="#ffffff">SHOUT</text>
+  <rect x="190" y="198" width="8" height="30" fill="#9a9a9a"/>
+  <rect x="198" y="198" width="192" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="294" y="218" text-anchor="middle" font-size="12" fill="#1f4a2f">listening — silence</text>
+  <rect x="390" y="198" width="16" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+
+  <!-- the miss -->
+  <rect x="112" y="146" width="76" height="44" rx="8" fill="#fbe9e7" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="150" y="164" text-anchor="middle" font-size="11" fill="#c0392b">a band is deaf</text>
+  <text x="150" y="180" text-anchor="middle" font-size="11" fill="#c0392b">during its own shout</text>
+  <text x="300" y="170" text-anchor="middle" font-size="13" font-weight="600" fill="#c0392b">they shout straight past each other</text>
+
+  <!-- break / jitter arrow -->
+  <path d="M 436 170 L 452 160 L 452 180 L 466 170" fill="none" stroke="#c79a3a" stroke-width="2"/>
+  <text x="450" y="264" text-anchor="middle" font-size="12" fill="#c79a3a">wait 100 ms</text>
+  <text x="450" y="280" text-anchor="middle" font-size="12" font-weight="600" fill="#c79a3a">+ dice: 0–100 ms</text>
+
+  <!-- ============ PANEL 2 ============ -->
+  <rect x="470" y="108" width="320" height="30" fill="#efece7"/>
+  <rect x="486" y="108" width="80" height="30" fill="#2f6f8f"/>
+  <text x="526" y="128" text-anchor="middle" font-size="12" fill="#ffffff">SHOUT</text>
+  <rect x="566" y="108" width="8" height="30" fill="#9a9a9a"/>
+  <rect x="574" y="108" width="32" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="606" y="108" width="184" height="30" fill="#a9cdb4" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="698" y="128" text-anchor="middle" font-size="12" fill="#1f4a2f">A receives</text>
+
+  <rect x="470" y="198" width="320" height="30" fill="#efece7"/>
+  <rect x="470" y="198" width="16" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="550" y="198" width="8" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="558" y="198" width="24" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1" stroke-dasharray="4 3"/>
+  <rect x="582" y="198" width="16" height="30" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="598" y="198" width="192" height="30" fill="#2f6f8f"/>
+  <text x="694" y="218" text-anchor="middle" font-size="12" fill="#ffffff">B TRANSMITS</text>
+
+  <line x1="554" y1="192" x2="554" y2="150" stroke="#b8b3aa" stroke-width="1.2"/>
+  <text x="556" y="164" font-size="11" fill="#3f7f4f">B's sniff catches</text>
+  <text x="556" y="178" font-size="11" fill="#3f7f4f">A's new shout</text>
+
+  <text x="470" y="264" font-size="12" fill="#8a8a8a">A shouts at 137 ms</text>
+  <text x="470" y="280" font-size="12" fill="#8a8a8a">B would have shouted at 189 ms — B hears A first</text>
+
+  <!-- summary -->
+  <rect x="110" y="316" width="680" height="200" rx="12" fill="#ffffff" stroke="#d8d4cd" stroke-width="1.8"/>
+  <text x="140" y="348" font-size="15" font-weight="600" fill="#1a1a1a">This is the one hole in the guarantee.</text>
+  <text x="140" y="376" font-size="14" fill="#3a3a3a">Step 4 proved a shout always lands in a sniff window.</text>
+  <text x="140" y="400" font-size="14" fill="#3a3a3a">But if the other band is shouting too, it has no sniff window open at all.</text>
+
+  <line x1="140" y1="418" x2="760" y2="418" stroke="#e2ded7" stroke-width="1.5"/>
+
+  <text x="140" y="446" font-size="15" font-weight="600" fill="#3f7f4f">The fix is not to detect it. It is to not repeat it.</text>
+  <text x="140" y="472" font-size="14" fill="#3a3a3a">Next shout = 100 ms + a fresh random 0–100 ms, drawn independently on each band.</text>
+  <text x="140" y="496" font-size="14" fill="#3a3a3a">A repeat needs both draws to land within 10 ms — roughly 1 in 5. Twice, 1 in 25.</text>
+
+  <text x="450" y="576" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — contact trigger — corner case 1</text>
+</svg>

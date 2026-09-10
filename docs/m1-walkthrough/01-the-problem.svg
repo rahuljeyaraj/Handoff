@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="560" fill="#faf9f7"/>
+
+  <text x="450" y="46" text-anchor="middle" font-size="24" font-weight="600" fill="#1a1a1a">Step 1 — If everyone waits, nobody starts</text>
+  <line x1="120" y1="62" x2="780" y2="62" stroke="#d8d4cd" stroke-width="2"/>
+
+  <!-- band A -->
+  <rect x="90" y="120" width="230" height="130" rx="16" fill="#ffffff" stroke="#2f6f8f" stroke-width="2.5"/>
+  <text x="205" y="158" text-anchor="middle" font-size="18" font-weight="600" fill="#2f6f8f">Band A</text>
+  <text x="205" y="192" text-anchor="middle" font-size="15" fill="#3a3a3a">listening…</text>
+  <text x="205" y="222" text-anchor="middle" font-size="14" fill="#7a7a7a">“I start when I hear someone”</text>
+
+  <!-- band B -->
+  <rect x="580" y="120" width="230" height="130" rx="16" fill="#ffffff" stroke="#8f5a2f" stroke-width="2.5"/>
+  <text x="695" y="158" text-anchor="middle" font-size="18" font-weight="600" fill="#8f5a2f">Band B</text>
+  <text x="695" y="192" text-anchor="middle" font-size="15" fill="#3a3a3a">listening…</text>
+  <text x="695" y="222" text-anchor="middle" font-size="14" fill="#7a7a7a">“I start when I hear someone”</text>
+
+  <!-- the silent gap -->
+  <line x1="330" y1="185" x2="570" y2="185" stroke="#c4bfb6" stroke-width="3" stroke-dasharray="9 9"/>
+  <circle cx="450" cy="185" r="30" fill="#faf9f7" stroke="#c0392b" stroke-width="2.5"/>
+  <line x1="431" y1="204" x2="469" y2="166" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="450" y="248" text-anchor="middle" font-size="15" fill="#c0392b" font-weight="600">nobody ever transmits</text>
+
+  <!-- circular wait -->
+  <path d="M 205 260 C 205 330, 695 330, 695 260" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-dasharray="6 6"/>
+  <text x="450" y="322" text-anchor="middle" font-size="14" fill="#7a7a7a">each one is waiting for the other one to go first</text>
+
+  <!-- no fallbacks -->
+  <rect x="120" y="368" width="660" height="112" rx="14" fill="#ffffff" stroke="#d8d4cd" stroke-width="2"/>
+  <text x="450" y="400" text-anchor="middle" font-size="15" fill="#3a3a3a">and there is nothing else on the board to ask</text>
+
+  <g font-size="15" fill="#9a9a9a">
+    <text x="230" y="446" text-anchor="middle">button</text>
+    <line x1="192" y1="441" x2="268" y2="441" stroke="#c0392b" stroke-width="2"/>
+    <text x="450" y="446" text-anchor="middle">touch sensor</text>
+    <line x1="386" y1="441" x2="514" y2="441" stroke="#c0392b" stroke-width="2"/>
+    <text x="670" y="446" text-anchor="middle">accelerometer</text>
+    <line x1="602" y1="441" x2="738" y2="441" stroke="#c0392b" stroke-width="2"/>
+  </g>
+
+  <text x="450" y="524" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — contact trigger — 1/6</text>
+</svg>

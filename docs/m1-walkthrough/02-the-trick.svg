@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="560" fill="#faf9f7"/>
+
+  <text x="450" y="46" text-anchor="middle" font-size="24" font-weight="600" fill="#1a1a1a">Step 2 — Being heard at all IS the proof of contact</text>
+  <line x1="90" y1="62" x2="810" y2="62" stroke="#d8d4cd" stroke-width="2"/>
+
+  <!-- ============ LEFT: not touching ============ -->
+  <rect x="60" y="100" width="360" height="330" rx="16" fill="#ffffff" stroke="#d8d4cd" stroke-width="2"/>
+  <text x="240" y="134" text-anchor="middle" font-size="17" font-weight="600" fill="#3a3a3a">not touching</text>
+
+  <rect x="95" y="180" width="105" height="80" rx="12" fill="#eef4f7" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="147" y="212" text-anchor="middle" font-size="14" font-weight="600" fill="#2f6f8f">Band A</text>
+  <text x="147" y="234" text-anchor="middle" font-size="12" fill="#2f6f8f">shouting</text>
+
+  <rect x="280" y="180" width="105" height="80" rx="12" fill="#ffffff" stroke="#8f5a2f" stroke-width="2"/>
+  <text x="332" y="212" text-anchor="middle" font-size="14" font-weight="600" fill="#8f5a2f">Band B</text>
+  <text x="332" y="234" text-anchor="middle" font-size="12" fill="#8f5a2f">listening</text>
+
+  <!-- broken path -->
+  <path d="M 200 220 L 225 220" stroke="#2f6f8f" stroke-width="3"/>
+  <path d="M 255 220 L 280 220" stroke="#c4bfb6" stroke-width="3" stroke-dasharray="5 5"/>
+  <circle cx="240" cy="220" r="17" fill="#faf9f7" stroke="#c0392b" stroke-width="2.5"/>
+  <line x1="229" y1="231" x2="251" y2="209" stroke="#c0392b" stroke-width="2.5"/>
+
+  <text x="240" y="300" text-anchor="middle" font-size="14" fill="#7a7a7a">air is not a channel at 200 kHz</text>
+  <text x="240" y="326" text-anchor="middle" font-size="14" fill="#7a7a7a">the signal simply does not arrive</text>
+
+  <rect x="95" y="356" width="290" height="46" rx="10" fill="#f6f2ec" stroke="#d8d4cd" stroke-width="1.5"/>
+  <text x="240" y="385" text-anchor="middle" font-size="15" font-weight="600" fill="#3a3a3a">B hears nothing</text>
+
+  <!-- ============ RIGHT: touching ============ -->
+  <rect x="480" y="100" width="360" height="330" rx="16" fill="#ffffff" stroke="#2f6f8f" stroke-width="2.5"/>
+  <text x="660" y="134" text-anchor="middle" font-size="17" font-weight="600" fill="#2f6f8f">skin meets skin</text>
+
+  <rect x="515" y="180" width="105" height="80" rx="12" fill="#eef4f7" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="567" y="212" text-anchor="middle" font-size="14" font-weight="600" fill="#2f6f8f">Band A</text>
+  <text x="567" y="234" text-anchor="middle" font-size="12" fill="#2f6f8f">shouting</text>
+
+  <rect x="700" y="180" width="105" height="80" rx="12" fill="#ffffff" stroke="#8f5a2f" stroke-width="2"/>
+  <text x="752" y="212" text-anchor="middle" font-size="14" font-weight="600" fill="#8f5a2f">Band B</text>
+  <text x="752" y="234" text-anchor="middle" font-size="12" fill="#8f5a2f">listening</text>
+
+  <!-- live path -->
+  <path d="M 620 220 L 700 220" stroke="#2f6f8f" stroke-width="3.5"/>
+  <polygon points="700,220 688,214 688,226" fill="#2f6f8f"/>
+  <text x="660" y="204" text-anchor="middle" font-size="12" fill="#2f6f8f">200 kHz through the body</text>
+
+  <text x="660" y="300" text-anchor="middle" font-size="14" fill="#7a7a7a">the two bodies close the circuit</text>
+  <text x="660" y="326" text-anchor="middle" font-size="14" fill="#7a7a7a">now, and only now, a channel exists</text>
+
+  <rect x="515" y="356" width="290" height="46" rx="10" fill="#eef4f7" stroke="#2f6f8f" stroke-width="1.5"/>
+  <text x="660" y="385" text-anchor="middle" font-size="15" font-weight="600" fill="#2f6f8f">B hears A</text>
+
+  <!-- conclusion -->
+  <rect x="150" y="452" width="600" height="52" rx="12" fill="#ffffff" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="450" y="484" text-anchor="middle" font-size="17" font-weight="600" fill="#1a1a1a">The channel is the sensor.</text>
+
+  <text x="450" y="536" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — contact trigger — 2/6</text>
+</svg>

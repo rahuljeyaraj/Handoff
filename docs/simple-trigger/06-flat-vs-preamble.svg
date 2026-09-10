@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 700" width="900" height="700" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="700" fill="#faf9f7"/>
+  <text x="450" y="40" text-anchor="middle" font-size="24" font-weight="600" fill="#1a1a1a">Shout as a flat tone, or as a preamble?</text>
+  <line x1="90" y1="56" x2="810" y2="56" stroke="#d8d4cd" stroke-width="2"/>
+
+  <g stroke="#e2ded7" stroke-width="1">
+    <line x1="170" y1="76" x2="170" y2="300"/>
+    <line x1="440" y1="76" x2="440" y2="300"/>
+    <line x1="500" y1="76" x2="500" y2="300"/>
+  </g>
+
+  <!-- FLAT -->
+  <text x="130" y="112" text-anchor="end" font-size="14" font-weight="600" fill="#2f6f8f">flat</text>
+  <rect x="140" y="90" width="600" height="34" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="140" y="90" width="300" height="34" fill="#2f6f8f"/>
+  <text x="290" y="112" text-anchor="middle" font-size="12" fill="#ffffff">one unbroken tone — no transitions anywhere</text>
+
+  <circle cx="170" cy="146" r="10" fill="#3f7f4f"/>
+  <text x="170" y="151" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">✓</text>
+  <text x="186" y="144" font-size="12" font-weight="600" fill="#3f7f4f">1 ms — “this is a shout”</text>
+  <text x="186" y="160" font-size="11" fill="#7a7a7a">the framer cannot lock to it, so it cannot be a card. Certain, not guessed.</text>
+
+  <!-- PREAMBLE -->
+  <text x="130" y="222" text-anchor="end" font-size="14" font-weight="600" fill="#8f5a2f">preamble</text>
+  <rect x="140" y="200" width="600" height="34" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <g fill="#8f5a2f">
+    <rect x="140" y="200" width="15" height="34"/><rect x="170" y="200" width="15" height="34"/>
+    <rect x="200" y="200" width="15" height="34"/><rect x="230" y="200" width="15" height="34"/>
+    <rect x="260" y="200" width="15" height="34"/><rect x="290" y="200" width="15" height="34"/>
+    <rect x="320" y="200" width="15" height="34"/><rect x="350" y="200" width="15" height="34"/>
+    <rect x="380" y="200" width="15" height="34"/><rect x="410" y="200" width="15" height="34"/>
+  </g>
+  <text x="290" y="256" text-anchor="middle" font-size="12" fill="#8f5a2f">identical to the opening of a real card</text>
+
+  <circle cx="170" cy="278" r="9" fill="#c79a3a"/>
+  <text x="170" y="283" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">?</text>
+  <text x="184" y="282" font-size="11" fill="#8a6a1a">1 ms — “something”</text>
+
+  <circle cx="500" cy="278" r="10" fill="#3f7f4f"/>
+  <text x="500" y="283" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">✓</text>
+  <text x="516" y="276" font-size="12" font-weight="600" fill="#3f7f4f">12 ms — “no marker followed, so it was a shout”</text>
+  <text x="516" y="292" font-size="11" fill="#7a7a7a">you can only tell by what did NOT arrive</text>
+
+  <g font-size="11" fill="#8a8a8a" text-anchor="middle">
+    <text x="140" y="322">0</text>
+    <text x="440" y="322">10</text>
+    <text x="500" y="322">12 ms</text>
+  </g>
+
+  <line x1="90" y1="344" x2="810" y2="344" stroke="#e2ded7" stroke-width="1.5"/>
+
+  <!-- ledger -->
+  <text x="450" y="376" text-anchor="middle" font-size="17" font-weight="600" fill="#1a1a1a">The ledger</text>
+
+  <rect x="110" y="396" width="680" height="76" rx="12" fill="#ffffff" stroke="#d8d4cd" stroke-width="1.8"/>
+  <text x="140" y="424" font-size="14" font-weight="600" fill="#3a3a3a">What you gain: nothing.</text>
+  <text x="140" y="450" font-size="13" fill="#7a7a7a">“B knows A is listening” is already true with a flat tone. And B has to wait for silence</text>
+  <text x="140" y="466" font-size="13" fill="#7a7a7a">before speaking either way — so not one millisecond is saved.</text>
+
+  <rect x="110" y="488" width="680" height="130" rx="12" fill="#fff5f4" stroke="#c0392b" stroke-width="1.8"/>
+  <text x="140" y="516" font-size="14" font-weight="600" fill="#c0392b">What you lose:</text>
+  <text x="140" y="542" font-size="13" fill="#3a3a3a">Every shout now drags the listener's decoder into a half-locked state, ~10 times a second.</text>
+  <text x="140" y="566" font-size="13" fill="#3a3a3a">The tail of a burst decaying can look like the marker, so the decoder starts reading noise</text>
+  <text x="140" y="586" font-size="13" fill="#3a3a3a">as a card. The checksum throws it away — but a slot is wasted every time.</text>
+  <text x="140" y="608" font-size="12" fill="#8a8a8a">a flat tone has no transitions, so this failure cannot happen at all — not rarely, never</text>
+
+  <rect x="110" y="634" width="680" height="24" rx="8" fill="#eef4f7"/>
+  <text x="450" y="651" text-anchor="middle" font-size="13" font-weight="600" fill="#2f6f8f">Unambiguous by construction beats unambiguous by timeout.</text>
+
+  <text x="450" y="686" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — simplified trigger — 6/7</text>
+</svg>

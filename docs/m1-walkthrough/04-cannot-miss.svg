@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="560" fill="#faf9f7"/>
+
+  <text x="450" y="42" text-anchor="middle" font-size="24" font-weight="600" fill="#1a1a1a">Step 4 — The shout is longer than the deaf gap</text>
+  <line x1="90" y1="58" x2="810" y2="58" stroke="#d8d4cd" stroke-width="2"/>
+
+  <!-- window guides -->
+  <g stroke="#e2ded7" stroke-width="1">
+    <line x1="140" y1="96" x2="140" y2="392"/>
+    <line x1="168" y1="96" x2="168" y2="392"/>
+    <line x1="280" y1="96" x2="280" y2="392"/>
+    <line x1="308" y1="96" x2="308" y2="392"/>
+    <line x1="420" y1="96" x2="420" y2="392"/>
+    <line x1="448" y1="96" x2="448" y2="392"/>
+    <line x1="560" y1="96" x2="560" y2="392"/>
+    <line x1="588" y1="96" x2="588" y2="392"/>
+    <line x1="700" y1="96" x2="700" y2="392"/>
+  </g>
+
+  <!-- peer ears -->
+  <text x="130" y="118" text-anchor="end" font-size="14" font-weight="600" fill="#3a3a3a">their ears</text>
+  <rect x="140" y="104" width="560" height="34" fill="#efece7" stroke="#b8b3aa" stroke-width="1.4"/>
+  <g fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1.2">
+    <rect x="140" y="104" width="28" height="34"/>
+    <rect x="280" y="104" width="28" height="34"/>
+    <rect x="420" y="104" width="28" height="34"/>
+    <rect x="560" y="104" width="28" height="34"/>
+  </g>
+  <text x="224" y="126" text-anchor="middle" font-size="12" fill="#8a8a8a">deaf 8 ms</text>
+  <text x="364" y="126" text-anchor="middle" font-size="12" fill="#8a8a8a">deaf 8 ms</text>
+  <text x="504" y="126" text-anchor="middle" font-size="12" fill="#8a8a8a">deaf 8 ms</text>
+  <text x="644" y="126" text-anchor="middle" font-size="12" fill="#8a8a8a">deaf 8 ms</text>
+  <text x="154" y="160" text-anchor="middle" font-size="11" fill="#3f7f4f">2 ms</text>
+
+  <!-- case A -->
+  <text x="130" y="212" text-anchor="end" font-size="13" fill="#3a3a3a">our shout</text>
+  <rect x="140" y="196" width="140" height="26" fill="#2f6f8f" opacity="0.85"/>
+  <rect x="140" y="196" width="28" height="26" fill="#e8b84b"/>
+  <text x="300" y="214" font-size="13" fill="#3a3a3a">heard for <tspan font-weight="600">2 ms</tspan></text>
+
+  <!-- case B -->
+  <text x="130" y="264" text-anchor="end" font-size="13" fill="#3a3a3a">shifted</text>
+  <rect x="168" y="248" width="140" height="26" fill="#2f6f8f" opacity="0.85"/>
+  <rect x="280" y="248" width="28" height="26" fill="#e8b84b"/>
+  <text x="330" y="266" font-size="13" fill="#3a3a3a">starts exactly as they go deaf — still heard for <tspan font-weight="600">2 ms</tspan></text>
+
+  <!-- case C worst -->
+  <text x="130" y="316" text-anchor="end" font-size="13" font-weight="600" fill="#c0392b">worst case</text>
+  <rect x="294" y="300" width="140" height="26" fill="#2f6f8f" opacity="0.85"/>
+  <rect x="294" y="300" width="14" height="26" fill="#e8b84b"/>
+  <rect x="420" y="300" width="14" height="26" fill="#e8b84b"/>
+  <text x="452" y="318" font-size="13" fill="#c0392b">cut in half — <tspan font-weight="600">1 ms</tspan> each side</text>
+  <text x="452" y="336" font-size="12" fill="#7a7a7a">and 1 ms is exactly what the detector needs</text>
+
+  <!-- legend -->
+  <rect x="140" y="360" width="200" height="24" fill="#e8b84b"/>
+  <text x="352" y="377" font-size="13" fill="#3a3a3a">overlap = the part they actually hear</text>
+
+  <!-- inequality -->
+  <rect x="90" y="408" width="720" height="98" rx="12" fill="#ffffff" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="450" y="440" text-anchor="middle" font-size="16" font-weight="600" fill="#1a1a1a">shout  &#8805;  deaf gap  +  detector latency</text>
+  <text x="450" y="470" text-anchor="middle" font-size="16" fill="#2f6f8f">10 ms  &#8805;  8 ms  +  1 ms</text>
+  <text x="450" y="494" text-anchor="middle" font-size="13" fill="#7a7a7a">checked by the compiler, not by a comment — change a constant and the build fails</text>
+
+  <text x="450" y="540" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — contact trigger — 4/6</text>
+</svg>

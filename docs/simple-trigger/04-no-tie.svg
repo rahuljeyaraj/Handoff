@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 640" width="900" height="640" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="640" fill="#faf9f7"/>
+  <text x="450" y="40" text-anchor="middle" font-size="24" font-weight="600" fill="#1a1a1a">Corner case — shouts overlap. Still no tie.</text>
+  <line x1="90" y1="56" x2="810" y2="56" stroke="#d8d4cd" stroke-width="2"/>
+
+  <g stroke="#e2ded7" stroke-width="1">
+    <line x1="242" y1="76" x2="242" y2="272"/>
+    <line x1="330" y1="76" x2="330" y2="272"/>
+    <line x1="462" y1="76" x2="462" y2="272"/>
+    <line x1="506" y1="76" x2="506" y2="272"/>
+  </g>
+
+  <!-- A -->
+  <text x="102" y="124" text-anchor="end" font-size="15" font-weight="600" fill="#2f6f8f">A</text>
+  <rect x="110" y="102" width="660" height="38" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="102" width="220" height="38" fill="#2f6f8f"/>
+  <text x="220" y="126" text-anchor="middle" font-size="12" fill="#ffffff">A SHOUTS  0 – 10</text>
+  <rect x="330" y="102" width="22" height="38" fill="#9a9a9a"/>
+  <rect x="352" y="102" width="154" height="38" fill="#f0e2c8" stroke="#c79a3a" stroke-width="1.4"/>
+  <text x="429" y="126" text-anchor="middle" font-size="12" fill="#8a6a1a">A hears B, waits</text>
+  <rect x="506" y="102" width="264" height="38" fill="#2f6f8f"/>
+  <text x="638" y="126" text-anchor="middle" font-size="12" fill="#ffffff">A SENDS ITS CARD</text>
+
+  <!-- B -->
+  <text x="102" y="212" text-anchor="end" font-size="15" font-weight="600" fill="#8f5a2f">B</text>
+  <rect x="110" y="190" width="660" height="38" fill="#efece7" stroke="#b8b3aa" stroke-width="1.2"/>
+  <rect x="110" y="190" width="132" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <rect x="242" y="190" width="220" height="38" fill="#2f6f8f"/>
+  <text x="352" y="214" text-anchor="middle" font-size="12" fill="#ffffff">B SHOUTS  6 – 16</text>
+  <rect x="462" y="190" width="22" height="38" fill="#9a9a9a"/>
+  <rect x="484" y="190" width="286" height="38" fill="#cfe3d3" stroke="#3f7f4f" stroke-width="1"/>
+  <text x="640" y="214" text-anchor="middle" font-size="12" fill="#1f4a2f">B receives A's card</text>
+
+  <!-- axis -->
+  <g stroke="#b8b3aa" stroke-width="1.2">
+    <line x1="110" y1="228" x2="110" y2="244"/>
+    <line x1="242" y1="228" x2="242" y2="244"/>
+    <line x1="330" y1="228" x2="330" y2="244"/>
+    <line x1="462" y1="228" x2="462" y2="244"/>
+    <line x1="506" y1="228" x2="506" y2="244"/>
+    <line x1="770" y1="228" x2="770" y2="244"/>
+  </g>
+  <g font-size="11" fill="#8a8a8a" text-anchor="middle">
+    <text x="110" y="260">0</text>
+    <text x="242" y="260">6</text>
+    <text x="330" y="260">10</text>
+    <text x="462" y="260">16</text>
+    <text x="512" y="260">18</text>
+    <text x="770" y="260">30 ms</text>
+  </g>
+
+  <text x="336" y="90" font-size="12" fill="#c79a3a" font-weight="600">A opens its ears at 11 — B is still shouting</text>
+  <text x="488" y="284" font-size="12" fill="#8a8a8a">B opens its ears at 17 — A stopped 7 ms ago, so B hears nothing</text>
+
+  <line x1="90" y1="308" x2="810" y2="308" stroke="#e2ded7" stroke-width="1.5"/>
+
+  <!-- proof -->
+  <text x="450" y="340" text-anchor="middle" font-size="17" font-weight="600" fill="#1a1a1a">Only one of them can possibly hear the other's shout</text>
+
+  <rect x="110" y="360" width="680" height="150" rx="12" fill="#ffffff" stroke="#2f6f8f" stroke-width="2"/>
+
+  <text x="150" y="392" font-size="14" fill="#3a3a3a">To hear the other's shout you must open your ears</text>
+  <text x="150" y="414" font-size="14" font-weight="600" fill="#2f6f8f">before their shout ends.</text>
+
+  <text x="150" y="450" font-size="14" fill="#3a3a3a">But your ears open 11 ms after your own shout began.</text>
+  <text x="150" y="472" font-size="14" fill="#3a3a3a">So the later shouter always opens up in time, and</text>
+  <text x="150" y="494" font-size="14" font-weight="600" fill="#2f6f8f">the earlier shouter is always too late.</text>
+
+  <rect x="110" y="530" width="680" height="60" rx="12" fill="#eef4f7" stroke="#2f6f8f" stroke-width="2"/>
+  <text x="450" y="556" text-anchor="middle" font-size="16" font-weight="600" fill="#1a1a1a">The sender is decided by physics, not by a draw.</text>
+  <text x="450" y="578" text-anchor="middle" font-size="13" fill="#2f6f8f">Both-send and both-listen are impossible. There is nothing left to arbitrate.</text>
+
+  <text x="450" y="622" text-anchor="middle" font-size="13" fill="#8a8a8a">Handoff — simplified trigger — 4/5</text>
+</svg>
