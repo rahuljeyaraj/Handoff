@@ -46,7 +46,7 @@ Everything is pinned and lives under `~/.pico-sdk`, deliberately **not** on PATH
 
 These versions appear in three places that must stay in step: the DO-NOT-EDIT
 block in [CMakeLists.txt](CMakeLists.txt), the variables at the top of
-[scripts/build.ps1](scripts/build.ps1), and the paths in
+[scripts/build.py](scripts/build.py), and the paths in
 [.vscode/settings.json](.vscode/settings.json).
 
 ### First-time setup on a new machine
@@ -61,37 +61,45 @@ Install the **Raspberry Pi Pico** VS Code extension
 
 **In VS Code** — `Ctrl+Shift+B`, or the Pico extension's *Compile Project*.
 
-**From a terminal:**
+**From a terminal** — same command on Windows and Linux:
 
-```powershell
-.\scripts\build.ps1              # configure + build
-.\scripts\build.ps1 -Clean       # wipe build/ first
-.\scripts\build.ps1 -Flash       # build, then flash over USB
-.\scripts\build.ps1 -Config Release
+```
+python scripts/build.py                    # configure + build
+python scripts/build.py --clean            # wipe build/ first
+python scripts/build.py --flash            # build, then flash over USB
+python scripts/build.py --config Release
+python scripts/build.py --target blink     # just one app
+python scripts/build.py --help
 ```
 
 Artifacts land in `build/` — `blink.uf2`, `.elf`, `.bin`, `.hex`, `.map`, `.dis`.
+
+The script prefers the pinned toolchain under `~/.pico-sdk` and falls back to
+whatever is on `PATH`, so a Linux box with distro `cmake`, `ninja` and
+`arm-none-eabi-gcc` builds this without installing the VS Code extension's
+bundle. Python 3.8+, standard library only.
 
 ## Flash
 
 Either drag `build/blink.uf2` onto the `RP2350` drive that appears when you plug
 the board in holding **BOOTSEL**, or:
 
-```powershell
-.\scripts\build.ps1 -Flash
+```
+python scripts/build.py --flash
 ```
 
 `picotool ... -fx` reboots a running board into BOOTSEL by itself, so BOOTSEL is
-only needed for the very first flash.
+only needed for the very first flash. On Linux, install picotool's udev rules
+rather than running the flash step under `sudo`.
 
 ## Serial console
 
 The firmware presents a USB CDC port. Any terminal at any baud rate works — it
 is USB, so the rate is ignored:
 
-```powershell
-mode                                              # find the COM port
-# then attach with PuTTY / Windows Terminal / pyserial
+```
+# Windows: 'mode' lists COM ports; attach with PuTTY or Windows Terminal
+# Linux:   /dev/ttyACM0; attach with 'screen /dev/ttyACM0' or 'picocom'
 ```
 
 Later this same link carries raw ADC buffers to the host plotter (design §10.5).
@@ -105,7 +113,7 @@ The receiver is the test instrument; there is no oscilloscope in this project.
 CMakeLists.txt            top level; sets PICO_BOARD=pico2_w, defines handoff_add_app()
 pico_sdk_import.cmake     stock SDK bootstrap, copied from pico-sdk 2.3.1
 firmware/blink/           bring-up step 0 — LED + USB heartbeat
-scripts/build.ps1         command-line build / flash
+scripts/build.py          command-line build / flash (Windows + Linux)
 docs/                     design documentation
 build/                    generated, git-ignored
 ```
