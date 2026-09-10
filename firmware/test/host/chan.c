@@ -1,0 +1,177 @@
+#include "chan.h"
+
+#include <math.h>
+#include <string.h>
+
+#define PI 3.14159265358979323846
+
+/* ---- deterministic randomness ----------------------------------------- */
+
+void rng_seed(rng_t *r, uint64_t seed)
+{
+    r->s = seed ? seed : 0x9E3779B97F4A7C15ull;
+    r->spare = 0.0;
+    r->has_spare = 0;
+}
+
+uint32_t rng_u32(rng_t *r)
+{
+    /* xorshift64*, plenty for a channel model and reproducible everywhere. */
+    uint64_t x = r->s;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    r->s = x;
+    return (uint32_t)((x * 0x2545F4914F6CDD1Dull) >> 32);
+}
+
+double rng_uniform(rng_t *r)
+{
+    return (double)rng_u32(r) / 4294967296.0;
+}
+
+double rng_normal(rng_t *r)
+{
+    double u, v, s;
+
+    if (r->has_spare) { r->has_spare = 0; return r->spare; }
+
+    do {
+        u = rng_uniform(r) * 2.0 - 1.0;
+        v = rng_uniform(r) * 2.0 - 1.0;
+        s = u * u + v * v;
+    } while (s >= 1.0 || s == 0.0);
+
+    s = sqrt(-2.0 * log(s) / s);
+    r->spare = v * s;
+    r->has_spare = 1;
+    return u * s;
+}
+
+/* ---- the channel ------------------------------------------------------ */
+
+void chan_default(chan_cfg_t *c)
+{
+    memset(c, 0, sizeof *c);
+    c->amplitude      = 200.0;   /* design §5: ~160 mV at the ADC, ~200 LSB */
+    c->noise_rms      = 0.0;
+    c->dc             = 2048.0;  /* VREF, design §6.2                        */
+    c->dc_drift_lsb_s = 0.0;
+    c->carrier_ppm    = 0.0;
+    c->clock_ppm      = 0.0;
+    c->ramp_db        = 0.0;
+    c->hum_hz         = 50.0;
+    c->hum_lsb        = 0.0;
+    c->dropout_prob   = 0.0;
+    c->dropout_chips  = 0;
+    c->tail_chips     = CHAN_TAIL_CHIPS;
+    c->seed           = 1;
+}
+
+void chan_set_snr_db(chan_cfg_t *c, double snr_db)
+{
+    const double carrier_rms = c->amplitude / sqrt(2.0);
+    c->noise_rms = carrier_rms / pow(10.0, snr_db / 20.0);
+}
+
+double chan_snr_db(const chan_cfg_t *c)
+{
+    const double carrier_rms = c->amplitude / sqrt(2.0);
+    if (c->noise_rms <= 0.0) return 999.0;
+    return 20.0 * log10(carrier_rms / c->noise_rms);
+}
+
+size_t chan_samples_for(const chan_cfg_t *c, size_t nchips)
+{
+    const double spc = (double)CHAN_SAMPLES_PER_CHIP * (1.0 + c->clock_ppm * 1e-6);
+    return (size_t)((double)(nchips + (size_t)c->tail_chips) * spc + 0.5);
+}
+
+size_t chan_render(const chan_cfg_t *c, const uint8_t *chips, size_t nchips,
+                   int16_t *out, size_t max)
+{
+    const size_t n = chan_samples_for(c, nchips);
+    const double fs = (double)HANDOFF_ADC_FS_HZ;
+    const double fc = (double)HANDOFF_CARRIER_HZ * (1.0 + c->carrier_ppm * 1e-6);
+    const double spc = (double)CHAN_SAMPLES_PER_CHIP * (1.0 + c->clock_ppm * 1e-6);
+    rng_t rng;
+    size_t i;
+    int dropout_left = 0;
+    size_t last_chip = (size_t)-1;
+    double phase = 0.0;
+
+    if (n > max) return 0;
+    rng_seed(&rng, c->seed);
+
+    for (i = 0; i < n; i++) {
+        const double t = (double)i / fs;
+        const size_t ci = (size_t)((double)i / spc);
+        double a, v;
+
+        /*
+         * Dropouts are drawn per chip, not per sample, so "the contact broke
+         * for 3 chips" is expressible and repeatable.
+         */
+        if (ci != last_chip) {
+            last_chip = ci;
+            if (dropout_left > 0) dropout_left--;
+            else if (c->dropout_prob > 0.0 && rng_uniform(&rng) < c->dropout_prob)
+                dropout_left = c->dropout_chips;
+        }
+
+        /* Amplitude ramp across the burst: grip tightening mid-handshake. */
+        a = c->amplitude;
+        if (c->ramp_db != 0.0 && nchips > 1) {
+            const double frac = (double)ci / (double)(nchips - 1);
+            a *= pow(10.0, (c->ramp_db * frac) / 20.0);
+        }
+        if (dropout_left > 0) a = 0.0;
+
+        v = c->dc + c->dc_drift_lsb_s * t;
+        if (c->hum_lsb > 0.0) v += c->hum_lsb * sin(2.0 * PI * c->hum_hz * t);
+
+        /*
+         * Phase is integrated rather than recomputed from t, so a carrier
+         * offset is a real frequency error rather than a per-sample
+         * discontinuity. It is used before it is advanced, so sample 0 has
+         * phase 0 — the same convention tools/gen_vectors.py uses, and the
+         * two are compared against each other in test_vectors.
+         */
+        if (ci < nchips && chips[ci]) v += a * sin(phase);
+        phase += 2.0 * PI * fc / fs;
+        if (phase > 2.0 * PI) phase -= 2.0 * PI;
+        if (c->noise_rms > 0.0) v += c->noise_rms * rng_normal(&rng);
+
+        /* The ADC is 12-bit and it does clip. Modelling that matters: design
+         * §15.2's LC bandpass exists precisely because it might. */
+        if (v < 0.0) v = 0.0;
+        if (v > 4095.0) v = 4095.0;
+
+        /* Centre it the way hal_pico will, so the DSP sees signed samples. */
+        out[i] = (int16_t)((int)(v + 0.5) - 2048);
+    }
+    return n;
+}
+
+/* ---- the receiver's front half ---------------------------------------- */
+
+void demod_init(demod_t *d)
+{
+    gz_init(&d->gz, HANDOFF_GZ_N, HANDOFF_GZ_BIN);
+    sync_init(&d->sy, HANDOFF_WINDOWS_PER_CHIP, HANDOFF_CHIP_GUARD);
+}
+
+size_t demod_run(demod_t *d, const int16_t *samples, size_t n,
+                 uint16_t *chips, size_t max)
+{
+    size_t i, out = 0;
+
+    for (i = 0; i < n; i++) {
+        uint32_t score;
+        uint16_t chip;
+        if (!gz_push(&d->gz, samples[i], &score)) continue;
+        if (!sync_push(&d->sy, score, &chip)) continue;
+        if (out < max) chips[out++] = chip;
+    }
+    return out;
+}

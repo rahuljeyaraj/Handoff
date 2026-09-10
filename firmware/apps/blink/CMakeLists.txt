@@ -7,6 +7,7 @@ add_executable(blink
 target_link_libraries(blink
     pico_stdlib
     pico_cyw43_arch_none   # LED lives on the CYW43439, so we need the driver
+    handoff_lib            # not used yet; keeps config.h on the include path
 )
 
 # Console over USB CDC. The UART pins stay free — GP0/GP1 are wanted later,

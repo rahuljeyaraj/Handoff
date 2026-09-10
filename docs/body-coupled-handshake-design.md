@@ -18,7 +18,7 @@ This document specifies the electrical design, the modulation and protocol, the 
 
 | # | Requirement |
 |---|---|
-| R1 | Transfer a 40-byte contact record between two wristbands during a normal handshake (approx. 1 second of contact) |
+| R1 | ~~Transfer a 40-byte contact record~~ **Transfer a full vCard** between two wristbands during a normal handshake (approx. 1 second of contact) — see [firmware-architecture.md §8](firmware-architecture.md) |
 | R2 | Battery powered, fully floating, no mains reference at either end |
 | R3 | No bare metal contacts skin |
 | R4 | Buildable on 2.54 mm single-sided perfboard; no custom PCB |
@@ -28,7 +28,7 @@ This document specifies the electrical design, the modulation and protocol, the 
 ### Non-requirements
 
 - Multi-party operation (human chain) is explicitly out of scope for this revision
-- iOS support is out of scope (Web Bluetooth does not exist on iOS)
+- iOS support is out of scope — the phone client is Android-only (§10.6)
 - Range beyond direct skin contact is out of scope
 
 ---
@@ -349,6 +349,11 @@ Cost: halves the data rate. There is sufficient margin.
 
 ### 9.4 Packet format
 
+> **Superseded by [firmware-architecture.md §8.3](firmware-architecture.md).** A full
+> vCard does not fit one packet, so the payload is fragmented: a 2-byte header
+> (fragment index, count, record id) is added and the checksum widened to CRC-16.
+> The preamble and start marker below are unchanged.
+
 | Field | Length | Content |
 |---|---|---|
 | Preamble | 32 chips | Alternating 1010… |
@@ -361,6 +366,12 @@ Approximately 350 ms per packet at 2 kchips/s.
 The preamble carries no data. It exists to give the receiver a dense run of transitions to lock timing onto. The start marker contains four identical consecutive bits, a pattern that cannot occur within the preamble, making the payload boundary unambiguous.
 
 ### 9.5 Transport strategy
+
+> **Superseded by [firmware-architecture.md §8.4](firmware-architecture.md).** With a
+> fragmented payload the repetition becomes a priority-weighted carousel —
+> fragment 0 (name + mobile, 248 ms) is repeated most, later fragments enrich it.
+> The property below that matters is kept: no acknowledgement, no retry
+> negotiation.
 
 The transmitting wristband sends the packet **continuously and repeatedly** for the duration of contact. The receiver accepts the first packet that passes CRC and discards everything else.
 
@@ -443,15 +454,20 @@ This is a design decision, not a fallback: it removes the need for an oscillosco
 
 ### 10.6 Phone integration
 
-Pico 2 W → BLE notify on a single characteristic → Web Bluetooth page in Android Chrome → `navigator.vibrate()` → hand the browser a `.vcf` so the contact lands in the real address book.
+> **Settled: the phone client is a native Android app. No web client, no iOS.**
+> See [firmware-architecture.md §11](firmware-architecture.md) for the app design.
+> The firmware exposes the fixed §11.2 BLE GATT contract and is insulated from
+> everything above it.
 
-Hosted on GitHub Pages (HTTPS is required by Web Bluetooth). No app store, no Android Studio. Vibration requires a prior user gesture; tapping "Connect" satisfies this.
+Pico 2 W → BLE, bonded and encrypted → a native Android app holding a background connection through a foreground service → `rx_vcard` notify → the received card is written to the app's own database, and optionally promoted into the system address book by an explicit user action.
 
-No display, LED or motor on the wristband. The phone provides all feedback.
+The app pairs with one wristband once, through Android's `CompanionDeviceManager`, and reconnects automatically thereafter. The foreground service is what keeps the link alive while the phone is pocketed during a handshake — and is the reason a web client was rejected, since a backgrounded browser tab drops the GATT connection.
+
+No display, LED or motor on the wristband. The phone provides all feedback, including the buzz on a completed handshake.
 
 **Rationale for BLE as a secondary link:** BLE broadcasts to everything within ten metres and cannot identify who was intended in a room of fifty. A handshake is unambiguous — physical touch is the addressing. BLE is only the wire to the wearer's own pocket; the link between two people remains skin.
 
-**Android only.** Web Bluetooth does not exist on iOS. State this plainly in any writeup rather than letting it be discovered.
+**Android only, by choice.** iOS is out of scope (§2). The app is a normal Android project at `android/`, outside the firmware tree; the Pico SDK toolchain does not build it.
 
 ---
 
@@ -670,6 +686,8 @@ Design decisions that were tried and rejected, kept here so they are not repeate
 |---|---|
 | Preamp input capacitance in situ | Not measured. Determines whether 200 kHz is achievable or the carrier must drop |
 | 500 ksps ADC + DMA + Goertzel timing on core 1 | Not verified. If this does not hold, the analogue mixer must be reinstated |
-| Contact record format inside the 40-byte payload | Not specified |
-| Role election implementation | Deferred to step 5 |
+| Contact record format | Replaced by full vCard; codec and fragmentation specified in [firmware-architecture.md §8](firmware-architecture.md) |
+| Phone client | **Settled: native Android app**, [firmware-architecture.md §11](firmware-architecture.md) |
+| Wristband provisioning (how it learns its own card) | Specified in [firmware-architecture.md §9](firmware-architecture.md) |
+| Role election implementation | Logic tested at development plan M1; hardware binding at M14 |
 | Enclosure and strap | Not designed |

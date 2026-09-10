@@ -51,4 +51,4 @@ function(handoff_add_app TARGET)
     pico_add_extra_outputs(${TARGET})
 endfunction()
 
-add_subdirectory(firmware/blink)
+add_subdirectory(firmware)

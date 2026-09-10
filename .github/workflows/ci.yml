@@ -1,0 +1,118 @@
+# Handoff CI. Development plan M1, fourth exit criterion: "CI runs the whole
+# suite on push."
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # The load-bearing job. Everything the development plan claims can be tested
+  # with no hardware is tested here, with gcc -Wall -Wextra -Werror, which is
+  # also what enforces architecture 3.2: a Pico SDK header anywhere under
+  # lib/{dsp,link,record,proto} fails this build immediately.
+  host-tests:
+    name: host tests (gcc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Layering rule
+        run: python scripts/test.py --check
+
+      - name: Reference codec selftest
+        run: python tools/vcf.py selftest
+
+      # Builds the library and the simulator, regenerates the golden vectors
+      # from tools/gen_vectors.py, cross-checks the C vCard codec against the
+      # Python one in both directions, and runs every suite.
+      - name: Unit tests, vectors and codec cross-check
+        run: python scripts/test.py --cc gcc
+
+      - name: BER curve
+        run: python scripts/test.py --cc gcc --ber --no-codec-check
+
+      - name: Parameter sweeps
+        run: python scripts/test.py --cc gcc --sweep --no-codec-check
+
+  # HANDOFF_GZ_N and HANDOFF_CARRIER_HZ are compile-time constants that size
+  # buffers and are _Static_assert-ed against each other, so the only way to
+  # test another value is to build with it.
+  #
+  # M1 chose N=25 at 200 kHz. The other three combinations are kept green
+  # because the plan needs them: 40 kHz is design 3.2's bring-up carrier and is
+  # what M3 and M10 start on, and N=50 keeps M1's decision reversible rather
+  # than letting it become accidental.
+  host-tests-config:
+    name: host tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "GZ_N 50"
+            defines: "--define HANDOFF_GZ_N=50"
+          - name: "40 kHz bring-up"
+            defines: "--define HANDOFF_CARRIER_HZ=40000"
+          - name: "GZ_N 50, 40 kHz"
+            defines: "--define HANDOFF_GZ_N=50 --define HANDOFF_CARRIER_HZ=40000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit tests
+        run: python scripts/test.py --cc gcc ${{ matrix.defines }}
+
+  # Clang catches a different set of things, and it is the compiler most likely
+  # to notice something the Pico's arm-none-eabi-gcc would also notice.
+  host-tests-clang:
+    name: host tests (clang)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit tests with clang
+        run: python scripts/test.py --cc clang
+
+  # Cross-compiles every app for RP2350. Catches the case where lib/ compiles
+  # on the host but the firmware image does not link -- which is exactly what
+  # would happen the first time a hal_pico stub grows a real SDK dependency.
+  firmware:
+    name: firmware (arm-none-eabi)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install the ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi cmake ninja-build
+
+      - name: Fetch the Pico SDK
+        run: |
+          git clone --depth 1 --branch 2.3.1 \
+            https://github.com/raspberrypi/pico-sdk.git "$HOME/pico-sdk"
+          git -C "$HOME/pico-sdk" submodule update --init --depth 1
+
+      - name: Build every app
+        env:
+          PICO_SDK_PATH: /home/runner/pico-sdk
+        run: python scripts/build.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uf2
+          path: build/*.uf2
+          if-no-files-found: error

@@ -13,7 +13,7 @@
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 
-#define BLINK_PERIOD_MS 500
+#define BLINK_PERIOD_MS 1000
 
 int main(void)
 {
