@@ -1,0 +1,35 @@
+{
+    // Paths use ${userHome}; the toolchain lives in ~/.pico-sdk, so this file
+    // is portable to any machine with the same Pico extension bundle.
+    "raspberry-pi-pico.cmakeAutoConfigure": true,
+    "raspberry-pi-pico.useCmakeTools": false,
+    "raspberry-pi-pico.cmakePath": "${userHome}/.pico-sdk/cmake/v4.3.4/bin/cmake",
+    "raspberry-pi-pico.ninjaPath": "${userHome}/.pico-sdk/ninja/v1.13.2/ninja",
+
+    "cmake.generator": "Ninja",
+    "cmake.configureOnOpen": false,
+    "cmake.configureOnEdit": false,
+    "cmake.automaticReconfigure": false,
+    "cmake.options.statusBarVisibility": "hidden",
+    "cmake.options.advanced": {
+        "build":  { "statusBarVisibility": "hidden" },
+        "launch": { "statusBarVisibility": "hidden" },
+        "debug":  { "statusBarVisibility": "hidden" }
+    },
+
+    "C_Cpp.debugShortcut": false,
+    "C_Cpp.default.configurationProvider": "raspberry-pi.raspberry-pi-pico",
+
+    "terminal.integrated.env.windows": {
+        "PICO_SDK_PATH": "${userHome}/.pico-sdk/sdk/2.3.1",
+        "PICO_TOOLCHAIN_PATH": "${userHome}/.pico-sdk/toolchain/15_2_Rel1",
+        "Path": "${userHome}/.pico-sdk/toolchain/15_2_Rel1/bin;${userHome}/.pico-sdk/picotool/2.3.1/picotool;${userHome}/.pico-sdk/cmake/v4.3.4/bin;${userHome}/.pico-sdk/ninja/v1.13.2;${env:Path}"
+    },
+
+    "files.associations": {
+        "*.pio": "asm-collection"
+    },
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "editor.rulers": [100]
+}
