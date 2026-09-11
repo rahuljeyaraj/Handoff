@@ -35,7 +35,7 @@ The board is regenerated separately, with KiCad's own Python (it needs `pcbnew`)
 "C:/Program Files/KiCad/10.0/bin/python.exe" hardware/tools/gen_pcb.py
 ```
 
-It must end `DRC: 0 error(s)` apart from the unrouted count, and `parity 0`.
+It must end `DRC: 0 error(s)`, `parity 0` and `unrouted 0 item(s)`.
 Run `gen_schematic.py` first: the board is built from `build/handoff.net`.
 
 ---
@@ -395,29 +395,53 @@ into the slot R2 vacated, and south under U2's body, where the island's
 vertical does not reach. That second escape is the one the first pass could not
 find.
 
-## What is still open: three connections
+## The board routes
 
-**3 unconnected items, no shorts, no crossings and no clearance violations.**
-All three are the same fact, and it is now a small one.
+**0 unconnected items, 0 DRC errors, parity 0.** The last three connections
+were all one fact, and the fix was one idea.
 
 OUT1 leaves the amplifier at the top of the right-hand column and has to get
-down to C1 and across to JP3. It does that in the only lane outboard of the
-column, and in doing so it draws a line between the column and the board edge
-from y 28.6 to y 43.2. Two nets need to cross that line:
+down to C1 and across to JP3. It used to do that on the top face, in the lane
+outboard of the column, and then cut west across the channel at y 43.2. That
+lane is the only way out of the AFE toward the elbow - the top face is walled
+at y 43 by C1 and C2, the bottom by BAT+ and SW_OUT - and OUT1 was drawing a
+line across it. AFE_3V3 (to JP4 and to C5) and OUT2 (to JP3) were behind it.
 
-* **AFE_3V3** from C3 out to JP4 and to C5 at the hand end (2 items)
-* **JP3 pad 3 to R7** — stage 2's output to the gain jumper (1 item)
+The lane is 3.05 mm wide, which is three tracks with room to spare. What it
+cannot take is a crossing, so the three are ordered, innermost to the net that
+enters lowest, and each entry crosses only lanes that have not started yet:
 
-Anything leaving the column between those two y values is behind it. Three ways
-out, cheapest first:
+| lane | net | enters at |
+|---|---|---|
+| x 25.7 | OUT2, R7 to JP3 pad 3 | y 36.1 |
+| x 26.4 | AFE_3V3, C3 to JP4 and to C5 | y 34.1 |
+| x 27.2 | OUT1, R4 to C1 and JP3 | y 28.6 |
 
-1. **Reorder the right-hand column** so C3 and R7 sit above OUT1's exit rather
-   than below it. Free, but it moves the decoupling cap away from pin 8.
-2. **0805 passives.** At 5.3 mm pitch a 1206 leaves a 0.31 mm gap between parts
-   and an 0805 leaves 1.51 mm, which is a lane. That gives the column doorways
-   of its own and OUT1 stops being a wall.
-3. **Four layers** — 5 and 4-5 days against  and 24 hours.
+OUT1 then leaves the lane by diving. Between BAT+ (y 41.55) and SW_OUT
+(y 44.09) the bottom face is empty across the whole channel, and that corridor
+lands on C1's OUT1 pad at y 43.36. So OUT1 goes down at the end of its lane,
+west along the corridor, and up into C1: two vias, and nothing on the top face
+crosses the channel between the amplifier and the elbow any more. A third via
+at x 21 takes the JP3 branch back up, where the top face is clear to the jumper.
 
-Nothing is bodged with vias through the electrode pour, which is the one thing
-that pour cannot afford.
+With the crossing gone, R8's VREF pad no longer has to dive under it, so that
+via went; and a second VREF via at y 52.5 turned out to have nothing on the
+top face to meet - DRC had been calling it dangling - so that went too.
 
+**Vias: 16 became 21, and the electrode pour lost 28 mm².** The earlier note
+here said nothing would be bodged through the electrode pour, so, plainly:
+the top pour measures 1493.9 mm² filled against 1521.7 before, a 1.8 % loss.
+About 4 mm² of that is the five extra vias (0.6 mm plus 0.2 mm clearance, a
+1.0 mm gap apiece); the rest is clearance around the three east lanes and the
+5 mm of AFE_3V3 on top at the hand end. Four of the new vias sit under the
+Pico in the AFE channel; one is at the hand end for C5. If that is not acceptable, the
+alternatives are the ones listed before - reorder the right-hand column so C3
+and R7 sit above OUT1's exit (free, but moves the decoupling cap off pin 8), or
+0603 passives in that column only (R4, R7, R8, R9, R11, C3; none dissipates
+more than 8 mW, so 1/10 W is fine) - and either would let OUT1 stay on top.
+
+AFE_3V3's run to C5 is on the bottom face. Past the antenna keep-out (to
+x 27.11) and before the Pico's pads (from 28.1) there is one lane, at x 27.7,
+and on the top face RX_IN already crosses it at y 21.23. The bottom is free the
+whole way - the pocket has no pour - so the run stays down until y 9.8, where
+BTN crosses at y 9, and comes up for the last 5 mm into C5's + pad.

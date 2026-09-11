@@ -291,11 +291,32 @@ ROUTES = [
                          (21.9, 25.75), (24.4, 25.75)]),
     ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 31.3), (17.0, 31.3),
                          (17.0, 29.65), (15.6, 29.65)]),
-    # OUT1: pin 1 -> R4.2 -> down the right outboard lane -> across to C1 in
-    # the gap between R8's two pads, which is the only 1.35 mm window there.
-    ("/OUT1", TL, [(20.975, 29.887), (20.975, 28.6), (25.7, 28.6),
-                   (25.7, 43.2), (16.5, 43.2)]),
-    ("/OUT1", TL, [(21.0, 43.2), (21.0, 49.3), (22.0, 49.3)]),
+    # OUT1: pin 1 -> R4.2 -> down the OUTERMOST of the three east lanes -> and
+    # then across to C1 on the bottom face, not the top.
+    #
+    # The east lane (x 25.05 column edge to 28.1 Pico pads, 3.05 mm) is the only
+    # way out of the AFE toward the elbow: the top face is walled at y 43 by C1
+    # and C2, the bottom by BAT+ (41.55) and SW_OUT (44.09). Three nets need it -
+    # OUT1, AFE_3V3 and OUT2 (JP3-B) - and it takes three 0.25 mm tracks with
+    # room to spare. What it cannot take is a crossing, and OUT1 used to cross
+    # it: it entered at the top (R4, y 28.6) and left across the channel at
+    # y 43.2, which put a line between the other two and everything south.
+    #
+    # The fix is an ordering. Innermost lane to the net that enters lowest:
+    #   x 25.7  OUT2      enters at y 36.1  (R7.2)
+    #   x 26.4  AFE_3V3   enters at y 34.1  (C3.1)
+    #   x 27.2  OUT1      enters at y 28.6  (R4.2)
+    # Each entry crosses only lanes that have not started yet. OUT1 then
+    # leaves the lane by diving: the corridor between BAT+ and SW_OUT on the
+    # bottom face, y 41.7-44.0, is empty across the whole channel and lands
+    # exactly on C1's OUT1 pad (y 43.36). Two vias, and nothing on the top
+    # face crosses the channel between the AFE and the elbow any more.
+    ("/OUT1", TL, [(20.975, 29.887), (20.975, 28.6), (27.2, 28.6), (27.2, 42.6)]),
+    ("/OUT1", BL, [(27.2, 42.6), (16.9, 42.6)]),
+    ("/OUT1", TL, [(16.9, 42.6), (16.0, 43.2)]),
+    # the branch to JP3: up out of the corridor at x 21, where the top face is
+    # clear all the way to the elbow, then down again to the jumper pad
+    ("/OUT1", TL, [(21.0, 42.6), (21.0, 49.3), (22.0, 49.3)]),
     ("/OUT1", BL, [(22.0, 49.3), (22.2, 50.0)]),
 
     # ---- stage 2 -----------------------------------------------------------
@@ -307,20 +328,27 @@ ROUTES = [
                          (22.6, 41.65), (24.4, 41.65)]),
     ("Net-(U2B--)", TL, [(24.4, 41.65), (24.4, 39.45)]),
     ("Net-(JP3-B)", TL, [(20.325, 34.112), (20.325, 36.1), (24.4, 36.1)]),
+    # OUT2 on to JP3: the innermost east lane (see OUT1), then one via down to
+    # the jumper pad. It enters lowest of the three, so nothing crosses it.
+    ("Net-(JP3-B)", TL, [(24.4, 36.1), (25.7, 36.1), (25.7, 48.0)]),
+    ("Net-(JP3-B)", BL, [(25.7, 48.0), (24.8, 50.0)]),
 
     # ---- VREF: the left outboard lane, with one dive so ADC0 can cross ----
     ("VREF", TL, [(13.9, 24.45), (15.6, 24.45)]),
     ("VREF", TL, [(13.9, 24.45), (13.9, 44.85)]),
     ("VREF", TL, [(13.9, 32.75), (15.6, 32.75)]),
     ("VREF", TL, [(13.9, 38.05), (15.6, 38.05)]),
-    # One dive, y 44.85 to 52.5. It is what lets ADC0, +3V3 and the divider's
-    # run out to C4 cross the bus on the top face instead of fighting it, and
-    # VREF is a DC reference - two vias in it cost nothing.
+    # One dive at y 44.85, and it stays down: JP6's pad is on the bottom face.
+    # It is what lets ADC0, +3V3 and the divider's run out to C4 cross the bus
+    # on the top face instead of fighting it, and VREF is a DC reference - a
+    # via in it costs nothing. (There used to be a second via at y 52.5 with
+    # nothing on the top face to meet it; DRC called it dangling, and it was.)
     ("VREF", BL, [(13.9, 44.85), (13.9, 52.5)]),
-    # R8's VREF pad is below OUT1's crossing, so it can come round the south
-    # of the column and back along the bottom face just clear of the pocket.
-    ("VREF", TL, [(24.4, 44.75), (26.5, 44.75), (26.5, 46.2)]),
-    ("VREF", BL, [(26.5, 46.2), (13.9, 46.2)]),
+    # R8's VREF pad goes straight back to the bus on the top face. It used to
+    # dive under OUT1's crossing; with that crossing gone, the channel between
+    # the two columns is open at y 41.6 (below C1's upper pad, above OUT1's
+    # corridor via), and this saves a via.
+    ("VREF", TL, [(24.4, 44.75), (22.0, 44.75), (22.0, 41.6), (13.9, 41.6)]),
     ("VREF", BL, [(13.9, 52.5), (13.9, 53.6), (15.4, 54.0)]),
 
     # ---- ADC0: C2 to pin 31, and down to the elbow block ------------------
@@ -333,6 +361,19 @@ ROUTES = [
     ("/AFE_3V3", TL, [(20.975, 34.112), (24.4, 34.112)]),
     ("/AFE_3V3", BL, [(17.15, 50.3), (17.0, 51.9)]),
     ("/AFE_3V3", TL, [(17.0, 51.9), (16.0, 50.9)]),
+    # South, to JP4: the middle east lane (see OUT1), then under the elbow
+    # block on the bottom face at y 51.3 - the one band there that clears the
+    # jumper pads at 50 and ADC0's via at 52.
+    ("/AFE_3V3", TL, [(24.4, 34.112), (26.4, 34.112), (26.4, 48.8)]),
+    ("/AFE_3V3", BL, [(26.4, 48.8), (26.4, 51.3), (18.0, 51.3), (17.0, 51.9)]),
+    # North, to C5 at the hand end. The antenna keep-out reaches x 27.11 and
+    # the Pico's pads start at 28.1, so past the antenna there is one lane,
+    # at x 27.7, and on the top face RX_IN already crosses it at y 21.23. So
+    # this runs on the bottom face - free the whole way, since the pocket has
+    # no pour and the only bottom-face track up there, BTN at y 9, is what the
+    # via at y 9.8 stops short of. Then the last 5 mm on top, into C5's + pad.
+    ("/AFE_3V3", BL, [(26.4, 34.112), (27.7, 32.0), (27.7, 9.8)]),
+    ("/AFE_3V3", TL, [(27.7, 9.8), (27.7, 7.5), (26.75, 4.5)]),
 
 
     # ---- the VREF divider: R10, R11, JP6 and C4 ---------------------------
@@ -371,14 +412,20 @@ VIAS = [
     ("Net-(JP7-B)", 31.3, 21.23),
     ("VSYS", 30.2, 52.8),
     ("/OUT1", 22.0, 49.3),
+    # OUT1's corridor: down at the east lane, up at C1, and up again at x 21
+    # for the branch to JP3
+    ("/OUT1", 27.2, 42.6), ("/OUT1", 16.9, 42.6), ("/OUT1", 21.0, 42.6),
     ("Net-(JP3-C)", 23.5, 48.4),
     ("Net-(JP1-A)", 26.6, 54.0),
     ("VREF", 13.9, 44.85),
-    ("VREF", 13.9, 52.5),
-    ("VREF", 26.5, 46.2),
     ("/ADC0", 19.8, 52.0),
     ("Net-(JP6-A)", 17.6, 52.6),
     ("/AFE_3V3", 17.0, 51.9),
+    # AFE_3V3: the lane start doubles as the drop to the bottom face for the
+    # run north; the second is where that run comes up for C5; the third is
+    # the end of the lane, going under the elbow block to JP4
+    ("/AFE_3V3", 26.4, 34.112), ("/AFE_3V3", 27.7, 9.8), ("/AFE_3V3", 26.4, 48.8),
+    ("Net-(JP3-B)", 25.7, 48.0),
     ("+3V3", 17.0, 47.6),
     # The two pours are one net and have to be stitched, or DRC reports them
     # unconnected. Four, all outside the cell pocket and the antenna keep-out.
