@@ -86,12 +86,16 @@ be added on the outer face of the enclosure — design §15.1 — if measurement
 shows the board's pour is too small. Exactly one wire, per §8.4; the connector
 is that one point.
 
-**Solder jumpers, both bridged by default, cut to isolate:**
+**Solder jumpers, all normally OPEN.** Two copper pads 0.3 mm apart, no part;
+bridge with a solder blob to connect, wick it off to isolate. Open rather than
+cut-to-open because a blob is reversible and a knife cut is not. The price:
+**the board does nothing as delivered until the in-line jumpers are bridged**,
+which is deliberate — bring it up one stage at a time.
 
-| | between | cut it when |
+| | between | bridge it when |
 |---|---|---|
-| JP1 | R9 and the GP26/ADC0 node | the AFE misbehaves and you want to drive the ADC from TP4 directly, as M5 does with its own attenuator |
-| JP2 | GP2 and R1 | RP2350-E9 leakage through R1 turns out to matter (development plan, open item) — re-route TX from any J4 pin instead |
+| JP1 | R9 and the GP26/ADC0 node | normal operation; leave open to drive the ADC from TP4 directly, as M5 does with its own attenuator |
+| JP2 | GP2 and R1 | normal operation; leave open if RP2350-E9 leakage through R1 turns out to matter (development plan, open item) and route TX from a J4 pin instead |
 
 **Test pads** (1.5 mm SMD): PAD, stage-1 out, AFE out, ADC0, VREF, 3V3, GND,
 VSYS, GP2. Deliberately **no** pad on the 10 MΩ node (R2/R3/U2 pin 3): a probe

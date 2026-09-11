@@ -476,7 +476,7 @@ FP_XH2 = "Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical"
 FP_XH4 = "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
 FP_SOCK10 = "Connector_PinSocket_2.54mm:PinSocket_1x10_P2.54mm_Vertical"
 FP_TP = "TestPoint:TestPoint_Pad_D1.5mm"
-FP_JP = "Jumper:SolderJumper-2_P1.3mm_Bridged_RoundedPad1.0x1.5mm"
+FP_JP = "Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm"
 # drawn from the vendor drawing, see hardware/handoff.pretty
 FP_SW = "handoff:SW_Slide_SS-12F23G5"
 
@@ -497,7 +497,7 @@ def build() -> Schematic:
     BAT = s.use("Device", "Battery_Cell")
     SW = s.use("Switch", "SW_SPDT")
     TP = s.use("Connector", "TestPoint")
-    JP = s.use("Jumper", "SolderJumper_2_Bridged")
+    JP = s.use("Jumper", "SolderJumper_2_Open")
     C2 = s.use("Connector_Generic", "Conn_01x02")
     C4 = s.use("Connector_Generic", "Conn_01x04")
     C10 = s.use("Connector_Generic", "Conn_01x10")
@@ -670,7 +670,7 @@ def build() -> Schematic:
     s.text("ANALOGUE — TX drive, shared PAD, x121 receive chain (design §6.3, §6.4)", (110, 60), size=2.0, bold=True)
     Y = 100  # signal row
     # -- TX: GP2 -> JP2 -> R1 -> PAD node
-    jp2 = s.place(JP, "JP2", "TX", (118, Y - 12), rot=0, fp=FP_JP, desc="Cut to disconnect GP2 from the pad",
+    jp2 = s.place(JP, "JP2", "TX", (118, Y - 12), rot=0, fp=FP_JP, desc="Open as shipped: bridge with solder to connect GP2 to the pad",
                   ref_at=(-4, -3), val_at=(2, -3))
     r1 = s.place(R, "R1", "1M", (134, Y - 12), rot=90, fp=FP_R, desc="TX safety resistor, design §13")
     a, b = s.gpin("JP2", "1"), s.gpin("JP2", "2")
@@ -747,7 +747,7 @@ def build() -> Schematic:
     # -- output filter R9, JP1, C2 -> ADC0
     r9 = s.place(R, "R9", "1k5", (outb[0] + 14, outb[1]), rot=90, fp=FP_R, desc="ADC series / anti-alias with C2")
     s.wire((outb[0] + 2, outb[1]), s.gpin("R9", "1"))
-    jp1 = s.place(JP, "JP1", "ADC", (outb[0] + 26, outb[1]), rot=0, fp=FP_JP, desc="Cut to isolate the ADC pin from the AFE",
+    jp1 = s.place(JP, "JP1", "ADC", (outb[0] + 26, outb[1]), rot=0, fp=FP_JP, desc="Open as shipped: bridge with solder to connect the AFE to the ADC pin",
                   ref_at=(-4, -3), val_at=(2, -3))
     s.wire(s.gpin("R9", "2"), s.gpin("JP1", "1"))
     adc = s.gpin("JP1", "2")
@@ -761,7 +761,7 @@ def build() -> Schematic:
     tp4 = s.place(TP, "TP4", "ADC0", (adc_node[0], adc_node[1] - 8), fp=FP_TP, desc="Test pad, ADC input", ref_at=(1, -3), val_at=(1, -1))
     s.wire(adc_node, s.gpin("TP4", "1"))
     s.text("Gain 11 x 11 = 121. Firmware holds GP2 high-Z while receiving so R1 does not load the pad.", (110, 136), size=1.27)
-    s.text("JP1/JP2 are bridged as shipped; cut with a knife to isolate. No test pad on the 10 MOhm node on purpose.", (110, 138), size=1.27)
+    s.text("JP1/JP2 ship OPEN: bridge them with solder to bring the board up; wick off to isolate. No test pad on the 10 MOhm node on purpose.", (110, 138), size=1.27)
 
     # =====================================================================
     # 6. STATUS LED  (bottom left)

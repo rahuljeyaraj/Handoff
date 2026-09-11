@@ -114,37 +114,38 @@ saying so explicitly.
 
 ## 4. Jumpers — the board is untested, so make every stage isolatable
 
-The owner has **no 0 Ω resistors**. Use KiCad solder jumpers, which are
-copper only:
+The owner has **no 0 Ω resistors** and has decided **every jumper is normally
+open** — you bridge with a solder blob to connect and wick it off to isolate;
+nothing is ever cut. Two-pad jumpers use symbol `Jumper:SolderJumper_2_Open`
+with footprint `Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm`; the
+3-way select uses `Jumper:SolderJumper_3_Open` with
+`Jumper:SolderJumper-3_P1.3mm_Open_RoundedPad1.0x1.5mm` (bridge centre to one
+side). They cost ~3 × 2 mm of board and nothing in the BOM. Consequence to
+keep in the README and on the silkscreen: **the board is inert as delivered
+until the in-line jumpers are bridged**; the bring-up order in the README
+must say which to bridge first. Write the "as shipped" state of every jumper
+as OPEN and the netlist oracle accordingly (an open jumper is two separate
+nets).
 
-| kind | footprint | as shipped | to change |
-|---|---|---|---|
-| normally closed | `Jumper:SolderJumper-2_P1.3mm_Bridged_RoundedPad1.0x1.5mm` | a thin copper trace joins the two pads | cut the trace with a knife; re-join with a solder blob |
-| normally open | `Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm` | two pads 0.3 mm apart, not joined | bridge with a solder blob |
-| 3-way select | `Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm` | centre joined to pad 1 | cut, then bridge centre to pad 3 |
-
-Symbols: `Jumper:SolderJumper_2_Bridged`, `Jumper:SolderJumper_2_Open`,
-`Jumper:SolderJumper_3_Bridged12`. They cost ~3 × 2 mm of board and nothing
-in the BOM.
-
-Already present: **JP1** (R9 → ADC0, cut to drive the ADC from TP4 directly)
-and **JP2** (GP2 → R1, cut to take the transmitter off the pad). Add, at
-minimum:
+Already present, both open: **JP1** (R9 → ADC0; leave open to drive the ADC
+from TP4 directly) and **JP2** (GP2 → R1; leave open to keep the transmitter
+off the pad). Add, at minimum:
 
 - **JP3, 3-way, stage select:** centre → R9; pad 1 → OUT1 (stage 1); pad 2 →
-  OUT2 (stage 2), bridged to OUT2 as shipped. If ×121 clips in a noisy hall,
-  cut and move to ×11 without a rework. Design §15.2 names this exact risk.
-- **JP4, closed, U2 supply:** in series with 3V3 to U2 pin 8. Cut to measure
+  OUT2 (stage 2). Bridge to OUT2 for ×121; if that clips in a noisy hall,
+  move the blob to OUT1 for ×11 without a rework. Design §15.2 names this
+  exact risk.
+- **JP4, U2 supply:** in series with 3V3 to U2 pin 8. Cut to measure
   the op-amp's current and to power the AFE from a bench supply at TP6.
-- **JP5, closed, in the VSYS feed** after D1, with test pads on both sides,
+- **JP5, in the VSYS feed** after D1, with test pads on both sides,
   so the whole board's current can be measured through an ammeter across it.
-- **JP6, closed, VREF to the divider** (between the R10/R11/C4 node and the
+- **JP6, VREF to the divider** (between the R10/R11/C4 node and the
   VREF net), so an external bias can be injected at TP5 if the divider is
   suspected.
-- **JP7, closed, PAD → R2** (receiver input), so the receiver can be tested
+- **JP7, PAD → R2** (receiver input), so the receiver can be tested
   from a signal injected at the R2 side while the pad and TX are off.
-- Consider a normally-open jumper from ADC0 to GND for a noise-floor
-  measurement, or state that TP4-to-TP7 with a wire does the same and skip it.
+- Consider a jumper from ADC0 to GND for a noise-floor measurement, or state
+  that TP4-to-TP7 with a wire does the same and skip it.
 
 For every jumper state what is being isolated, which test pad drives the
 isolated side, and which milestone uses it. Put that table in the README.
