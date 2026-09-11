@@ -15,6 +15,7 @@ the schematic implements its §6/§7 netlist with the changes listed under
 | `tools/gen_schematic.py` | **the source of the schematic.** Generates the sheet from the §7 netlist and proves it with `kicad-cli`: ERC, the netlist against `EXPECTED_NETS` pin for pin, and the BOM against the parts table below. Edit this, not the sheet |
 | `tools/render.py` | renders `build/handoff.pdf` to `build/sheet.png` so the sheet can be looked at |
 | `review.md` | the pre-layout review: every check, its number, its verdict |
+| `schematic-prompt.md` | the brief for the next session: the schematic changes the floor plan forces, then layout |
 | `tools/gen_floorplan.py` / `floorplan.svg` | the floor plan: which block sits where in the enclosure, and why. Placement only, no tracks — the input to the layout session |
 
 Regenerate and verify after any change (must end `ERC: 0 violation(s), 0 error(s)`,
