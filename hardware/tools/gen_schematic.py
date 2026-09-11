@@ -481,7 +481,7 @@ FP_MSOP8 = "Package_SO:MSOP-8_3x3mm_P0.65mm"
 FP_XH2 = "Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical"
 FP_XH4 = "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
 # J4 is ten separate breakout pads, not a connector: see hardware/README.md
-FP_BRK = "TestPoint:TestPoint_THTPad_D2.0mm_Drill1.0mm"
+FP_BRK = "TestPoint:TestPoint_THTPad_D1.5mm_Drill0.7mm"
 FP_TP = "TestPoint:TestPoint_Pad_D1.5mm"
 FP_JP = "Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm"
 FP_JP3 = "Jumper:SolderJumper-3_P1.3mm_Open_RoundedPad1.0x1.5mm"
@@ -909,7 +909,7 @@ def build() -> Schematic:
             s.wire(pin, (pin[0] - 6, pin[1])); s.power("GND", (pin[0] - 6, pin[1]), rot=90)
         else:
             s.wire(pin, (pin[0] - 6, pin[1])); s.label(net, (pin[0] - 6, pin[1]), 0, "right bottom")
-    s.text("Through-hole, 2.0 mm pad / 1.0 mm drill: a wire solders in. RUN to GND is a reset.", (150, 205), size=1.0)
+    s.text("Through-hole, 1.5 mm pad / 0.7 mm drill: a wire solders in. RUN to GND is a reset.", (150, 205), size=1.0)
     s.text("The spare ADC (GP27) is deliberate: a second analogue path is the likeliest hack this board will need.", (150, 207), size=1.0)
 
     # =====================================================================
@@ -941,6 +941,14 @@ def build() -> Schematic:
         s.place(HOLE, f"H{i + 1}", "M3", (282 + 10 * i, BY + 2), fp=FP_HOLE, desc="Mounting hole, M3 clearance, unplated",
                 in_bom=False, ref_at=(0, -3, "center"), val_at=(0, 3, "center"))
     s.text("H1-H4: 3.4 mm unplated, 8 mm boss keep-out, one per corner, not tied to GND", (274, BY + 8), size=1.0)
+
+    # Copper-only items are not purchasable parts, so they are not in the BOM.
+    # Their footprints already carry exclude_from_bom; saying the same thing on
+    # the symbol is what makes the PCB's schematic-parity check a real test
+    # instead of 31 standing complaints.
+    for inst in s.insts:
+        if re.match(r"(TP|JP|H|E)\d+$", inst.ref):
+            inst.in_bom = False
 
     return s
 
@@ -996,13 +1004,48 @@ EXPECTED_NETS = {
 
 def write_project():
     pro = {
-        "board": {"design_settings": {"defaults": {}, "rules": {}}, "layer_presets": [], "viewports": []},
+        # Board rules live here, not in the .kicad_pcb: this is what DRC enforces.
+        # 0.15/0.15 and a 0.3 mm drill are inside every PCBWay 2-layer process.
+        "board": {"design_settings": {"defaults": {}, "rules": {
+            "min_clearance": 0.15,
+            "min_track_width": 0.15,
+            "min_connection": 0.0,
+            "min_through_hole_diameter": 0.3,
+            "min_hole_to_hole": 0.25,
+            "min_hole_clearance": 0.25,
+            "min_copper_edge_clearance": 0.3,
+            "min_via_annular_width": 0.1,
+            "min_via_diameter": 0.45,
+            "min_silk_clearance": 0.0,
+            "min_text_height": 0.8,
+            "min_text_thickness": 0.08,
+            "solder_mask_clearance": 0.0,
+            "solder_mask_min_width": 0.0,
+            "min_resolved_spokes": 2,
+            "max_error": 0.005,
+            "allow_blind_buried_vias": False,
+            "allow_microvias": False,
+            "use_height_for_length_calcs": True,
+        },
+            # gen_pcb.py deliberately moves some footprints' silkscreen outlines
+            # to the fab layer (U1's box is drawn over everything that sits under
+            # the socketed module). The board is regenerated from scratch on every
+            # run, so a footprint cannot drift from its library by accident and
+            # this check has nothing left to catch.
+            "rule_severities": {"lib_footprint_mismatch": "ignore"}},
+            "layer_presets": [], "viewports": []},
         "libraries": {"pinned_footprint_libs": [], "pinned_symbol_libs": []},
         "meta": {"filename": f"{PROJECT}.kicad_pro", "version": 3},
         "net_settings": {"classes": [{"name": "Default", "clearance": 0.2, "track_width": 0.25,
                                       "via_diameter": 0.6, "via_drill": 0.3, "wire_width": 6, "bus_width": 12,
                                       "line_style": 0, "priority": 2147483647,
+                                      "schematic_color": "rgba(0, 0, 0, 0.000)", "pcb_color": "rgba(0, 0, 0, 0.000)"},
+                        {"name": "Power", "clearance": 0.2, "track_width": 0.5,
+                                      "via_diameter": 0.8, "via_drill": 0.4, "wire_width": 6, "bus_width": 12,
+                                      "line_style": 0, "priority": 1,
                                       "schematic_color": "rgba(0, 0, 0, 0.000)", "pcb_color": "rgba(0, 0, 0, 0.000)"}],
+                         "netclass_patterns": [{"netclass": "Power", "pattern": n} for n in
+                                               ("GND", "+3V3", "VSYS", "BAT+", "SW_OUT", "D1_K", "AFE_3V3")],
                          "meta": {"version": 4}},
         "pcbnew": {"page_layout_descr_file": ""},
         "schematic": {"drawing": {"default_line_thickness": 6.0, "default_text_size": 50.0,
@@ -1087,8 +1130,15 @@ def check(sch_path: Path) -> int:
     for line in bom.read_text(encoding="utf-8").splitlines()[1:]:
         refs = line.split('","')[0].strip('"')
         bom_refs |= {r.strip() for r in refs.split(",")}
-    readme_refs = set()
+    # Only the parts table counts: the jumper and test-pad tables further down
+    # also start their rows with a reference, and those are not purchasable parts.
+    readme_refs, in_parts = set(), False
     for line in (HW / "README.md").read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            in_parts = line.startswith("## Parts")
+            continue
+        if not in_parts:
+            continue
         m = re.match(r"\|\s*((?:[A-Z]+\d+(?:\s*,\s*)?)+)\s*\|", line)
         if m:
             readme_refs |= {r.strip() for r in m.group(1).split(",")}

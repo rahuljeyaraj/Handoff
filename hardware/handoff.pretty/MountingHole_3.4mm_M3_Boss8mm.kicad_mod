@@ -8,7 +8,7 @@
 	(property "Reference" "REF**"
 		(at 0 -5 0)
 		(layer "F.SilkS")
-		(uuid "d3089b7b-f241-44d2-ad76-e3b281c0dc87")
+		(uuid "158c6919-ed4c-4f5f-abe8-e36991259937")
 		(effects
 			(font
 				(size 1 1)
@@ -19,7 +19,7 @@
 	(property "Value" "MountingHole_3.4mm_M3_Boss8mm"
 		(at 0 5 0)
 		(layer "F.Fab")
-		(uuid "5855c63a-6c99-44de-be87-6f7f83f05698")
+		(uuid "022c8135-704d-44ab-869d-485397a28ba2")
 		(effects
 			(font
 				(size 1 1)
@@ -32,7 +32,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "94712beb-0763-47b7-8b6e-dd52affdb3d7")
+		(uuid "08509ffe-1138-4c8e-81dc-8dd328fa1937")
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -45,7 +45,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "471d9e9a-52f3-4003-a32e-b9e1eab26f38")
+		(uuid "9d34b0ad-537b-44b6-81ad-d7877962970f")
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -64,7 +64,7 @@
 		)
 		(fill none)
 		(layer "F.SilkS")
-		(uuid "182a5946-960f-470a-b6b1-e4a15b2747ed")
+		(uuid "baafabb4-3c57-48b4-a197-9450c59e4bcc")
 	)
 	(fp_circle
 		(center 0 0)
@@ -75,7 +75,7 @@
 		)
 		(fill none)
 		(layer "F.Fab")
-		(uuid "d41b5afe-8020-44c2-8ee0-c01de53a8b6c")
+		(uuid "921a16e4-a806-4ef7-a24e-322d3834bdec")
 	)
 	(fp_circle
 		(center 0 0)
@@ -86,7 +86,7 @@
 		)
 		(fill none)
 		(layer "Dwgs.User")
-		(uuid "10fdbe11-2d65-4333-bb97-02d50ed8fd8c")
+		(uuid "54d1158f-3935-4ac4-9e91-57251fbcb278")
 	)
 	(fp_circle
 		(center 0 0)
@@ -97,12 +97,12 @@
 		)
 		(fill none)
 		(layer "F.CrtYd")
-		(uuid "11f56d6a-3581-4d60-8daa-95d8d5cb2ff5")
+		(uuid "8b572cdf-b812-4063-831d-a4ea2a8b8737")
 	)
 	(fp_text user "boss 8"
 		(at 0 -6.2 0)
 		(layer "Dwgs.User")
-		(uuid "07e9b05f-702f-4c5b-9e81-da7639031a73")
+		(uuid "cf05e840-d1b8-481a-96a8-4867c835e20e")
 		(effects
 			(font
 				(size 0.6 0.6)
@@ -116,11 +116,11 @@
 		(drill 3.4)
 		(layers "F&B.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(uuid "192ed256-1b23-46a6-b09d-9b3a5525d35d")
+		(uuid "e719d42c-f050-4cef-8a4d-5b4d352accd1")
 	)
 	(zone
 		(layers "F.Cu" "B.Cu")
-		(uuid "2b6a322c-1f2d-4696-8aed-b64c07758aaa")
+		(uuid "d34cc424-9d5a-402f-a527-4e55ebd23cc3")
 		(name "Boss Keep Out")
 		(hatch full 0.5)
 		(connect_pads
@@ -130,7 +130,7 @@
 		(keepout
 			(tracks not_allowed)
 			(vias not_allowed)
-			(pads not_allowed)
+			(pads allowed)
 			(copperpour not_allowed)
 			(footprints allowed)
 		)

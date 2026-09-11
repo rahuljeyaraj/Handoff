@@ -1,0 +1,19 @@
+(version 1)
+
+# The Pico 2 W is SOCKETED, in two 1x20 female headers: its own PCB sits about
+# 8.5 mm above this one. The AFE, the breakout pads and the bottom-face jumpers
+# are deliberately underneath it - that is the whole reason the channel under
+# the Pico is the AFE's home (README, "Design 12.3 is no longer met"). KiCad's
+# courtyard test has no notion of height, so it has to be told. This suppresses
+# courtyard overlap against U1 ONLY; every clearance and short test still runs.
+(rule "Pico is socketed - parts may sit under it"
+	(constraint courtyard_clearance (min -20mm))
+	(condition "A.Reference == 'U1' || B.Reference == 'U1'"))
+
+# E1-E10 are bare through-hole pads with nothing mounted on them. They inherit a
+# TestPoint footprint's 3.09 mm courtyard, which is larger than the 2.54 mm pin
+# pitch they are placed on, so adjacent ones "overlap" bodies that do not exist.
+# Copper clearance between them is unaffected and still checked: 0.54 mm.
+(rule "Breakout pads have no body"
+	(constraint courtyard_clearance (min -5mm))
+	(condition "A.Reference == 'E1' || B.Reference == 'E1' || A.Reference == 'E10' || B.Reference == 'E10' || A.Reference == 'E2' || B.Reference == 'E2' || A.Reference == 'E3' || B.Reference == 'E3' || A.Reference == 'E4' || B.Reference == 'E4' || A.Reference == 'E5' || B.Reference == 'E5' || A.Reference == 'E6' || B.Reference == 'E6' || A.Reference == 'E7' || B.Reference == 'E7' || A.Reference == 'E8' || B.Reference == 'E8' || A.Reference == 'E9' || B.Reference == 'E9'"))

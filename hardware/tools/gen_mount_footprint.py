@@ -12,7 +12,9 @@ position tolerance instead of fighting it.
 
 The 8 mm keep-out is the boss's own footprint. It rides in the footprint rather
 than being drawn on the board so DRC enforces it wherever the hole is placed,
-and so it cannot be forgotten on the fourth corner.
+and so it cannot be forgotten on the fourth corner. It bars tracks, vias and
+copper pour but allows pads, because otherwise it flags this footprint's own
+NPTH pad - which carries no copper to keep out in the first place.
 
 Unplated, no copper, no annular ring: a metal screw or standoff must not become
 a second ground-plane connection (design 8.4 - exactly one).
@@ -156,7 +158,7 @@ text = f"""(footprint "MountingHole_3.4mm_M3_Boss8mm"
 		(keepout
 			(tracks not_allowed)
 			(vias not_allowed)
-			(pads not_allowed)
+			(pads allowed)
 			(copperpour not_allowed)
 			(footprints allowed)
 		)
