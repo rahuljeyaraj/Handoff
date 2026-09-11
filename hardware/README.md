@@ -89,17 +89,27 @@ balance-lead one, where pin 1 (square pad) is the negative end. The silkscreen
 will say so. Verify the pigtail against the silkscreen before the first plug-in —
 D1 means getting it wrong costs nothing but a re-pinned plug.
 
-**RGB LED on GP14 / GP13 / GP12 (R / G / B) through 330 Ω.** J3 pin order is
+**RGB LED on GP17 / GP18 / GP19 (R / G / B) through 330 Ω.** J3 pin order is
 R, K, G, B — the lead order of a standard 5 mm common-cathode RGB LED, longest
 leg second — so the LED can be soldered directly. At 3.3 V and 330 Ω the red
 runs ~4 mA and green/blue ~1 mA: a status indicator, not a torch.
 
-*Moved from GP16/17/18 by the floor plan.* J3 sits hard against the left edge,
-parallel to it, opposite the Pico's row A. With R → GP14 (pin 19), K → GND
-(pin 18), G → GP13 (pin 17), B → GP12 (pin 16), J3's four pins face pins 16–19
-straight across: four ~7 mm traces, no crossings, and the LED's legs bend 90°
-straight into the header with no pigtail. The cathode lands on a Pico GND pin
-that is already there, so the LED's return does not travel.
+*Moved one pin up from GP16/17/18 by the floor plan.* J3 sits hard against the
+thumb-side edge, parallel to it, opposite the Pico's **thumb row — which is pins
+21–40**, not 1–20. With R → GP17 (pin 22), K → GND (pin 23), G → GP18 (pin 24),
+B → GP19 (pin 25), J3's four pins face pins 22–25 straight across: four ~7 mm
+traces, no crossings, and the LED's legs bend 90° straight into the header with
+no pigtail. The cathode lands on a Pico GND pin that is already there, so the
+LED's return does not travel.
+
+**Which row is which.** The Pico sits at 180°: USB overhanging the elbow edge
+puts the antenna keep-out at the hand end, and it puts **pins 1–20 on the
+little-finger row and pins 21–40 on the thumb row.** The floor plan had these
+mirrored until the layout session checked the footprint's own pad coordinates
+against its USB and antenna zones. Everything that names a Pico pin and a board
+position — J3, the breakout pads, the TX escape, BTN and ROLE — depends on
+getting this right; it is the cheapest thing on the board to verify and the most
+expensive to get wrong.
 
 **J2 carries both electrodes: pin 1 = PAD, pin 2 = ground-plane electrode.**
 The ground plane does *not* need air contact; it needs area and distance from
@@ -126,7 +136,7 @@ separate nets in the netlist oracle.
 | JP2 | GP11 → R1 | the transmitter from the pad | nothing — leave open and fit C6 instead if GP11 leakage biases the pad (moving TX to another GPIO does not help: every bank-0 pin has E9) | M3 (measure leakage first), M8 |
 | JP3 (3-way) | OUT1 / OUT2 → R9 | the ADC from both stages; centre pad → R9, pad 3 ← OUT2 (×121), pad 1 ← OUT1 (×11) | TP3 or TP2 as a bare output for the scope | M7: blob to pad 3; move it to pad 1 if a noisy hall clips stage 2 (design §15.2) |
 | JP1 | R9 → GP26/ADC0 | the ADC pin from the amplifier | TP4 directly, as M5 does with its own attenuator; TP4 to TP13 with a wire grounds the ADC for the M4 noise floor | M4/M5 open, M7 bridged |
-| JP8 | GP17 → GND | (a strap, not in-line) | — | M6: bridge on one board to set its role; firmware enables GP17's pull-up |
+| JP8 | GP14 → GND | (a strap, not in-line) | — | M6: bridge on one board to set its role; firmware enables GP14's pull-up |
 
 Nothing touches the 10 MΩ node (R2/R3/U2 pin 3): no jumper, no test pad. JP7
 and TP12 are on the *pad* side of R2.
@@ -166,22 +176,19 @@ C6 (DNP, 330 pF, in parallel with JP2) is the hardware way out: it AC-couples
 the transmitter, so no DC can reach the pad node whatever GP11 does, at no cost
 to the carrier (2.4 kΩ at 200 kHz against R1's 1 MΩ). See `review.md` §2.4.
 
-**Push button SW2 on GP16 (pin 21), pull-up R15 to 3V3, net `BTN`.** The bench control
+**Push button SW2 on GP15 (pin 20), pull-up R15 to 3V3, net `BTN`.** The bench control
 the next milestones need: force TX, force RX, provisioning mode, clear bond —
 firmware decides which by press length. No debounce cap; debounce in firmware.
 E9 does not affect a pulled-up input (the leakage pulls the same way). Pads 1-1
 and 2-2 of the footprint are the switch's internally joined pairs, so it cannot
 be fitted wrong.
 
-*BTN moved from GP15 and `ROLE` from GP14 (pin 19) to GP17 (pin 22)*, because the
-LED took GP14/13/12. Both now land on row B beside SW2 and JP8 on the floor plan.
-The alternative, GP22 (pin 29) and GP19 (pin 25), was checked and rejected: it
-clears the antenna keep-out, but the escapes then have to detour around J2 and
-the corner boss to reach SW2 and JP8 at the hand end, which is more copper, not
-less. Pins 21 and 22 sit 1.3 mm and 1.6 mm inside the keep-out's edge and both
-nets are static DC — a pull-up input read at boot and a strap to GND — so they
-are exactly the "thin escape" the keep-out tolerates. Nothing switching or
-RF-carrying goes under the antenna.
+*`BTN` on GP15 (pin 20) and `ROLE` on GP14 (pin 19) — where they started.* The
+LED was briefly given GP14/13/12, which would have displaced both; once the
+Pico's rows were checked the LED moved to the thumb row instead and these two
+never had to move. They sit at the hand end of the **little-finger** row, next to
+R15 and JP8, at x = 28.9 — outside the antenna keep-out, which spans x 12.9–27.1.
+Neither escape puts any copper under the antenna.
 
 **J5 "CHG": the charger's plug, in parallel with J1, same pin order.** The
 TP4056's OUT± plugs in here so charging no longer means unplugging the cell.
@@ -255,8 +262,8 @@ firmware call on WL_GPIO1 (see README). Nothing on the board.
   current, 0.35 V with the radio on) to get the cell voltage, or calibrate
   against TP10 once. On a Pico 2 W GP29 is shared with the CYW43 SPI clock, so
   read it the way `pico-examples/adc/read_vsys` does.
-- GP17 (`ROLE`): enable the internal pull-up, read it once at boot.
-- GP16 (`BTN`): active low, R15 pulls up.
+- GP14 (`ROLE`): enable the internal pull-up, read it once at boot.
+- GP15 (`BTN`): active low, R15 pulls up.
 - Hold SW2 at power-on → `rom_reset_usb_boot()` would give a BOOTSEL that is
   reachable with the lid on; the Pico's own BOOTSEL is not.
 
@@ -279,7 +286,13 @@ firmware call on WL_GPIO1 (see README). Nothing on the board.
 - SW1's board edge goes on its Dwgs.User "board edge" line (6.3 mm from the
   pin row): body on the board, handle 5 mm outside it. The enclosure wall
   needs a 6.5 mm × 3.0 mm slot, its centre 3.0 mm beyond the board edge, at
-  the handle's height above the board.
+  the handle's height above the board. **Its pin row is therefore at x = 6.3**,
+  not the 8.8 the floor plan first drew — at 8.8 only 2.5 mm of the 5 mm handle
+  cleared the edge. (The floor plan had drawn the body 5.5 mm deep, which is its
+  height above the board; in plane it is 7.1 mm, 0.8 behind the pins and 6.3 in
+  front.) At x = 6.3 the body spans x 0–7.1 and stands 4.0 mm off the Pico's
+  thumb row, against the 2.3 mm the brief flagged as the tightest clearance on
+  the board. That clearance is no longer the tightest thing here.
 - SW2 where a lid hole or actuator can reach it; J3 pigtail lets D2 live in
   the lid.
 - H1–H4 in the corners, unplated, no copper tie.

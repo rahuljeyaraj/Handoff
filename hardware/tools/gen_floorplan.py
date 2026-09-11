@@ -20,8 +20,11 @@ STRAP_Y, STRAP_H = 24.0, 15.0
 PW, PH = 21.0, 51.0
 PX, PY = (BOARD_W - PW) / 2, 11.0             # Pico centred across the board
 ANT_H = 11.0                                   # antenna keep-out, hand end
-ROW_A, ROW_B = PX + 1.6, PX + PW - 1.6         # header rows: pins 1-20 / 21-40
-BRK_X_A, BRK_X_B = ROW_A + 2.54, ROW_B - 2.54  # breakout pad columns, inboard
+# The Pico sits at 180 deg: USB overhangs the elbow edge, antenna at the hand end.
+# That puts pins 1-20 on the LITTLE-FINGER row and 21-40 on the THUMB row - the
+# opposite of what this sheet said before 6530685. Verified against the footprint.
+ROW_A, ROW_B = PX + PW - 1.6, PX + 1.6         # pins 1-20 (little finger) / 21-40 (thumb)
+BRK_X_A, BRK_X_B = ROW_A - 2.54, ROW_B + 2.54  # breakout pad columns, inboard
 P0 = 60.6                                      # y of pin 1 and pin 40
 
 
@@ -34,9 +37,10 @@ def pin_b(n):
 
 
 # E1-E10: one breakout pad inboard of its own Pico pin (not a connector)
-BRK_A = [(1, "GP0"), (2, "GP1"), (3, "GND"), (6, "GP4"), (7, "GP5")]
-BRK_B = [(26, "GP20"), (27, "GP21"), (30, "RUN"), (32, "GP27"), (36, "3V3")]
-LED_PINS = [(19, "R"), (18, "K"), (17, "G"), (16, "B")]
+BRK_A = [(1, "GP0"), (2, "GP1"), (3, "GND"), (6, "GP4"), (7, "GP5")]        # little finger
+BRK_B = [(26, "GP20"), (27, "GP21"), (30, "RUN"), (32, "GP27"), (36, "3V3")]  # thumb
+# J3 faces the thumb row: R=GP17(22), K=GND(23), G=GP18(24), B=GP19(25)
+LED_PINS = [(22, "R"), (23, "K"), (24, "G"), (25, "B")]
 
 STACK = (10.0, 16.0, 20.0, 30.0)               # cell over pad, centred, 20 x 30
 AFE = (15.0, 24.0, 10.0, 36.0)                 # top face, under the Pico
@@ -110,10 +114,10 @@ class View:
             self.hole(ROW_B, pin_b(n + 20))
         for n, _ in BRK_A:
             self.hole(BRK_X_A, pin_a(n), r=0.75)
-            self.line(ROW_A + 0.6, pin_a(n), BRK_X_A - 0.8, pin_a(n), "#6b3f8a", 0.7)
+            self.line(ROW_A - 0.6, pin_a(n), BRK_X_A + 0.8, pin_a(n), "#6b3f8a", 0.7)
         for n, _ in BRK_B:
             self.hole(BRK_X_B, pin_b(n), r=0.75)
-            self.line(ROW_B - 0.6, pin_b(n), BRK_X_B + 0.8, pin_b(n), "#6b3f8a", 0.7)
+            self.line(ROW_B + 0.6, pin_b(n), BRK_X_B - 0.8, pin_b(n), "#6b3f8a", 0.7)
 
     def xh2(self, y, label, fill="#f0e4f6"):
         """A 2-pin JST-XH, through-hole, pins in a row along y."""
@@ -170,25 +174,30 @@ t.text(20.0, 51.0, "SMD, top face,", 7, fill="#8a4a0a")
 t.text(20.0, 54.0, "under the Pico", 7, fill="#8a4a0a")
 
 # thumb wall: D2 / J3 near the hand, SW1 near the elbow
-t.rect(1.6, pin_a(19) - 1.4, 2.8, 10.4, "#f0e4f6", "#6b3f8a", 1.1)
+t.rect(1.6, pin_b(22) - 1.4, 2.8, 10.4, "#f0e4f6", "#6b3f8a", 1.1)
 for i, (n, lab) in enumerate(LED_PINS):
-    y = pin_a(n)
+    y = pin_b(n)
     t.hole(3.0, y, sq=(i == 0))
-    t.line(3.8, y, ROW_A - 0.6, y, "#6b3f8a", 0.7)
+    t.line(3.8, y, ROW_B - 0.6, y, "#6b3f8a", 0.7)
     t.text(6.4, y + 0.5, lab, 6, fill="#4b2a63")
 t.circ(-3.6, 18.7, 2.5, "#cdf0cd", "#2b7a2b", 1.3)
 t.rect(-WALL - 0.3, 16.35, 2.0, 4.7, "#fff", "#aaa", 0.8)
 t.text(-6.6, 18.7, "D2", 9, weight="bold", fill="#2b7a2b", rot=-90)
 t.text(8.0, 18.7, "J3", 8, weight="bold", fill="#4b2a63", rot=-90)
 
-SW1Y = 46.0
-t.rect(0.2, SW1Y - 4.35, 5.5, 8.7, "#dadada", "#333", 1.2)
+# SW1: pin row at x = 6.3 so the body's FRONT FACE lands on the board edge at
+# x = 0 - the rule on Dwgs.User and in the README. The body is 7.1 deep in plane
+# (0.8 behind the pins, 6.3 in front); the 5.5 this sheet used before 6530685 was
+# the body's HEIGHT above the board, not its depth. At the old x = 8.8 only 2.5 mm
+# of the 5 mm handle cleared the edge. 4.8 mm now stands off the Pico's thumb row.
+SW1X, SW1Y = 6.3, 46.0
+t.rect(0.0, SW1Y - 4.35, 7.1, 8.7, "#dadada", "#333", 1.2)
 for dy in (-3.0, 0.0, 3.0):
-    t.hole(8.8, SW1Y + dy)
+    t.hole(SW1X, SW1Y + dy)
 for dy in (-6.05, 6.05):
-    t.circ(3.0, SW1Y + dy, 0.575, "#fff", "#333", 0.8)
-t.rect(-3.2, SW1Y - 1.3, 3.4, 2.6, "#777", "#222", 0.9)
-t.rect(-WALL - 0.3, SW1Y - 3.0, 2.0, 6.0, "#fff", "#aaa", 0.8)
+    t.circ(SW1X, SW1Y + dy, 0.575, "#fff", "#333", 0.8)
+t.rect(-5.0, SW1Y - 1.5, 5.0, 3.0, "#777", "#222", 0.9)
+t.rect(-WALL - 0.3, SW1Y - 3.25, 2.0, 6.5, "#fff", "#aaa", 0.8)
 t.text(-6.6, SW1Y, "SW1", 9, weight="bold", fill="#333", rot=-90)
 
 # hand strip
@@ -210,8 +219,8 @@ t.hole(35.5, 50.62)
 t.text(38.2, 46.8, "D1 + JP5", 7.5, fill="#333", rot=-90)
 
 for n, lab in ((39, "VSYS"), (33, "AGND"), (31, "GP26")):
-    t.text(ROW_B - 1.2, pin_b(n) + 0.6, lab, 6, anchor="end", fill="#1d3f6e")
-t.text(ROW_A + 1.2, pin_a(15) + 0.6, "GP11 TX", 6, anchor="start", fill="#1d3f6e")
+    t.text(ROW_B + 1.2, pin_b(n) + 0.6, lab, 6, anchor="start", fill="#1d3f6e")
+t.text(ROW_A - 1.2, pin_a(15) + 0.6, "GP11 TX", 6, anchor="end", fill="#1d3f6e")
 
 # =========================================================================
 # 2 - BOTTOM SIDE
@@ -244,8 +253,8 @@ b.rect(1.0, 12.0, 8.0, 9.0, "#f0e4f6", "#6b3f8a", 1.1, dash="2,2")
 b.text(5.0, 17.0, "R12-14", 7.5, fill="#4b2a63")
 b.rect(24.0, 2.0, 6.0, 3.0, "#f0e4f6", "#6b3f8a", 1.1, dash="2,2")
 b.text(27.0, 4.1, "R15", 7, fill="#4b2a63")
-b.rect(31.5, 10.0, 7.0, 3.0, "#f0e4f6", "#6b3f8a", 1.1, dash="2,2")
-b.text(35.0, 12.1, "JP8", 7, fill="#4b2a63")
+b.rect(31.5, 13.4, 7.0, 3.0, "#f0e4f6", "#6b3f8a", 1.1, dash="2,2")
+b.text(35.0, 15.5, "JP8", 7, fill="#4b2a63")
 
 # =========================================================================
 # 3 - SECTION

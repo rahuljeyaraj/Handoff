@@ -702,8 +702,8 @@ def build() -> Schematic:
     for num in ("35", "37"):
         s.no_connect(s.gpin("U1", num))
     used_left = {"1": "GP0", "2": "GP1", "6": "GP4", "7": "GP5", "15": "GP11_TX",
-                 "16": "LED_B", "17": "LED_G", "19": "LED_R", "30": "RUN"}
-    used_right = {"21": "BTN", "22": "ROLE", "26": "GP20", "27": "GP21",
+                 "19": "ROLE", "20": "BTN", "30": "RUN"}
+    used_right = {"22": "LED_R", "24": "LED_G", "25": "LED_B", "26": "GP20", "27": "GP21",
                   "31": "ADC0", "32": "GP27_ADC1"}
     gp_left = ["1", "2", "4", "5", "6", "7", "9", "10", "11", "12", "14", "15", "16", "17", "19", "20"]
     gp_right = ["21", "22", "24", "25", "26", "27", "29", "31", "32", "34"]
@@ -853,7 +853,7 @@ def build() -> Schematic:
     # =====================================================================
     # 6. STATUS LED  (bottom left)
     # =====================================================================
-    s.text("STATUS LED — RGB common cathode on GP14/13/12, direct-solder or JST-XH 4p", (12, 150), size=2.0, bold=True)
+    s.text("STATUS LED — RGB common cathode on GP17/18/19, direct-solder or JST-XH 4p", (12, 150), size=2.0, bold=True)
     LY = 168
     # J3 rot 0: pins on the left, rows LY (R), LY+2 (K), LY+4 (G), LY+6 (B); each series
     # resistor sits on its own pin row, staggered in x so nothing crosses.
@@ -915,7 +915,7 @@ def build() -> Schematic:
     # =====================================================================
     # 8. BUTTON, ROLE STRAP, MOUNTING  (bottom right)
     # =====================================================================
-    s.text("BUTTON (GP16), ROLE strap (GP17), MOUNTING", (238, 150), size=2.0, bold=True)
+    s.text("BUTTON (GP15), ROLE strap (GP14), MOUNTING", (238, 150), size=2.0, bold=True)
     BX, BY = 250, 164
     r15 = s.place(R, "R15", "10k", (BX, BY), rot=0, fp=FP_R, desc="BTN pull-up", ref_at=(2, -1), val_at=(2, 1))
     r15a, r15b = s.gpin("R15", "1"), s.gpin("R15", "2")
@@ -932,7 +932,7 @@ def build() -> Schematic:
     # JP8: strap GP14 to GND to pick the board's role for M6 (firmware enables the internal pull-up)
     jy = BY + 18
     jp8 = s.place(JP, "JP8", "ROLE", (BX + 8, jy), rot=0, fp=FP_JP,
-                  desc="Open as shipped: bridge to strap GP17 low = board role for M6 (internal pull-up in firmware)",
+                  desc="Open as shipped: bridge to strap GP14 low = board role for M6 (internal pull-up in firmware)",
                   ref_at=(-3, 3), val_at=(1, 3))
     a8, b8 = s.gpin("JP8", "1"), s.gpin("JP8", "2")
     s.wire((BX - 8, jy), a8); s.label("ROLE", (BX - 8, jy), 0, "right bottom")
@@ -974,12 +974,12 @@ EXPECTED_NETS = {
     "OUT2": {("U2", "7"), ("R7", "2"), ("JP3", "3"), ("TP3", "1")},
     "JP3_R9": {("JP3", "2"), ("R9", "1")},
     "R9_JP1": {("R9", "2"), ("JP1", "1")},
-    "BTN": {("U1", "21"), ("R15", "2"), ("SW2", "1")},
-    "ROLE": {("U1", "22"), ("JP8", "1")},
+    "BTN": {("U1", "20"), ("R15", "2"), ("SW2", "1")},
+    "ROLE": {("U1", "19"), ("JP8", "1")},
     "ADC0": {("JP1", "2"), ("C2", "1"), ("TP4", "1"), ("U1", "31")},
-    "LED_R": {("U1", "19"), ("R12", "1")},
-    "LED_G": {("U1", "17"), ("R13", "1")},
-    "LED_B": {("U1", "16"), ("R14", "1")},
+    "LED_R": {("U1", "22"), ("R12", "1")},
+    "LED_G": {("U1", "24"), ("R13", "1")},
+    "LED_B": {("U1", "25"), ("R14", "1")},
     "J3_R": {("R12", "2"), ("J3", "1")},
     "J3_G": {("R13", "2"), ("J3", "3")},
     "J3_B": {("R14", "2"), ("J3", "4")},

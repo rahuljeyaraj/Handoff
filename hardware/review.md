@@ -332,18 +332,58 @@ why, and what it cost.
 
 | Net | Was | Now | Why |
 |---|---|---|---|
-| `LED_R` / `LED_G` / `LED_B` | GP16 / GP17 / GP18 (pins 21/22/24) | GP14 / GP13 / GP12 (pins 19/17/16) | J3 sits hard against the left edge opposite row A. Its four pins now face pins 16–19 straight across: four ~7 mm traces, no crossings, and the cathode lands on pin 18, a Pico GND pin that is already there. The LED's legs bend 90° into the header with no pigtail |
-| `BTN` | GP15 (pin 20) | GP16 (pin 21) | displaced by the LED; lands on row B beside SW2 |
-| `ROLE` | GP14 (pin 19) | GP17 (pin 22) | displaced by the LED; lands on row B beside JP8 |
+| `LED_R` / `LED_G` / `LED_B` | GP16 / GP17 / GP18 (pins 21/22/24) | GP17 / GP18 / GP19 (pins 22/24/25) | J3 sits hard against the thumb edge opposite the **thumb row, which is pins 21–40**. Its four pins now face pins 22–25 straight across: four ~7 mm traces, no crossings, and the cathode lands on pin 23, a Pico GND pin that is already there. The LED's legs bend 90° into the header with no pigtail |
+| `BTN` | GP15 (pin 20) | GP15 (pin 20) — unchanged | see *The floor plan had the Pico's rows mirrored* below |
+| `ROLE` | GP14 (pin 19) | GP14 (pin 19) — unchanged | as above |
 | `GP2_TX` → `GP11_TX` | GP2 (pin 4) | GP11 (pin 15) | GP2 was never special — §2.4 established that E9 hits every bank-0 pin equally. Pin 15 is directly opposite the R2/R3 island, so R1 butts up to the island with a short perpendicular entry instead of a 24 mm run alongside it. Less copper running beside the only critical node on the board |
 
-The alternative re-homing for BTN/ROLE — GP22 (pin 29) and GP19 (pin 25) — was
-checked and rejected. It clears the antenna keep-out, but the escapes then have
-to detour around J2 and the corner boss to reach SW2 and JP8 at the hand end:
-more copper near the antenna, not less. Pins 21 and 22 sit 1.3 mm and 1.6 mm
-inside the keep-out's edge, and both nets are static DC — a pull-up input read
-once at boot, and a strap to GND. Nothing switching or RF-carrying goes under
-the antenna.
+### The floor plan had the Pico's rows mirrored
+
+Caught at the start of the layout session, before anything was placed, by
+checking the footprint's own pad coordinates against its USB and antenna
+keep-out zones rather than trusting the drawing.
+
+The Pico sits at 180°, because the USB has to overhang the elbow edge and that
+is what puts the antenna keep-out at the hand end. At 180°, **pins 1–20 land on
+the little-finger row (x = 28.9) and pins 21–40 on the thumb row (x = 11.1)** —
+the opposite of what `floorplan.svg` showed. The empirical check: with the module
+placed at 180° about (28.9, 60.6), pad 1 reads (28.90, 60.60), pad 21 reads
+(11.12, 12.34), the antenna zone spans y 10.5–19.5 (hand end ✓) and the USB zone
+y 63.8–83.7 (past the elbow edge ✓).
+
+This mattered because J3 is on the **thumb** wall — the wall that faces the sky
+in a right-hand shake, which is a deliberate ergonomic decision taken twice over
+and not worth undoing. So the LED had to take thumb-row pins, not GP14/13/12.
+The requirement was unchanged: four consecutive pins with a Pico GND in the
+second slot, so the LED solders in directly as R, K, G, B. On the thumb row the
+GND pins are 23, 28 and 38; pin 23 puts the group at 22–25, which is exactly the
+y span (14.9–22.5) the floor plan had already drawn J3 at. Hence GP17 / GND /
+GP18 / GP19.
+
+With the LED on the thumb row, nothing displaces BTN and ROLE, and they stay on
+GP15 and GP14 where the review found them. They sit at the hand end of the
+little-finger row at x = 28.9, outside the antenna keep-out's x 12.9–27.1 span,
+so neither escape puts copper under the antenna. The GP16/GP17 re-homing and the
+GP22/GP19 alternative both became moot.
+
+TX on GP11 (pin 15) survives the correction: on the little-finger row it reads
+(28.9, 25.04), which is 4.4 mm from the R2/R3 island's right edge at the same y —
+still the short perpendicular entry that motivated the move.
+
+### SW1's pin row moves to x = 6.3
+
+The floor plan drew SW1's body 5.5 mm deep. That is the body's **height above the
+board**; in plane it is 7.1 mm — 0.8 mm behind the pin row and 6.3 in front. With
+the pin row at the drawn x = 8.8 the body's front face lands at x = 2.5, so 2.5 mm
+of board sits under it and only 2.5 mm of the 5 mm handle clears the edge — not
+enough to reach through a 1.5 mm enclosure wall, and a direct contradiction of
+the footprint's own "board edge" line and the README rule that quotes it.
+
+Pin row at **x = 6.3** puts the front face on the board edge at x = 0, the whole
+handle outside, and the body spanning x 0–7.1. It also opens the clearance to the
+Pico's thumb row from 2.3 mm to 4.0 mm, so the item the brief called "the tightest
+clearance on the board, and the first thing that breaks if this dimension is
+wrong" is no longer the tightest thing on the board.
 
 ### J4 is no longer a connector
 
