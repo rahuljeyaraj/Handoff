@@ -582,8 +582,6 @@ def build() -> Schematic:
     s.wire(tap_p, (tap_p[0], swb[1]), (tap_p[0] + 8, swb[1]), swb)
     s.label("BAT+", (tap_p[0], swb[1]), 0, "left bottom")
     # TP10: the cell voltage, before D1
-    tp10 = s.place(TP, "TP10", "BAT+", (tap_p[0] + 8, swb[1] - 4), fp=FP_TP, desc="Test pad, cell voltage (before D1)", ref_at=(1, -2), val_at=(1, 1))
-    s.wire((tap_p[0] + 8, swb[1]), s.gpin("TP10", "1"))
     # J5: the charger's plug, in parallel with J1 on the cell side of SW1, same pin order.
     # Not a power input: it exists so the TP4056 plugs in beside the cell instead of replacing it.
     j5 = s.place(C2, "J5", "CHG XH-2", (j1p2[0] + 16, bn[1]), rot=0, mirror="x", fp=FP_XH2,
@@ -601,20 +599,16 @@ def build() -> Schematic:
     s.label("SW_OUT", (swa[0] + 1, swa[1]), 0, "left bottom")
     # D1 cathode -> TP11 -> JP5 -> VSYS. JP5 open: the whole board's current through an ammeter TP11 -> TP8.
     n1 = (dk[0] + 2, dk[1])
-    tp11 = s.place(TP, "TP11", "D1_K", (n1[0], n1[1] - 4), fp=FP_TP, desc="Test pad, cell side of JP5 (ammeter + here)", ref_at=(1, -2), val_at=(1, 1))
     jp5 = s.place(JP, "JP5", "VSYS", (n1[0] + 6, n1[1]), rot=0, fp=FP_JP,
                   desc="Open as shipped: bridge to feed VSYS from the cell; open, an ammeter from TP11 to TP8 reads the board current",
                   ref_at=(-3, 3), val_at=(1, 3))
     a5, b5 = s.gpin("JP5", "1"), s.gpin("JP5", "2")
     s.wire(dk, n1, a5)
-    s.wire(n1, s.gpin("TP11", "1"))
     vsys_p = (b5[0] + 2, b5[1])
     s.wire(b5, vsys_p, (vsys_p[0], vsys_p[1] - 2))
     s.power("VSYS", (vsys_p[0], vsys_p[1] - 2))
     s.place(FLAG, "#FLG01", "PWR_FLAG", (vsys_p[0] + 2, vsys_p[1] + 4), rot=180, ref_at=(0, 4, "center"), val_at=(0, 3, "center"))
     s.wire(vsys_p, (vsys_p[0] + 2, vsys_p[1]), (vsys_p[0] + 2, vsys_p[1] + 4))
-    tp8 = s.place(TP, "TP8", "VSYS", (vsys_p[0] + 8, vsys_p[1] - 4), fp=FP_TP, desc="Test pad, VSYS (after D1 and JP5)", ref_at=(1, -2), val_at=(1, 1))
-    s.wire((vsys_p[0] + 2, vsys_p[1]), (vsys_p[0] + 8, vsys_p[1]), s.gpin("TP8", "1"))
 
     s.text("VBUS (USB) and VSYS are OR'd inside the Pico; D1 stops VSYS back-feeding the cell and makes a reversed J1 harmless.", (12, 50), size=1.27)
     s.text("~0.35 V drop: VSYS 2.6-3.8 V, Pico needs 1.8-5.5 V. J5 is the charger's plug, wired to the cell, NOT a power input.", (12, 52), size=1.27)
@@ -629,16 +623,16 @@ def build() -> Schematic:
     c4 = s.place(CP, "C4", "10uF 63V", (132, 40), fp=FP_CP, desc="VREF hold-up, electrolytic, + to VREF")
     top = s.gpin("R10", "1"); mid1 = s.gpin("R10", "2"); mid2 = s.gpin("R11", "1"); bot = s.gpin("R11", "2")
     c4p, c4n = s.gpin("C4", "1"), s.gpin("C4", "2")
-    # the divider hangs off the AFE side of JP4, so a bench supply at TP6 powers the whole analogue side
+    # the divider hangs off the AFE side of JP4, so a bench supply on JP4 pad 2 powers the whole analogue side
     s.wire(top, (top[0], top[1] - 3)); s.label("AFE_3V3", (top[0], top[1] - 3), 90, "left bottom")
     s.wire(mid1, mid2)
     s.wire(bot, (bot[0], bot[1] + 2)); s.power("GND", (bot[0], bot[1] + 2))
     vref_y = (mid1[1] + mid2[1]) // 2 if (mid1[1] + mid2[1]) % 2 == 0 else mid1[1]
     s.wire((mid1[0], vref_y), (c4p[0], vref_y), c4p)
     s.wire(c4n, (c4n[0], bot[1] + 2), (bot[0], bot[1] + 2))
-    # JP6: divider -> VREF. Open, an external bias goes in at TP5.
+    # JP6: divider -> VREF. Open, an external bias goes in on JP6 pad 2.
     jp6 = s.place(JP, "JP6", "VREF", (c4p[0] + 7, vref_y), rot=0, fp=FP_JP,
-                  desc="Open as shipped: bridge to connect the R10/R11/C4 divider to VREF; open, inject a bias at TP5",
+                  desc="Open as shipped: bridge to connect the R10/R11/C4 divider to VREF; open, inject a bias on pad 2",
                   ref_at=(-3, 3), val_at=(1, 3))
     a6, b6 = s.gpin("JP6", "1"), s.gpin("JP6", "2")
     s.wire((c4p[0], vref_y), a6)
@@ -648,8 +642,6 @@ def build() -> Schematic:
     flag_x = vref_out[0] + 6
     s.place(FLAG, "#FLG02", "PWR_FLAG", (flag_x, vref_out[1] + 4), rot=180, ref_at=(0, 4, "center"), val_at=(0, 3, "center"))
     s.wire(vref_out, (flag_x, vref_out[1]), (flag_x, vref_out[1] + 4))
-    tp5 = s.place(TP, "TP5", "VREF", (flag_x + 6, vref_out[1] - 2), fp=FP_TP, desc="Test pad", ref_at=(1, -2), val_at=(1, 1))
-    s.wire((flag_x, vref_out[1]), (flag_x + 6, vref_out[1]), s.gpin("TP5", "1"))
 
     # =====================================================================
     # 3. Op-amp supply + decoupling (right top)
@@ -666,23 +658,20 @@ def build() -> Schematic:
     s.wire(vp, (vp[0], yt), (vp[0] + 4, yt), (240, yt), rail_end)
     s.label("AFE_3V3", (vp[0] + 4, yt), 0, "left bottom")
     s.wire(c3a, (c3a[0], yt)); s.wire(c5a, (c5a[0], yt))
-    s.wire(vn, (vn[0], yb), (240, yb))
+    s.wire(vn, (vn[0], yb), (max(c3b[0], c5b[0]), yb))   # the rail stopped at TP7 before
     s.wire(c3b, (c3b[0], yb)); s.wire(c5b, (c5b[0], yb))
     s.wire((vn[0], yb), (vn[0], yb + 2)); s.power("GND", (vn[0], yb + 2))
-    # JP4: 3V3 -> U2 VDD. Open: U2 current through an ammeter, or a bench supply at TP6 runs the AFE alone.
+    # JP4: 3V3 -> U2 VDD. Open: U2 current through an ammeter across the jumper, or a bench
+    # supply on pad 2 runs the AFE alone.
     s.wire((vp[0], yt), (vp[0], yt - 4))
     jp4 = s.place(JP, "JP4", "U2 VDD", (vp[0] - 8, yt - 4), rot=0, fp=FP_JP,
-                  desc="Open as shipped: bridge to power the AFE from the Pico's 3V3; open, meter U2's current or feed AFE_3V3 at TP6",
+                  desc="Open as shipped: bridge to power the AFE from the Pico's 3V3; open, meter U2's current across it or feed AFE_3V3 on pad 2",
                   ref_at=(0, -3, "center"), val_at=(0, 3, "center"))
     a4, b4 = s.gpin("JP4", "1"), s.gpin("JP4", "2")
     s.wire(b4, (vp[0], yt - 4))
     s.wire(a4, (a4[0], a4[1] - 2)); s.power("+3V3", (a4[0], a4[1] - 2))
     s.place(FLAG, "#FLG03", "PWR_FLAG", (rail_end[0], yt + 4), rot=180, ref_at=(0, 4, "center"), val_at=(0, 3, "center"))
     s.wire(rail_end, (rail_end[0], yt + 4))
-    tp6 = s.place(TP, "TP6", "AFE_3V3", (240, yt - 4), fp=FP_TP, desc="Test pad, U2 supply (AFE side of JP4)", ref_at=(1, -2), val_at=(1, 1))
-    s.wire((240, yt), s.gpin("TP6", "1"))
-    tp7 = s.place(TP, "TP7", "GND", (240, yb + 4), rot=180, fp=FP_TP, desc="Test pad", ref_at=(0, 5, "center"), val_at=(0, 7, "center"))
-    s.wire((240, yb), s.gpin("TP7", "1"))
 
     # =====================================================================
     # 4. PICO  (left middle)
@@ -733,8 +722,6 @@ def build() -> Schematic:
     r1 = s.place(R, "R1", "1M", (134, Y - 12), rot=90, fp=FP_R, desc="TX safety resistor, design §13")
     a, b = s.gpin("JP2", "1"), s.gpin("JP2", "2")
     s.wire((a[0] - 8, a[1]), a); s.label("GP11_TX", (a[0] - 8, a[1]), 0, "right bottom")
-    tp9 = s.place(TP, "TP9", "GP11 TX", (a[0] - 6, a[1] - 6), fp=FP_TP, desc="Test pad", ref_at=(1, -2), val_at=(1, 1))
-    s.wire(s.gpin("TP9", "1"), (a[0] - 6, a[1]))
     s.wire(b, s.gpin("R1", "1"))
     # C6, DNP, across JP2: AC-couples the TX drive so GP11's leakage (RP2350-E9) cannot reach the pad node.
     # Fit only if the M3/M7 leakage measurement says so; then JP2 stays open.
@@ -746,8 +733,8 @@ def build() -> Schematic:
     s.wire(b, (b[0], c6b[1]), c6b)
     pad_node = (150, Y)
     r1b = s.gpin("R1", "2")
-    s.wire(r1b, (pad_node[0], r1b[1]), (pad_node[0], Y - 6))   # TP1 sits on this drop
-    # -- PAD connector J2 and test pad
+    s.wire(r1b, (pad_node[0], r1b[1]), pad_node)
+    # -- PAD connector J2
     j2 = s.place(C2, "J2", "PAD JST-XH 2p", (140, Y), rot=180, fp=FP_XH2,
                  desc="Pin 1 = skin PAD, pin 2 = ground-plane electrode (optional)", ref_at=(-6, -4, "center"), val_at=(-6, 6, "center"))
     j2p1, j2p2 = s.gpin("J2", "1"), s.gpin("J2", "2")   # pin 1 (PAD) on row Y, pin 2 (GND plane) above it
@@ -757,18 +744,14 @@ def build() -> Schematic:
     s.power("GND", (j2p2[0] + 2, j2p2[1] - 2), rot=180)
     s.label("PAD", (j2p1[0] + 1, j2p1[1]), 0, "left bottom")
     s.text("ground-plane electrode: optional, see README", (j2p1[0] - 22, Y + 8), size=1.0)
-    tp1 = s.place(TP, "TP1", "PAD", (150, Y - 6), fp=FP_TP, desc="Test pad", ref_at=(1, -3), val_at=(1, -1))
-    s.wire(s.gpin("TP1", "1"), pad_node)
     # -- RX stage 1: PAD -> R2 -> U2A+ ; R3 to VREF ; R4/R5 feedback
-    # JP7: PAD -> receiver. Open, the receiver is tested from a signal injected at TP12 with pad and TX out of the picture.
+    # JP7: PAD -> receiver. Open, the receiver is driven from JP7 pad 2 with the pad and TX out of the picture.
     jp7 = s.place(JP, "JP7", "RX", (156, Y), rot=0, fp=FP_JP,
-                  desc="Open as shipped: bridge to connect the pad to the receiver; open, drive the receiver from TP12",
+                  desc="Open as shipped: bridge to connect the pad to the receiver; open, drive the receiver from pad 2",
                   ref_at=(-3, 3), val_at=(1, 3))
     s.wire(pad_node, s.gpin("JP7", "1"))
     r2 = s.place(R, "R2", "1M", (170, Y), rot=90, fp=FP_R, desc="RX safety resistor, design §13")
     s.wire(s.gpin("JP7", "2"), (164, Y), s.gpin("R2", "1"))
-    tp12 = s.place(TP, "TP12", "RX_IN", (164, Y - 6), fp=FP_TP, desc="Test pad, receiver input (R2 side of JP7)", ref_at=(1, -3), val_at=(1, -1))
-    s.wire((164, Y), s.gpin("TP12", "1"))
     u2a = s.place(OPA, "U2", "MCP6292-E/MS", (196, Y + 2), unit=1, fp=FP_MSOP8, ref_at=(-1, 0, "center"), hide_value=True)
     ina_p, ina_n, outa = s.gpin("U2", "3", 1), s.gpin("U2", "2", 1), s.gpin("U2", "1", 1)
     hiz = (ina_p[0] - 8, ina_p[1])
@@ -793,8 +776,6 @@ def build() -> Schematic:
     c1 = s.place(C, "C1", "330pF C0G", (outa[0] + 14, outa[1]), rot=90, fp=FP_C, desc="Interstage DC block")
     s.wire((outa[0] + 2, outa[1]), (outa[0] + 7, outa[1]), s.gpin("C1", "1"))
     s.label("OUT1", (outa[0] + 7, outa[1]), 0, "left bottom")
-    tp2 = s.place(TP, "TP2", "OUT1", (outa[0] + 5, outa[1] - 5), fp=FP_TP, desc="Test pad, stage 1 output", ref_at=(1, -3), val_at=(1, -1))
-    s.wire((outa[0] + 5, outa[1]), s.gpin("TP2", "1"))
     c1b = s.gpin("C1", "2")
     in2 = (c1b[0] + 4, c1b[1])
     s.wire(c1b, in2)
@@ -816,8 +797,6 @@ def build() -> Schematic:
     s.wire(fb2, (fb2[0], r7a[1]), r7a)
     s.wire(r7b, (outb[0] + 2, r7b[1]), (outb[0] + 2, outb[1]))
     s.wire(outb, (outb[0] + 2, outb[1]))
-    tp3 = s.place(TP, "TP3", "AFE_OUT", (outb[0] + 5, outb[1] - 5), fp=FP_TP, desc="Test pad, amplifier output", ref_at=(1, -3), val_at=(1, -1))
-    s.wire((outb[0] + 5, outb[1]), s.gpin("TP3", "1"))
     # -- JP3: which stage feeds the ADC. Centre (pin 2) -> R9; pin 3 <- OUT2 (x121); pin 1 <- OUT1 (x11).
     s.wire((outb[0] + 2, outb[1]), (outb[0] + 9, outb[1]))
     jp3 = s.place(JP3S, "JP3", "STAGE", (outb[0] + 13, outb[1] + 7), rot=180, fp=FP_JP3,
@@ -841,11 +820,7 @@ def build() -> Schematic:
     s.wire(adc_node, s.gpin("C2", "1"))
     c2b = s.gpin("C2", "2")
     s.wire(c2b, (c2b[0], c2b[1] + 2)); s.power("GND", (c2b[0], c2b[1] + 2))
-    tp4 = s.place(TP, "TP4", "ADC0", (adc_node[0], adc_node[1] - 8), fp=FP_TP, desc="Test pad, ADC input", ref_at=(1, -3), val_at=(1, -1))
-    s.wire(adc_node, s.gpin("TP4", "1"))
     # a scope ground next to the analogue test pads (TP7 is up by U2's supply)
-    tp13 = s.place(TP, "TP13", "GND", (adc_node[0] + 14, adc_node[1] + 6), fp=FP_TP, desc="Test pad, ground for the analogue probes", ref_at=(1, -3), val_at=(1, -1))
-    s.wire(s.gpin("TP13", "1"), (adc_node[0] + 14, adc_node[1] + 8)); s.power("GND", (adc_node[0] + 14, adc_node[1] + 8))
     s.text("Gain 11 x 11 = 121. Firmware holds GP11 high-Z with its input buffer OFF while receiving (RP2350-E9), so R1 does not load or bias the pad.", (110, 136), size=1.27)
     s.text("Every JP ships OPEN: bridge with solder to bring the board up one stage at a time (README order); wick off to isolate. No test pad on the 10 MOhm node on purpose.", (110, 138), size=1.27)
     s.text("JP3: centre -> R9. Blob to pin 3 = stage 2 (x121); move it to pin 1 = stage 1 only (x11) if stage 2 clips. C6 is DNP: fit it instead of bridging JP2 to AC-couple TX.", (110, 140), size=1.27)
@@ -959,32 +934,32 @@ def build() -> Schematic:
 # --------------------------------------------------------------------------
 EXPECTED_NETS = {
     # every JPx is OPEN as shipped, so each one splits what the design doc calls one net into two
-    "BAT+": {("J1", "2"), ("J5", "2"), ("SW1", "2"), ("TP10", "1")},
+    "BAT+": {("J1", "2"), ("J5", "2"), ("SW1", "2")},
     "GND": {("J1", "1"), ("J5", "1"), ("U1", "3"), ("U1", "8"), ("U1", "13"), ("U1", "18"), ("U1", "23"),
             ("U1", "28"), ("U1", "33"), ("U1", "38"), ("U2", "4"), ("C3", "2"), ("C5", "2"), ("R11", "2"), ("C4", "2"),
-            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("TP7", "1"), ("TP13", "1"), ("SW2", "2"), ("JP8", "2")},
+            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("SW2", "2"), ("JP8", "2")},
     "SW_OUT": {("SW1", "1"), ("D1", "2")},
-    "D1_K": {("D1", "1"), ("JP5", "1"), ("TP11", "1")},
-    "VSYS": {("JP5", "2"), ("U1", "39"), ("TP8", "1")},
+    "D1_K": {("D1", "1"), ("JP5", "1")},
+    "VSYS": {("JP5", "2"), ("U1", "39")},
     "+3V3": {("U1", "36"), ("JP4", "1"), ("E1", "1"), ("R15", "1")},
-    "AFE_3V3": {("JP4", "2"), ("U2", "8"), ("C3", "1"), ("C5", "1"), ("R10", "1"), ("TP6", "1")},
+    "AFE_3V3": {("JP4", "2"), ("U2", "8"), ("C3", "1"), ("C5", "1"), ("R10", "1")},
     "VREF_DIV": {("R10", "2"), ("R11", "1"), ("C4", "1"), ("JP6", "1")},
-    "VREF": {("JP6", "2"), ("R3", "2"), ("R5", "2"), ("R6", "2"), ("R8", "2"), ("TP5", "1")},
-    "GP11_TX": {("U1", "15"), ("JP2", "1"), ("C6", "1"), ("TP9", "1")},
+    "VREF": {("JP6", "2"), ("R3", "2"), ("R5", "2"), ("R6", "2"), ("R8", "2")},
+    "GP11_TX": {("U1", "15"), ("JP2", "1"), ("C6", "1")},
     "JP2_R1": {("JP2", "2"), ("C6", "2"), ("R1", "1")},
-    "PAD": {("R1", "2"), ("JP7", "1"), ("J2", "1"), ("TP1", "1")},
-    "RX_IN": {("JP7", "2"), ("R2", "1"), ("TP12", "1")},
+    "PAD": {("R1", "2"), ("JP7", "1"), ("J2", "1")},
+    "RX_IN": {("JP7", "2"), ("R2", "1")},
     "HIZ": {("R2", "2"), ("R3", "1"), ("U2", "3")},
     "FB1": {("U2", "2"), ("R5", "1"), ("R4", "1")},
-    "OUT1": {("U2", "1"), ("R4", "2"), ("C1", "1"), ("TP2", "1"), ("JP3", "1")},
+    "OUT1": {("U2", "1"), ("R4", "2"), ("C1", "1"), ("JP3", "1")},
     "IN2": {("C1", "2"), ("R6", "1"), ("U2", "5")},
     "FB2": {("U2", "6"), ("R8", "1"), ("R7", "1")},
-    "OUT2": {("U2", "7"), ("R7", "2"), ("JP3", "3"), ("TP3", "1")},
+    "OUT2": {("U2", "7"), ("R7", "2"), ("JP3", "3")},
     "JP3_R9": {("JP3", "2"), ("R9", "1")},
     "R9_JP1": {("R9", "2"), ("JP1", "1")},
     "BTN": {("U1", "20"), ("R15", "2"), ("SW2", "1")},
     "ROLE": {("U1", "19"), ("JP8", "1")},
-    "ADC0": {("JP1", "2"), ("C2", "1"), ("TP4", "1"), ("U1", "31")},
+    "ADC0": {("JP1", "2"), ("C2", "1"), ("U1", "31")},
     "LED_R": {("U1", "22"), ("R12", "1")},
     "LED_G": {("U1", "24"), ("R13", "1")},
     "LED_B": {("U1", "25"), ("R14", "1")},

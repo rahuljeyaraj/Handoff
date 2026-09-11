@@ -151,7 +151,7 @@ PLACE = {
     "R6":  ("@", COL_L, 36.5, 270, TOP),    # IN2 pad 2.5 mm from pin 5
     "C1":  ("@", COL_L, 41.8, 90, TOP),
     "C2":  ("@", COL_L, 47.1, 270, TOP),
-    "R10": ("@", COL_L, 52.4, 90, TOP),
+    "R10": ("@", COL_L, 52.4, 270, TOP),   # AFE_3V3 pad toward JP4, JP6-A toward JP6
 
     # right column. The hand-end slot is deliberately empty: it is the only band
     # in which the pad-side nets can cross the Pico's pin row on the top layer.
@@ -172,15 +172,11 @@ PLACE = {
     # gaps between those bands, in two columns at x 32.3 and 36.8.
     "JP8": ("@", 32.3, 12.0, 180, BOT),     # ROLE, 3 mm from pin 19
     "R15": ("@", 36.8, 11.5, 0, BOT),       # BTN pull-up, beside pin 20
-    "TP1": ("@", 36.8, 16.75, 0, BOT),      # PAD, level with J2 pin 1
     "JP7": ("@", 32.3, 22.3, 0, BOT),       # between J2's band and J1's
-    "TP12": ("@", 36.8, 22.3, 0, BOT),
-    "TP10": ("@", 36.8, 27.0, 0, BOT),      # BAT+, beside J1
     # JP2, JP3 and JP8 are turned so each pad faces the net that feeds it: the
     # alternative is a trace that has to get past the jumper's own other pad.
     "JP2": ("@", 32.0, 31.0, 180, BOT),     # between J1's band and J5's
     "R1":  ("@", 36.5, 31.0, 180, BOT),     # TX safety resistor, in line with JP2
-    "TP9": ("@", 36.5, 35.5, 0, BOT),
     "C6":  ("@", 33.0, 40.0, 180, BOT),     # DNP across JP2, between J5 and D1
     # TP11 and TP8 flank JP5 so an ammeter is a 3 mm clip, not a 24 mm reach.
     # They sit inboard of D1's pads, which are at x 34.4-36.6 on this face.
@@ -188,27 +184,26 @@ PLACE = {
     # little-finger breakout column. TP11 and TP8 still flank JP5, and at the
     # edge a clip has nothing to foul. D1's pads own x 34.4-36.6 on this face,
     # so the column goes outboard of them, not between.
-    "TP11": ("@", 37.9, 45.0, 0, BOT),
     "JP5": ("@", 37.9, 47.7, 0, BOT),
-    "TP8": ("@", 37.9, 50.4, 0, BOT),
 
     # LED series resistors, between J3 and the thumb row, on the bottom face
     "R12": ("@", 7.0, 14.9, 0, BOT),
     "R13": ("@", 7.0, 19.95, 0, BOT),
     "R14": ("@", 7.0, 22.45, 0, BOT),
 
-    # ---- the elbow block: the rest of the jumpers and test pads ---------
-    "JP4": ("@", 16.5, 49.0, 0, BOT),
-    "TP6": ("@", 20.0, 49.0, 0, BOT),
-    "TP7": ("@", 23.5, 49.0, 0, BOT),
-    "JP6": ("@", 16.5, 52.5, 0, BOT),
-    "TP5": ("@", 20.0, 52.5, 0, BOT),
-    "JP3": ("@", 24.1, 52.5, 180, BOT),
-    "TP2": ("@", 16.5, 56.0, 0, BOT),
-    "TP3": ("@", 20.0, 56.0, 0, BOT),
-    "JP1": ("@", 23.5, 56.0, 0, BOT),
-    "TP4": ("@", 16.5, 59.3, 0, BOT),
-    "TP13": ("@", 20.0, 59.3, 0, BOT),
+    # ---- the elbow block ------------------------------------------------
+    # Five test pads came out of here: TP2, TP3, TP4, TP5 and TP6 each sat on
+    # the same net as a solder-jumper pad two millimetres away, so they were
+    # duplicates. Eleven parts became six, and the six are spread deliberately:
+    # two columns 2.96 mm apart with a clear corridor between them, and rows
+    # 4 mm apart so every gap takes a track. The old block had three gaps of
+    # 0.9 mm across and none at all down the sides.
+    # Each jumper is turned so the pad faces the net that feeds it.
+    "JP4": ("@", 16.5, 50.0, 180, BOT),    # pad 1 +3V3 west, pad 2 AFE_3V3 east
+    "JP3": ("@", 23.5, 50.0, 180, BOT),    # pad 1 OUT1 west, pads 2/3 to R9/R7
+    "JP6": ("@", 16.5, 54.0, 0, BOT),      # pad 2 VREF west, toward the bus
+    "JP1": ("@", 23.5, 54.0, 0, BOT),      # pad 2 ADC0 west, pad 1 to R9
+    # the two probe grounds, clear of the corridor and of VSYS at y 59.33
 }
 for _ref, _pin in BREAKOUT.items():
     _x, _y = pico_pin(_pin)
@@ -237,6 +232,13 @@ ROUTES = [
     ("/RUN", BL, [(11.12, 35.2), (8.6, 35.2)]),
     ("/GP27_ADC1", BL, [(11.12, 40.28), (8.6, 40.28)]),
     ("+3V3", BL, [(11.12, 50.44), (8.6, 50.44)]),
+    ("+3V3", TL, [(11.12, 50.44), (12.6, 47.6), (17.0, 47.6)]),
+    ("+3V3", BL, [(17.0, 47.6), (16.2, 49.4), (15.85, 50.0)]),
+    # R15's pull-up: the strip outboard of D1 is empty now that the test pads
+    # have gone, so +3V3 runs up the board edge instead of through the middle.
+    ("+3V3", BL, [(15.85, 49.4), (15.85, 47.2), (26.8, 47.2), (28.0, 46.6),
+                  (33.5, 46.6), (34.0, 45.0), (39.5, 45.0), (39.5, 12.5),
+                  (38.35, 11.5)]),
 
     # The little-finger five stop at x 31.2, not on the pad centre: H4's 8 mm
     # boss keep-out reaches x 31.5 and bars tracks, though not pads.
@@ -264,10 +266,9 @@ ROUTES = [
     ("/GP11_TX", BL, [(28.9, 25.04), (30.5, 25.04), (30.5, 31.0), (31.35, 31.0)]),
     ("/GP11_TX", BL, [(31.35, 31.0), (31.35, 40.0), (31.44, 40.0)]),
     ("Net-(JP2-B)", BL, [(32.65, 31.0), (34.95, 31.0)]),
-    ("Net-(JP2-B)", BL, [(34.95, 31.0), (34.95, 33.0), (35.2, 33.0), (35.2, 40.0), (34.56, 40.0)]),
+    ("Net-(JP2-B)", BL, [(34.95, 31.0), (35.2, 33.0), (35.2, 40.0), (34.56, 40.0)]),
 
     # ---- PAD: J2, its test pad, JP7 and R1's far end ----------------------
-    ("/PAD", BL, [(33.0, 16.75), (36.8, 16.75)]),
     ("/PAD", BL, [(33.0, 16.75), (34.8, 16.75), (34.8, 22.3), (32.95, 22.3)]),
     ("/PAD", BL, [(38.05, 31.0), (38.8, 31.0), (38.8, 20.0), (34.8, 20.0)]),
 
@@ -277,7 +278,6 @@ ROUTES = [
     # from the channel out to C5 at the hand end.
     ("Net-(JP7-B)", TL, [(19.675, 22.45), (21.0, 22.45), (21.0, 21.23), (31.3, 21.23)]),
     ("Net-(JP7-B)", BL, [(31.3, 21.23), (31.3, 22.3), (31.65, 22.3)]),
-    ("Net-(JP7-B)", TL, [(31.3, 21.23), (36.8, 21.23), (36.8, 22.3)]),
 
     # ---- the 1 MOhm island: R3, R2 and pin 3, a T 8.4 mm end to end -------
     ("Net-(U2A-+)", TL, [(15.6, 27.55), (19.675, 27.55), (19.675, 29.887)]),
@@ -295,9 +295,8 @@ ROUTES = [
     # the gap between R8's two pads, which is the only 1.35 mm window there.
     ("/OUT1", TL, [(20.975, 29.887), (20.975, 28.6), (25.7, 28.6),
                    (25.7, 43.2), (16.5, 43.2)]),
-    ("/OUT1", TL, [(21.6, 43.2), (21.6, 48.5)]),
-    ("/OUT1", BL, [(21.6, 48.5), (21.6, 51.0), (22.8, 51.9)]),
-    ("/OUT1", TL, [(18.9, 43.2), (18.9, 54.4), (16.5, 56.0)]),
+    ("/OUT1", TL, [(21.0, 43.2), (21.0, 49.3), (22.0, 49.3)]),
+    ("/OUT1", BL, [(22.0, 49.3), (22.2, 50.0)]),
 
     # ---- stage 2 -----------------------------------------------------------
     # The lower row fans out planar: pin 5 west, then 6, 7 and 8 east in that
@@ -318,32 +317,39 @@ ROUTES = [
     # run out to C4 cross the bus on the top face instead of fighting it, and
     # VREF is a DC reference - two vias in it cost nothing.
     ("VREF", BL, [(13.9, 44.85), (13.9, 52.5)]),
-    ("VREF", TL, [(13.9, 52.5), (13.9, 55.0)]),
+    # R8's VREF pad is below OUT1's crossing, so it can come round the south
+    # of the column and back along the bottom face just clear of the pocket.
+    ("VREF", TL, [(24.4, 44.75), (26.5, 44.75), (26.5, 46.2)]),
+    ("VREF", BL, [(26.5, 46.2), (13.9, 46.2)]),
+    ("VREF", BL, [(13.9, 52.5), (13.9, 53.6), (15.4, 54.0)]),
 
     # ---- ADC0: C2 to pin 31, and down to the elbow block ------------------
-    ("/ADC0", TL, [(15.6, 45.538), (12.3, 45.538), (12.3, 37.74), (11.12, 37.74)]),
+    ("/ADC0", TL, [(15.6, 45.538), (13.2, 45.538), (13.2, 37.74), (11.12, 37.74)]),
+    ("/ADC0", TL, [(16.475, 45.538), (19.8, 45.538), (19.8, 52.0)]),
+    ("/ADC0", BL, [(19.8, 52.0), (19.8, 54.0), (22.85, 54.0)]),
 
 
     # ---- AFE supply: JP4 feeds C3 and U2 pin 8, R10 and C5 ----------------
     ("/AFE_3V3", TL, [(20.975, 34.112), (24.4, 34.112)]),
-    ("/AFE_3V3", BL, [(20.0, 47.3), (20.0, 48.4)]),
+    ("/AFE_3V3", BL, [(17.15, 50.3), (17.0, 51.9)]),
+    ("/AFE_3V3", TL, [(17.0, 51.9), (16.0, 50.9)]),
 
 
     # ---- the VREF divider: R10, R11, JP6 and C4 ---------------------------
-    ("Net-(JP6-A)", TL, [(15.6, 50.85), (17.6, 50.85), (17.6, 52.0)]),
-    ("Net-(JP6-A)", TL, [(24.4, 55.35), (21.4, 55.35)]),
-    ("Net-(JP6-A)", BL, [(21.4, 55.35), (21.4, 54.0), (18.2, 54.0), (17.3, 53.0)]),
+    ("Net-(JP6-A)", TL, [(15.6, 53.95), (16.6, 52.6), (17.6, 52.6)]),
+    ("Net-(JP6-A)", TL, [(24.4, 55.35), (22.0, 56.8), (17.6, 56.8), (17.6, 52.6)]),
+    ("Net-(JP6-A)", BL, [(17.6, 52.6), (17.4, 53.5)]),
     # C4 sits at the hand end; x 9.7 is the only top lane past the antenna
     # keep-out on this side, and the thumb breakout stubs are on the bottom
     # face precisely so that it stays clear.
-    ("Net-(JP6-A)", TL, [(15.6, 50.85), (14.6, 51.71), (9.7, 51.71),
+    ("Net-(JP6-A)", TL, [(15.6, 53.95), (14.6, 51.71), (9.7, 51.71),
                          (9.7, 6.0), (10.75, 4.5)]),
 
     # ---- the elbow jumpers ------------------------------------------------
-    ("Net-(JP3-C)", TL, [(24.4, 46.95), (22.4, 46.95), (22.4, 49.8)]),
-    ("Net-(JP3-C)", BL, [(22.4, 49.8), (22.4, 50.4), (24.1, 50.4), (24.1, 51.9)]),
-    ("Net-(JP1-A)", TL, [(24.4, 50.05), (27.7, 50.05), (27.7, 56.6), (26.9, 56.6)]),
-    ("Net-(JP1-A)", BL, [(26.9, 56.6), (24.65, 56.3)]),
+    ("Net-(JP3-C)", TL, [(24.4, 46.95), (23.5, 48.4)]),
+    ("Net-(JP3-C)", BL, [(23.5, 48.4), (23.5, 50.0)]),
+    ("Net-(JP1-A)", TL, [(24.4, 50.05), (26.6, 50.05), (26.6, 54.0)]),
+    ("Net-(JP1-A)", BL, [(26.6, 54.0), (24.15, 54.0)]),
 
     # ---- power on the little-finger strip ---------------------------------
     # Both long crossings run on the bottom face, threading the 2.54 mm gaps
@@ -352,14 +358,11 @@ ROUTES = [
     # second, so they never have to cross.
     ("/SW_OUT", BL, [(6.3, 43.0), (4.8, 43.0), (4.8, 44.09), (30.5, 44.09),
                      (30.5, 42.5), (35.5, 42.5), (35.5, 43.0)], 0.25),
-    ("Net-(D1-K)", BL, [(35.5, 50.62), (35.5, 45.0), (37.9, 45.0)]),
-    ("Net-(D1-K)", BL, [(37.9, 45.0), (39.5, 45.0), (39.5, 47.7), (38.55, 47.7)]),
+    ("Net-(D1-K)", BL, [(35.5, 50.62), (35.5, 46.0), (38.55, 46.0), (38.55, 47.4)]),
     ("VSYS", BL, [(37.25, 47.7), (37.25, 51.5), (37.25, 52.8), (30.2, 52.8)]),
-    ("VSYS", BL, [(37.9, 50.4), (37.25, 50.4)]),
     ("VSYS", TL, [(30.2, 52.8), (30.2, 59.33), (12.5, 59.33), (12.5, 58.06),
                   (11.12, 58.06)], 0.3),
     ("/BAT+", TL, [(33.0, 28.25), (33.0, 32.0), (31.5, 32.0), (31.5, 37.25), (33.0, 37.25)]),
-    ("/BAT+", BL, [(33.85, 28.25), (35.0, 28.25), (35.0, 27.0), (36.05, 27.0)]),
     ("/BAT+", BL, [(33.0, 37.25), (33.0, 41.55), (3.5, 41.55),
                    (3.5, 46.0), (6.3, 46.0)], 0.25),
 ]
@@ -367,13 +370,16 @@ ROUTES = [
 VIAS = [
     ("Net-(JP7-B)", 31.3, 21.23),
     ("VSYS", 30.2, 52.8),
-    ("/OUT1", 21.6, 48.5),
-    ("Net-(JP3-C)", 22.4, 49.8),
-    ("Net-(JP1-A)", 26.9, 56.6),
+    ("/OUT1", 22.0, 49.3),
+    ("Net-(JP3-C)", 23.5, 48.4),
+    ("Net-(JP1-A)", 26.6, 54.0),
     ("VREF", 13.9, 44.85),
     ("VREF", 13.9, 52.5),
-    ("Net-(JP6-A)", 17.6, 52.0),
-    ("Net-(JP6-A)", 21.4, 55.35),
+    ("VREF", 26.5, 46.2),
+    ("/ADC0", 19.8, 52.0),
+    ("Net-(JP6-A)", 17.6, 52.6),
+    ("/AFE_3V3", 17.0, 51.9),
+    ("+3V3", 17.0, 47.6),
     # The two pours are one net and have to be stitched, or DRC reports them
     # unconnected. Four, all outside the cell pocket and the antenna keep-out.
     ("GND", 6.0, 9.5), ("GND", 31.0, 7.0), ("GND", 2.0, 53.0), ("GND", 9.0, 33.0),
@@ -408,13 +414,14 @@ def load_netlist():
 
 
 # Refs that earn silkscreen: the bring-up procedure in the README is carried out
-# with the board in hand, and it names jumpers, test pads and connectors. The
+# with the board in hand, and it names jumpers and connectors. (There are no
+# test pads: every one of them duplicated a jumper or connector pad.) The
 # AFE's passives do not get silk - there is no room for it between 1206 pads on
 # a 5.3 mm pitch, and their references stay on F.Fab where CAD still shows them.
 # E1-E10 are NOT here: they sit under the socketed Pico at 2.54 mm pitch with
 # the AFE columns 0.4 mm away, and 0.8 mm text does not fit in that. They are
 # identified by the Pico pin each one sits inboard of - see hardware/README.md.
-SILK_REFS = ("TP", "JP", "J", "SW", "H", "U", "D")
+SILK_REFS = ("JP", "J", "SW", "H", "U", "D")
 SILK_H = 0.8        # PCBWay's minimum legible silk height
 
 # Footprints whose silkscreen OUTLINE is removed (their reference text stays).
@@ -429,12 +436,8 @@ SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4"}
 # Reference text, placed as (dx, dy) from the footprint's own origin.
 REF_AT = {
     "U2": (0.0, 4.6), "SW1": (-3.0, -8.0),
-    "TP1": (0.0, -1.6), "TP12": (0.0, -1.6), "TP10": (0.0, -1.6),
-    "TP9": (0.0, 1.9), "TP11": (-2.8, 0.0), "TP8": (-2.1, 1.6),
     "JP5": (-3.0, 0.0), "JP7": (0.0, 1.8), "JP2": (0.0, 1.8), "JP8": (0.0, 1.8),
     "JP4": (0.0, -1.7), "JP6": (0.0, -1.7), "JP3": (2.6, -2.6), "JP1": (0.0, 1.8),
-    "TP6": (0.0, -1.6), "TP7": (0.0, -1.6), "TP5": (0.0, -1.6), "TP2": (0.0, -1.6),
-    "TP3": (0.0, -1.6), "TP4": (0.0, 1.8), "TP13": (0.0, 1.8),
 }
 
 

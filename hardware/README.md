@@ -69,7 +69,7 @@ without changing the footprint.
 | J3 | JST-XH 2.54 straight 4-pin male (LED), or the LED soldered straight in | through-hole | — | 1 |
 | BT1 | KP384455 Li-ion 3.7 V 1500 mAh | off-board, on a JST-XH pigtail | — | 1 |
 
-Copper only, nothing to buy: 13 test pads TP1–TP13, 8 solder jumpers JP1–JP8, 10
+Copper only, nothing to buy: 8 solder jumpers JP1–JP8, 10
 expansion breakout pads E1–E10, and 4 mounting holes H1–H4 (M3 clearance, 3.4 mm,
 unplated, each with an 8 mm boss keep-out).
 
@@ -140,39 +140,49 @@ separate nets in the netlist oracle.
 
 | | in series with | open, it isolates… | …and the isolated side is driven from | first used |
 |---|---|---|---|---|
-| JP5 | D1 cathode → VSYS | the whole board from the cell (USB still powers it) | an ammeter TP11 → TP8 reads the board current; a bench supply at TP8 replaces the cell | M3 bring-up, M11 battery life |
-| JP4 | 3V3 → U2 VDD (and the VREF divider) | the analogue side from the Pico's rail | a bench supply / second cell at TP6 — the SMPS-noise experiment; an ammeter across JP4 reads U2's current | M7 |
-| JP6 | R10/R11/C4 divider → VREF | the bias divider from the amplifiers | an external 1.65 V at TP5 | M7 if VREF is suspected |
-| JP7 | PAD → R2 | the pad and the transmitter from the receiver | a signal generator at TP12 (through R2: the 1 MΩ is still in circuit) | M7 gain / corner / clipping sweeps |
+| JP5 | D1 cathode → VSYS | the whole board from the cell (USB still powers it) | an ammeter across JP5's own two pads reads the board current; a bench supply on pad 2 replaces the cell | M3 bring-up, M11 battery life |
+| JP4 | 3V3 → U2 VDD (and the VREF divider) | the analogue side from the Pico's rail | a bench supply / second cell on JP4 pad 2 — the SMPS-noise experiment; an ammeter across JP4 reads U2's current | M7 |
+| JP6 | R10/R11/C4 divider → VREF | the bias divider from the amplifiers | an external 1.65 V on JP6 pad 2 | M7 if VREF is suspected |
+| JP7 | PAD → R2 | the pad and the transmitter from the receiver | a signal generator on JP7 pad 2 (through R2: the 1 MΩ is still in circuit) | M7 gain / corner / clipping sweeps |
 | JP2 | GP11 → R1 | the transmitter from the pad | nothing — leave open and fit C6 instead if GP11 leakage biases the pad (moving TX to another GPIO does not help: every bank-0 pin has E9) | M3 (measure leakage first), M8 |
-| JP3 (3-way) | OUT1 / OUT2 → R9 | the ADC from both stages; centre pad → R9, pad 3 ← OUT2 (×121), pad 1 ← OUT1 (×11) | TP3 or TP2 as a bare output for the scope | M7: blob to pad 3; move it to pad 1 if a noisy hall clips stage 2 (design §15.2) |
-| JP1 | R9 → GP26/ADC0 | the ADC pin from the amplifier | TP4 directly, as M5 does with its own attenuator; TP4 to TP13 with a wire grounds the ADC for the M4 noise floor | M4/M5 open, M7 bridged |
+| JP3 (3-way) | OUT1 / OUT2 → R9 | the ADC from both stages; centre pad → R9, pad 3 ← OUT2 (×121), pad 1 ← OUT1 (×11) | JP3's own pad 3 or pad 1 as a bare output for the scope | M7: blob to pad 3; move it to pad 1 if a noisy hall clips stage 2 (design §15.2) |
+| JP1 | R9 → GP26/ADC0 | the ADC pin from the amplifier | JP1 pad 2 directly, as M5 does with its own attenuator; a wire from JP1 pad 2 to any Pico GND pin grounds the ADC for the M4 noise floor | M4/M5 open, M7 bridged |
 | JP8 | GP14 → GND | (a strap, not in-line) | — | M6: bridge on one board to set its role; firmware enables GP14's pull-up |
 
 Nothing touches the 10 MΩ node (R2/R3/U2 pin 3): no jumper, no test pad. JP7
-and TP12 are on the *pad* side of R2.
+is on the *pad* side of R2.
 
 **Bring-up order** — the sequence that makes the jumpers pay for themselves:
 
 1. Nothing bridged, no cell. USB in: the Pico runs, M3–M5 need nothing else
-   (M5's loopback goes TP9 → TP4 by wire; TP4 → TP13 grounds the ADC for M4).
-2. Bridge **JP4** and **JP6**. Read 3.3 V at TP6, 1.65 V ±5 % at TP5, 1.65 V
-   at TP2 and TP3. Anything else at TP2/TP3 is a bias problem: open JP6 and
-   inject 1.65 V at TP5 to split divider from amplifier.
-3. Bridge **JP3 centre–pad 3**. Inject at TP12 (JP7 still open): gain, corner,
-   clipping and noise sweeps of M7, reading TP3 with a scope and TP4/ADC after
-   bridging **JP1**.
-4. Bridge **JP7**. Now the pad is live; M8 with a capacitor from TP1 to TP13.
+   (M5's loopback goes JP2 pad 1 → JP1 pad 2 by wire; JP1 pad 2 to a Pico GND
+   pin grounds the ADC for M4).
+2. Bridge **JP4** and **JP6**. Read 3.3 V on JP4 pad 2, 1.65 V ±5 % on JP6
+   pad 2, 1.65 V on JP3 pads 1 and 3. Anything else on JP3 is a bias problem:
+   open JP6 and inject 1.65 V on its pad 2 to split divider from amplifier.
+3. Bridge **JP3 centre–pad 3**. Inject on JP7 pad 2 (JP7 still open): gain,
+   corner, clipping and noise sweeps of M7, reading JP3 pad 3 with a scope and
+   the ADC after bridging **JP1**.
+4. Bridge **JP7**. Now the pad is live; M8 with a capacitor from J2 pin 1 to a
+   Pico GND pin.
 5. Bridge **JP2** *only after* the M3 leakage measurement (below) says the
    pad node stays at 1.65 V with GP11 high-Z. If it does not, fit **C6** instead.
-6. Bridge **JP5** last, with the cell on J1; first reading at TP10 vs TP8 is the
-   D1 drop.
+6. Bridge **JP5** last, with the cell on J1; first reading of J1 pin 2 against
+   JP5 pad 2 is the D1 drop.
 
-**Test pads** (1.5 mm SMD): TP1 PAD, TP2 OUT1, TP3 AFE out (OUT2), TP4 ADC0,
-TP5 VREF, TP6 AFE_3V3, TP7 GND (by U2), TP8 VSYS (after JP5), TP9 GP11, TP10
-BAT+ (the cell, before D1), TP11 D1 cathode (before JP5), TP12 RX_IN (R2 side
-of JP7), TP13 GND (by the ADC pads, for scope grounds). Deliberately **no** pad
-on the 10 MΩ node (R2/R3/U2 pin 3): a probe there measures the probe.
+**There are no test pads.** There were thirteen; every one of them sat on the
+same net as a solder-jumper pad, a connector pin or a Pico header pin two
+millimetres away, and the owner probes with a meter or a scope tip rather than
+a clip. Thirteen through-hole pads were removed for that, and the board went
+from 17 unroutable connections to 3. Probe points are named above in terms of
+the pad you actually touch. Ground for a scope is any of the Pico's GND header
+pins — 3, 8, 13, 18, 23, 28, 33 or 38 — which are through-hole and exposed.
+Deliberately **no** pad on the 10 MΩ node (R2/R3/U2 pin 3): a probe there
+measures the probe.
+
+> One thing this costs: JP5's ammeter position. To read board current you now
+> hold the meter across JP5's own two pads, which are 1 × 0.5 mm. If a probe
+> slips the board loses power mid-measurement.
 
 **GP11 leakage, RP2350-E9 — the one thing that can make the receiver dead on
 arrival.** With GP11 high-Z the pad node's only DC path is R3 (10 MΩ) to VREF,
@@ -182,7 +192,7 @@ when the pad sits between logic levels *with the input buffer enabled* — and
 our pad node idles at exactly 1.65 V. The owner's Pico 2 W is an RP2350A2,
 so this is live, not hypothetical. Firmware must therefore disable GP11's
 input buffer (`gpio_set_input_enabled(2, false)`) whenever it is high-Z, and
-M3 must measure TP2 with JP2 bridged: 1.65 V means clean, a rail means leakage.
+M3 must measure JP3 pad 1 with JP2 bridged: 1.65 V means clean, a rail means leakage.
 C6 (DNP, 330 pF, in parallel with JP2) is the hardware way out: it AC-couples
 the transmitter, so no DC can reach the pad node whatever GP11 does, at no cost
 to the carrier (2.4 kΩ at 200 kHz against R1's 1 MΩ). See `review.md` §2.4.
@@ -271,7 +281,7 @@ firmware call on WL_GPIO1 (see README). Nothing on the board.
   10 MΩ node to 0.28 V and stage 1 sits on the rail.
 - The VSYS/3 monitor on GP29 (ADC3) reads *after* D1: add ~0.3 V (0.2 V at idle
   current, 0.35 V with the radio on) to get the cell voltage, or calibrate
-  against TP10 once. On a Pico 2 W GP29 is shared with the CYW43 SPI clock, so
+  against J1 pin 2 once. On a Pico 2 W GP29 is shared with the CYW43 SPI clock, so
   read it the way `pico-examples/adc/read_vsys` does.
 - GP14 (`ROLE`): enable the internal pull-up, read it once at boot.
 - GP15 (`BTN`): active low, R15 pulls up.
@@ -309,7 +319,7 @@ firmware call on WL_GPIO1 (see README). Nothing on the board.
 - H1–H4 in the corners, unplated, no copper tie.
 - Solder jumpers on the side that stays accessible with the Pico fitted, each
   with its name and "OPEN = isolated" on the silkscreen; J5 marked "CHG only".
-- C2's return and AGND (pin 33) to one point; TP13 beside TP2–TP4.
+- C2's return and AGND (pin 33) to one point.
 
 ---
 
@@ -385,23 +395,29 @@ into the slot R2 vacated, and south under U2's body, where the island's
 vertical does not reach. That second escape is the one the first pass could not
 find.
 
-## What is still open, and where it moved to
+## What is still open: three connections
 
-**17 unconnected items, no shorts and no clearance violations.** Every one of
-them is in one of two places, and neither is the AFE:
+**3 unconnected items, no shorts, no crossings and no clearance violations.**
+All three are the same fact, and it is now a small one.
 
-1. **The elbow jumper block.** JP1, JP3, JP4, JP6 and six test pads occupy
-   x 15-26, y 49-60 on the bottom face. JP3's three pads alone wall off
-   x 22.3-25.9. Open there: TP3-JP3, TP5-JP6, TP4-JP1, JP4-TP6, JP4-R10,
-   TP2-OUT1, TP12-RX_IN and +3V3 to JP4 and R15.
-2. **The AFE supply leaving the channel.** OUT1 crosses the right column in the
-   only window there is - the 1.35 mm gap between R8's two pads at y 43.2 - and
-   AFE_3V3 needs the same window to reach JP4, R10 and C5. One window, two nets.
+OUT1 leaves the amplifier at the top of the right-hand column and has to get
+down to C1 and across to JP3. It does that in the only lane outboard of the
+column, and in doing so it draws a line between the column and the board edge
+from y 28.6 to y 43.2. Two nets need to cross that line:
 
-Both are the same shape of problem the channel had: too many bottom-face
-jumper and test-pad bodies in too small an area. The cheapest fix is to thin
-the elbow block - several of those test pads exist for a bring-up step that
-happens once - or to give the AFE supply its own via down to the bottom face
-outside the cell pocket. Deliberately not bodged with vias through the
-electrode pour.
+* **AFE_3V3** from C3 out to JP4 and to C5 at the hand end (2 items)
+* **JP3 pad 3 to R7** — stage 2's output to the gain jumper (1 item)
+
+Anything leaving the column between those two y values is behind it. Three ways
+out, cheapest first:
+
+1. **Reorder the right-hand column** so C3 and R7 sit above OUT1's exit rather
+   than below it. Free, but it moves the decoupling cap away from pin 8.
+2. **0805 passives.** At 5.3 mm pitch a 1206 leaves a 0.31 mm gap between parts
+   and an 0805 leaves 1.51 mm, which is a lane. That gives the column doorways
+   of its own and OUT1 stops being a wall.
+3. **Four layers** — 5 and 4-5 days against  and 24 hours.
+
+Nothing is bodged with vias through the electrode pour, which is the one thing
+that pour cannot afford.
 

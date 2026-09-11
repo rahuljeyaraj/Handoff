@@ -583,3 +583,38 @@ layers at 4-5 days**. Four layers would dissolve both remaining bottlenecks at
 once - a power plane and a signal layer make the elbow block and the AFE supply
 trivial - for $20 and three days. Two layers is still the target, but that is
 now a $20 decision rather than a design constraint.
+
+## Every test pad came out
+
+The owner's reading was that a test pad next to a solder jumper on the same net
+is a duplicate, and that probing is done by holding a meter or scope tip on the
+real pad rather than clipping to a dedicated one. Both are true here, so all
+thirteen went - TP1 to TP13.
+
+Five of them (TP2, TP3, TP4, TP5, TP6) sat on the same net as a solder-jumper
+pad two millimetres away. The rest duplicated a connector pin, a Pico header
+pin or a jumper pad in the same way.
+
+What it bought, measured rather than estimated:
+
+| | before | after |
+|---|---|---|
+| footprints on the board | 65 | 52 |
+| parts in the elbow block | 11 | 6 |
+| gaps across the elbow block | 3, of 0.9 mm | 2 of 1.4 mm plus a 2.96 mm corridor |
+| gaps down the elbow block | 0 (0.5 mm) | 1, the corridor |
+| unconnected items | 17 | **3** |
+
+The elbow block was re-laid at the same time: two columns 2.96 mm apart with a
+clear corridor between them, rows 4 mm apart, and each jumper turned so its pad
+faces the net that feeds it. R10 was flipped end for end, which turned two runs
+that had to cross each other into two single hops.
+
+What is left is three items, all behind OUT1's descent on the right-hand side.
+Written up in the README under *What is still open*. No shorts, no crossings,
+no clearance violations, schematic parity still 0.
+
+**The one thing this costs** is JP5's ammeter position: board current is now
+read by holding a meter across JP5's own two 1 x 0.5 mm pads, and a slipped
+probe cuts power mid-measurement. Recorded here rather than discovered at
+bring-up.
