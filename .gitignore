@@ -75,3 +75,13 @@ desktop.ini
 .DS_Store
 *~
 *.swp
+
+# ---- KiCad ---------------------------------------------------------------
+hardware/build/
+*.kicad_sch-bak
+*.kicad_pcb-bak
+*-backups/
+*.lck
+fp-info-cache
+_autosave-*
+*.kicad_prl
