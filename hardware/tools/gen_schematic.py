@@ -196,8 +196,18 @@ class LibSym:
         return max(int(re.match(r".*_(\d+)_\d+$", s[1]).group(1)) for s in find_all(self.node, "symbol"))
 
 
+_UID_N = 0
+
+
 def uid() -> str:
-    return str(uuid.uuid4())
+    """Deterministic: the n-th UUID asked for is always the same one. The sheet
+    is regenerated from scratch every run, and with random UUIDs every run
+    rewrote every junction, wire and symbol path in the sheet and the board -
+    a thousand-line diff that said nothing. Stable UUIDs make the diff the
+    change."""
+    global _UID_N
+    _UID_N += 1
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"handoff.kicad_sch/{_UID_N}"))
 
 
 # --------------------------------------------------------------------------
@@ -597,13 +607,14 @@ def build() -> Schematic:
     da, dk = s.gpin("D1", "2"), s.gpin("D1", "1")  # A, K
     s.wire(swa, da)
     s.label("SW_OUT", (swa[0] + 1, swa[1]), 0, "left bottom")
-    # D1 cathode -> TP11 -> JP5 -> VSYS. JP5 open: the whole board's current through an ammeter TP11 -> TP8.
+    # D1 cathode -> JP5 -> VSYS. JP5 open: the whole board's current through an ammeter TP7 -> TP6.
     n1 = (dk[0] + 2, dk[1])
     jp5 = s.place(JP, "JP5", "VSYS", (n1[0] + 6, n1[1]), rot=0, fp=FP_JP,
-                  desc="Open as shipped: bridge to feed VSYS from the cell; open, an ammeter from TP11 to TP8 reads the board current",
+                  desc="Open as shipped: bridge to feed VSYS from the cell; open, an ammeter from TP7 (D1_K) to TP6 (VSYS) reads the board current",
                   ref_at=(-3, 3), val_at=(1, 3))
     a5, b5 = s.gpin("JP5", "1"), s.gpin("JP5", "2")
     s.wire(dk, n1, a5)
+    s.label("D1_K", (n1[0], n1[1]), 0, "left bottom")
     vsys_p = (b5[0] + 2, b5[1])
     s.wire(b5, vsys_p, (vsys_p[0], vsys_p[1] - 2))
     s.power("VSYS", (vsys_p[0], vsys_p[1] - 2))
@@ -612,7 +623,7 @@ def build() -> Schematic:
 
     s.text("VBUS (USB) and VSYS are OR'd inside the Pico; D1 stops VSYS back-feeding the cell and makes a reversed J1 harmless.", (12, 50), size=1.27)
     s.text("~0.35 V drop: VSYS 2.6-3.8 V, Pico needs 1.8-5.5 V. J5 is the charger's plug, wired to the cell, NOT a power input.", (12, 52), size=1.27)
-    s.text("JP5 ships OPEN: bridge it to run from the cell (USB works regardless); open, TP11 -> TP8 is the ammeter position.", (12, 54), size=1.27)
+    s.text("JP5 ships OPEN: bridge it to run from the cell (USB works regardless); open, TP7 -> TP6 is the ammeter position.", (12, 54), size=1.27)
 
     # =====================================================================
     # 2. VREF bias  (mid top)
@@ -885,6 +896,32 @@ def build() -> Schematic:
         else:
             s.wire(pin, (pin[0] - 6, pin[1])); s.label(net, (pin[0] - 6, pin[1]), 0, "right bottom")
     s.text("Through-hole, 1.5 mm pad / 0.7 mm drill: a wire solders in. RUN to GND is a reset.", (150, 205), size=1.0)
+
+    # =====================================================================
+    # 8. TEST PADS (bottom middle, right of the expansion block)
+    # =====================================================================
+    # Eight, in the README's bring-up priority order, on the nets a scope or
+    # meter has to see that no jumper or connector pin already exposes well:
+    # a ground for the scope's clip next to the AFE, the ADC input, stage 1's
+    # output, the bias, the AFE supply, the pad (10x probe only), and the
+    # ammeter pair either side of JP5. Same through-hole pad as E1-E10.
+    s.text("TP1-TP7 TEST PADS — bring-up order (README)", (222, 150), size=2.0, bold=True)
+    tps = [("TP1", "GND", "GND, scope clip, beside U2"), ("TP2", "ADC0", "ADC input"),
+           ("TP3", "OUT1", "stage 1 output"), ("TP4", "VREF", "1.65 V bias"),
+           ("TP5", "PAD", "receive node: 10x probe only"),
+           ("TP6", "VSYS", "ammeter +, after JP5"), ("TP7", "D1_K", "ammeter -, before JP5")]
+    for i, (ref, net, what) in enumerate(tps):
+        x = 248 + 34 * (i // 4)
+        y = 162 + 8 * (i % 4)
+        s.place(TP, ref, net, (x, y), fp=FP_BRK, desc=f"Test pad, {what}",
+                ref_at=(-2, -2, "right"), val_at=(2, -2, "left"))
+        pin = s.gpin(ref, "1")
+        s.wire(pin, (pin[0] - 6, pin[1]))
+        if net in ("GND", "VSYS", "VREF"):
+            s.power(net, (pin[0] - 6, pin[1]), rot=90 if net == "GND" else 270)
+        else:
+            s.label(net, (pin[0] - 6, pin[1]), 0, "right bottom")
+    s.text("TP5 loads a 10 MOhm node through R1: a 10x probe or better, never a meter. TP6/TP7 straddle JP5: the ammeter position. AFE_3V3 is probed on C5's + lead.", (222, 205), size=1.0)
     s.text("The spare ADC (GP27) is deliberate: a second analogue path is the likeliest hack this board will need.", (150, 207), size=1.0)
 
     # =====================================================================
@@ -937,21 +974,21 @@ EXPECTED_NETS = {
     "BAT+": {("J1", "2"), ("J5", "2"), ("SW1", "2")},
     "GND": {("J1", "1"), ("J5", "1"), ("U1", "3"), ("U1", "8"), ("U1", "13"), ("U1", "18"), ("U1", "23"),
             ("U1", "28"), ("U1", "33"), ("U1", "38"), ("U2", "4"), ("C3", "2"), ("C5", "2"), ("R11", "2"), ("C4", "2"),
-            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("SW2", "2"), ("JP8", "2")},
+            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("SW2", "2"), ("JP8", "2"), ("TP1", "1")},
     "SW_OUT": {("SW1", "1"), ("D1", "2")},
-    "D1_K": {("D1", "1"), ("JP5", "1")},
-    "VSYS": {("JP5", "2"), ("U1", "39")},
+    "D1_K": {("D1", "1"), ("JP5", "1"), ("TP7", "1")},
+    "VSYS": {("JP5", "2"), ("U1", "39"), ("TP6", "1")},
     "+3V3": {("U1", "36"), ("JP4", "1"), ("E1", "1"), ("R15", "1")},
     "AFE_3V3": {("JP4", "2"), ("U2", "8"), ("C3", "1"), ("C5", "1"), ("R10", "1")},
     "VREF_DIV": {("R10", "2"), ("R11", "1"), ("C4", "1"), ("JP6", "1")},
-    "VREF": {("JP6", "2"), ("R3", "2"), ("R5", "2"), ("R6", "2"), ("R8", "2")},
+    "VREF": {("JP6", "2"), ("R3", "2"), ("R5", "2"), ("R6", "2"), ("R8", "2"), ("TP4", "1")},
     "GP11_TX": {("U1", "15"), ("JP2", "1"), ("C6", "1")},
     "JP2_R1": {("JP2", "2"), ("C6", "2"), ("R1", "1")},
-    "PAD": {("R1", "2"), ("JP7", "1"), ("J2", "1")},
+    "PAD": {("R1", "2"), ("JP7", "1"), ("J2", "1"), ("TP5", "1")},
     "RX_IN": {("JP7", "2"), ("R2", "1")},
     "HIZ": {("R2", "2"), ("R3", "1"), ("U2", "3")},
     "FB1": {("U2", "2"), ("R5", "1"), ("R4", "1")},
-    "OUT1": {("U2", "1"), ("R4", "2"), ("C1", "1"), ("JP3", "1")},
+    "OUT1": {("U2", "1"), ("R4", "2"), ("C1", "1"), ("JP3", "1"), ("TP3", "1")},
     "IN2": {("C1", "2"), ("R6", "1"), ("U2", "5")},
     "FB2": {("U2", "6"), ("R8", "1"), ("R7", "1")},
     "OUT2": {("U2", "7"), ("R7", "2"), ("JP3", "3")},
@@ -959,7 +996,7 @@ EXPECTED_NETS = {
     "R9_JP1": {("R9", "2"), ("JP1", "1")},
     "BTN": {("U1", "20"), ("R15", "2"), ("SW2", "1")},
     "ROLE": {("U1", "19"), ("JP8", "1")},
-    "ADC0": {("JP1", "2"), ("C2", "1"), ("U1", "31")},
+    "ADC0": {("JP1", "2"), ("C2", "1"), ("U1", "31"), ("TP2", "1")},
     "LED_R": {("U1", "22"), ("R12", "1")},
     "LED_G": {("U1", "24"), ("R13", "1")},
     "LED_B": {("U1", "25"), ("R14", "1")},
@@ -977,9 +1014,48 @@ EXPECTED_NETS = {
 }
 
 
-def write_project():
-    pro = {
-        # Board rules live here, not in the .kicad_pcb: this is what DRC enforces.
+# Net classes, and the track width each one is routed at. gen_pcb.py reads this
+# table for its widths, so the project file and the board cannot disagree.
+# The names are the board's net names: a pattern has to match the whole name,
+# and local labels arrive on the board with a leading "/".
+#   Power  0.5 mm  the cell's current: up to ~0.5 A with the radio on
+#   Rail   0.4 mm  +3V3 past the Pico and the AFE's supply - under 5 mA, so
+#                  the width is convention, not current; 0.4 rather than 0.5
+#                  because the one lane past the antenna keep-out is 0.99 mm
+#   Default 0.25   everything else
+NET_CLASSES = {
+    "Power": (0.5, ("GND", "VSYS", "/BAT+", "/SW_OUT", "/D1_K")),
+    "Rail": (0.4, ("+3V3", "/AFE_3V3")),
+}
+
+
+def net_settings():
+    """net_settings in the shape KiCad 10 itself writes (meta version 5), so a
+    save from pcbnew keeps it. An earlier version-4 write was lost the first
+    time KiCad saved over it from a session that had loaded the older file."""
+    def cls(name, width, prio):
+        return {"bus_width": 12, "clearance": 0.2, "diff_pair_gap": 0.25,
+                "diff_pair_via_gap": 0.25, "diff_pair_width": 0.2, "line_style": 0,
+                "microvia_diameter": 0.3, "microvia_drill": 0.1, "name": name,
+                "pcb_color": "rgba(0, 0, 0, 0.000)", "priority": prio,
+                "schematic_color": "rgba(0, 0, 0, 0.000)", "track_width": width,
+                "tuning_profile": "", "via_diameter": 0.6, "via_drill": 0.3, "wire_width": 6}
+    classes = [cls("Default", 0.25, 2147483647)]
+    patterns = []
+    for i, (name, (width, nets)) in enumerate(NET_CLASSES.items()):
+        classes.append(cls(name, width, i))
+        patterns += [{"netclass": name, "pattern": n} for n in nets]
+    return {"classes": classes, "meta": {"version": 5}, "net_colors": None,
+            "netclass_assignments": None, "netclass_patterns": patterns}
+
+
+def board_settings():
+    """The part of the project file that is the board's rule set: DRC minimums,
+    severities and net classes. gen_pcb.py re-applies exactly this after every
+    save, because pcbnew's BOARD.Save() also rewrites the project file from
+    the blank project it was built under - which is how the Power class went
+    missing once. Written once here, applied from both generators."""
+    return {
         # 0.15/0.15 and a 0.3 mm drill are inside every PCBWay 2-layer process.
         "board": {"design_settings": {"defaults": {}, "rules": {
             "min_clearance": 0.15,
@@ -1004,24 +1080,53 @@ def write_project():
         },
             # gen_pcb.py deliberately moves some footprints' silkscreen outlines
             # to the fab layer (U1's box is drawn over everything that sits under
-            # the socketed module). The board is regenerated from scratch on every
-            # run, so a footprint cannot drift from its library by accident and
-            # this check has nothing left to catch.
-            "rule_severities": {"lib_footprint_mismatch": "ignore"}},
+            # the socketed module). Those ten mismatches stay visible as warnings
+            # - documented in the README - rather than being hidden, so a real
+            # one could not hide among them. Everything a fab would reject, or
+            # that the layout convention forbids, is an error.
+            "rule_severities": {"lib_footprint_mismatch": "warning",
+                                "silk_over_copper": "error",
+                                "silk_overlap": "error",
+                                "silk_edge_clearance": "error",
+                                "text_height": "error",
+                                "text_thickness": "error",
+                                "connection_width": "error",
+                                "isolated_copper": "error",
+                                "copper_sliver": "error",
+                                "track_dangling": "error",
+                                "via_dangling": "error",
+                                "hole_to_hole": "error",
+                                "holes_co_located": "error",
+                                "track_angle": "error",
+                                "track_segment_length": "error",
+                                "mirrored_text_on_front_layer": "error",
+                                "nonmirrored_text_on_back_layer": "error"}},
             "layer_presets": [], "viewports": []},
+        "net_settings": net_settings(),
+    }
+
+
+def apply_board_settings(path):
+    """Merge board_settings() into an existing project file, keeping whatever
+    else KiCad has stored there."""
+    pro = json.loads(path.read_text(encoding="utf-8"))
+    for key, val in board_settings().items():
+        if key == "board":
+            ds = pro.setdefault("board", {}).setdefault("design_settings", {})
+            for k2, v2 in val["design_settings"].items():
+                if isinstance(v2, dict):
+                    ds.setdefault(k2, {}).update(v2)
+                else:
+                    ds[k2] = v2
+        else:
+            pro[key] = val
+    path.write_text(json.dumps(pro, indent=2) + "\n", encoding="utf-8")
+
+
+def write_project():
+    pro = {
         "libraries": {"pinned_footprint_libs": [], "pinned_symbol_libs": []},
         "meta": {"filename": f"{PROJECT}.kicad_pro", "version": 3},
-        "net_settings": {"classes": [{"name": "Default", "clearance": 0.2, "track_width": 0.25,
-                                      "via_diameter": 0.6, "via_drill": 0.3, "wire_width": 6, "bus_width": 12,
-                                      "line_style": 0, "priority": 2147483647,
-                                      "schematic_color": "rgba(0, 0, 0, 0.000)", "pcb_color": "rgba(0, 0, 0, 0.000)"},
-                        {"name": "Power", "clearance": 0.2, "track_width": 0.5,
-                                      "via_diameter": 0.8, "via_drill": 0.4, "wire_width": 6, "bus_width": 12,
-                                      "line_style": 0, "priority": 1,
-                                      "schematic_color": "rgba(0, 0, 0, 0.000)", "pcb_color": "rgba(0, 0, 0, 0.000)"}],
-                         "netclass_patterns": [{"netclass": "Power", "pattern": n} for n in
-                                               ("GND", "+3V3", "VSYS", "BAT+", "SW_OUT", "D1_K", "AFE_3V3")],
-                         "meta": {"version": 4}},
         "pcbnew": {"page_layout_descr_file": ""},
         "schematic": {"drawing": {"default_line_thickness": 6.0, "default_text_size": 50.0,
                                   "label_size_ratio": 0.375, "pin_symbol_size": 25.0, "text_offset_ratio": 0.15},
@@ -1029,6 +1134,7 @@ def write_project():
         "sheets": [],
         "text_variables": {},
     }
+    pro.update(board_settings())
     (HW / f"{PROJECT}.kicad_pro").write_text(json.dumps(pro, indent=2) + "\n", encoding="utf-8")
     (HW / "sym-lib-table").write_text(
         '(sym_lib_table\n  (version 7)\n'
