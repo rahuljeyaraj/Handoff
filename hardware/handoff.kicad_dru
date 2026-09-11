@@ -10,10 +10,18 @@
 	(constraint courtyard_clearance (min -20mm))
 	(condition "A.Reference == 'U1' || B.Reference == 'U1'"))
 
-# E1-E10 are bare through-hole pads with nothing mounted on them. They inherit a
-# TestPoint footprint's 3.09 mm courtyard, which is larger than the 2.54 mm pin
-# pitch they are placed on, so adjacent ones "overlap" bodies that do not exist.
-# Copper clearance between them is unaffected and still checked: 0.54 mm.
-(rule "Breakout pads have no body"
+# E1-E10 and the test pads are bare through-hole pads with nothing mounted on
+# them. They inherit a TestPoint footprint's 2.59 mm courtyard, which is larger
+# than the 2.54 mm pin pitch the breakout pads are placed on, so adjacent ones
+# "overlap" bodies that do not exist. Copper clearance is unaffected and still
+# checked.
+(rule "Bare pads have no body"
 	(constraint courtyard_clearance (min -5mm))
-	(condition "A.Reference == 'E1' || B.Reference == 'E1' || A.Reference == 'E10' || B.Reference == 'E10' || A.Reference == 'E2' || B.Reference == 'E2' || A.Reference == 'E3' || B.Reference == 'E3' || A.Reference == 'E4' || B.Reference == 'E4' || A.Reference == 'E5' || B.Reference == 'E5' || A.Reference == 'E6' || B.Reference == 'E6' || A.Reference == 'E7' || B.Reference == 'E7' || A.Reference == 'E8' || B.Reference == 'E8' || A.Reference == 'E9' || B.Reference == 'E9'"))
+	(condition "A.Reference == 'E1' || B.Reference == 'E1' || A.Reference == 'E10' || B.Reference == 'E10' || A.Reference == 'E2' || B.Reference == 'E2' || A.Reference == 'E3' || B.Reference == 'E3' || A.Reference == 'E4' || B.Reference == 'E4' || A.Reference == 'E5' || B.Reference == 'E5' || A.Reference == 'E6' || B.Reference == 'E6' || A.Reference == 'E7' || B.Reference == 'E7' || A.Reference == 'E8' || B.Reference == 'E8' || A.Reference == 'E9' || B.Reference == 'E9' || A.Reference == 'TP1' || B.Reference == 'TP1' || A.Reference == 'TP2' || B.Reference == 'TP2' || A.Reference == 'TP3' || B.Reference == 'TP3' || A.Reference == 'TP4' || B.Reference == 'TP4' || A.Reference == 'TP5' || B.Reference == 'TP5' || A.Reference == 'TP6' || B.Reference == 'TP6' || A.Reference == 'TP7' || B.Reference == 'TP7' || A.Reference == 'TP8' || B.Reference == 'TP8' || A.Reference == 'TP9' || B.Reference == 'TP9' || A.Reference == 'TP10' || B.Reference == 'TP10' || A.Reference == 'TP11' || B.Reference == 'TP11' || A.Reference == 'TP12' || B.Reference == 'TP12' || A.Reference == 'TP13' || B.Reference == 'TP13' || A.Reference == 'TP14' || B.Reference == 'TP14' || A.Reference == 'TP15' || B.Reference == 'TP15' || A.Reference == 'TP16' || B.Reference == 'TP16' || A.Reference == 'TP17' || B.Reference == 'TP17' || A.Reference == 'TP18' || B.Reference == 'TP18' || A.Reference == 'TP19' || B.Reference == 'TP19'"))
+
+# Layout convention, enforced: every corner is 45 or straight (a right angle
+# is two connected segments at 90), and no segment is a stub.
+(rule "No right-angle corners"
+	(constraint track_angle (min 134)))
+(rule "No stub segments"
+	(constraint track_segment_length (min 0.15mm)))

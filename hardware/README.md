@@ -337,32 +337,97 @@ cannot quietly drag a part off its target.
 
 | | |
 |---|---|
-| Track / clearance | 0.25 mm / 0.2 mm default, 0.5 mm on the `Power` class (GND, +3V3, VSYS, BAT+, SW_OUT, D1_K, AFE_3V3) |
+| Track / clearance | 0.25 mm default, 0.4 mm on the `Rail` class (+3V3, AFE_3V3), 0.5 mm on the `Power` class (GND, VSYS, BAT+, SW_OUT, D1_K). 0.2 mm clearance throughout |
 | Vias | 0.6 mm / 0.3 mm drill |
 | Fab minimums enforced | 0.15 mm track and clearance, 0.3 mm drill, 0.3 mm copper-to-edge — inside every PCBWay 2-layer process |
-| Pours | GND on both faces. The **top** pour is the ground-plane electrode |
+| Pours | GND on both faces, inset 0.5 mm from the edge (PCBWay's routed-edge tolerance is ±0.2 mm). The **top** pour is the ground-plane electrode |
 | Rule areas | the 20 × 30 cell/pad pocket bars bottom-face pour and bottom-face parts (tracks are allowed); each mounting hole carries its own 8 mm boss keep-out |
+| Corners | every track corner is 45° or straight; `handoff.kicad_dru` fails the run on any right angle or stub segment |
 
-**Two custom DRC rules, in `handoff.kicad_dru`.** Both exist because KiCad's
-courtyard test has no notion of height, and both suppress *only* courtyard
+**The `Power` net class was inert.** `gen_pcb.py` widened its nets to 0.5 mm,
+but the project file it was widening them *in* only ever defined `Default` —
+`gen_schematic.py` writes the `Power` class into `handoff.kicad_pro`, but
+`pcbnew.BOARD.Save()` rewrites that same file from the blank project the board
+was built under, on every run, and silently dropped it again. Every "0.5 mm"
+track on the board was actually 0.25 mm. Fixed two ways: the net-class table
+now lives once, in `gen_schematic.py`'s `NET_CLASSES`/`net_settings()`, and
+`gen_pcb.py` calls `apply_board_settings()` to re-merge it into the project
+file *after* `Save()`, every run, so it cannot go missing silently again. A
+second class, `Rail`, was added at 0.4 mm for +3V3 and AFE_3V3: real current
+there is under 5 mA, but 0.4 mm is what fits the lanes those nets actually
+run in (see *Test points* below) — 0.5 mm did not clear both pads in the one
+lane left past the antenna keep-out.
+
+**The battery path was three crossings and six pin-row threads; it is now
+one of each.** BAT+, SW_OUT, D1_K and VSYS used to zigzag between the
+little-finger and thumb walls because SW1, D1 and JP5 were on the
+little-finger side. They now live on the thumb wall, in the corridor between
+J3 and SW1: J1 → BAT+ crosses the board once, to SW1; SW1 → SW_OUT → D1 is a
+straight run down the same wall; D1 → JP5 → VSYS is a single via and one
+threaded pin-row gap, straight into pin 39, which is on this row. At 0.5 mm
+in a 0.94 mm gap the old crossings left 0.22 mm to each pad — no longer
+acceptable once Power tracks were actually 0.5 mm (see above). The two
+crossings that remain (BAT+, at y 41.55 and y 46.63) neck down to 0.4 mm for
+2.6 mm through the gap, which restores 0.27 mm to each pad, and are otherwise
+full width.
+
+**J3 no longer overhangs.** Its housing is 5.85 mm wide; at pin 1 = x 3.0 the
+body ran to x −0.93, 0.93 mm past the board edge. Pin 1 is now at x 4.0, which
+puts the housing's own outer face flush with the edge (its courtyard starts
+at x 0.05) — SW1's handle and U1's USB courtyard still overhang, by design,
+and are the only footprints in `OVERHANG`.
+
+**Every silkscreen and fab reference is checked against the outline, not
+just eyeballed.** `report()` now walks every footprint's reference and value
+text (and every loose `PCB_TEXT`) and fails the run if any of it sits within
+0.5 mm of the board edge. H1–H4 no longer carry silk labels at all — a 3.4 mm
+hole in a corner needs none, and the label had nowhere to go but off the
+board; C4, C5, E3, D1 and the four connectors' texts were repositioned onto
+the board or rotated to fit their strip.
+
+**Every corner is 45° or straight.** `mitre()` chamfers every right-angle
+join in a `ROUTES` polyline by 0.5 mm before it becomes copper (or half the
+shorter leg, whichever is less), so the table can still be written on a grid.
+Two DRC rules enforce it going forward: `track_angle (min 134°)` and
+`track_segment_length (min 0.15mm)`, so a future edit that reintroduces a
+right angle or a stub fails the run instead of passing quietly.
+
+**Two custom DRC rules, in `handoff.kicad_dru`, exist because KiCad's
+courtyard test has no notion of height**, and both suppress *only* courtyard
 overlap — every clearance and short test still runs against these parts:
 
 - *The Pico is socketed.* Its own PCB sits ~8.5 mm above this one, so the AFE,
   the breakout pads and the bottom-face jumpers are deliberately underneath it.
-- *Breakout pads have no body.* E1–E10 inherit a `TestPoint` footprint's 3.09 mm
-  courtyard, which is wider than the 2.54 mm pitch they sit on. Copper clearance
-  between them is unaffected and still checked: 0.54 mm.
+- *Bare pads have no body.* E1–E10 and the test pads (below) inherit a
+  `TestPoint` footprint's 2.59 mm courtyard, which is wider than the 2.54 mm
+  pitch they sit on. Copper clearance between them is unaffected and still
+  checked: 0.54 mm.
+
+**DRC severities are tightened past KiCad's defaults.** `silk_over_copper`,
+`silk_overlap`, `silk_edge_clearance`, `text_height`/`thickness`,
+`connection_width`, `isolated_copper`, `copper_sliver`, `track_dangling`,
+`via_dangling`, `hole_to_hole`, `holes_co_located` and the two corner rules
+above are all errors now, not warnings — anything a fab would reject, or the
+layout convention forbids, stops the run. `lib_footprint_mismatch` is the one
+warning left at warning severity, and stays visible rather than silenced, so
+a real mismatch could not hide among the ten deliberate ones.
 
 **Silkscreen.** Values are hidden everywhere. References are on silk for the
 things the bring-up procedure names in your hand — test pads, jumpers,
-connectors, switches, U1/U2, D1, the mounting holes — and on the fab layer for
-the AFE's passives and for E1–E10, where 0.8 mm text does not fit between 1206
-pads on a 5.3 mm pitch. **E1–E10 are identified by the Pico pin each one sits
-inboard of**, which is unambiguous and listed under *Expansion* above. The
-silkscreen *outlines* of U1, the four JST connectors, SW1 and the mounting holes
-are moved to the fab layer too: U1's is a 21 × 51 box drawn over everything that
-deliberately lives under it. That is what the ten `lib_footprint_mismatch`
-warnings are — the only warnings the board reports, and all deliberate.
+connectors, switches, U1/U2, D1 — and on the fab layer for the AFE's
+passives and for E1–E10, where 0.8 mm text does not fit between 1206 pads on
+a 5.3 mm pitch. **E1–E10 are identified by the Pico pin each one sits
+outboard of**, which is unambiguous and listed under *Expansion* above. The
+silkscreen *outlines* of U1, the four JST connectors, SW1 and the mounting
+holes are moved to the fab layer too: U1's is a 21 × 51 box drawn over
+everything that deliberately lives under it. That is what the ten
+`lib_footprint_mismatch` warnings are — the only warnings the board reports,
+and all deliberate. A board-edge legend (project name, revision, date) is on
+F.SilkS at the hand end and repeated on B.SilkS along the little-finger wall;
+a fab note (2-layer, 1.6 mm FR-4, 1 oz Cu, HASL, green mask, white silk, 0.3 mm
+min drill) is on `Cmts.User`. J1/J2/J5's pin-1 ends are marked **+ / −** or
+**PAD / GP** on F.SilkS, and J3's four pins are marked **R K G B**, so the
+board can be assembled from the silk without the schematic in hand.
 
 ### The breakout pads moved out, and the channel routes
 
@@ -441,7 +506,77 @@ and R7 sit above OUT1's exit (free, but moves the decoupling cap off pin 8), or
 more than 8 mW, so 1/10 W is fine) - and either would let OUT1 stay on top.
 
 AFE_3V3's run to C5 is on the bottom face. Past the antenna keep-out (to
-x 27.11) and before the Pico's pads (from 28.1) there is one lane, at x 27.7,
-and on the top face RX_IN already crosses it at y 21.23. The bottom is free the
-whole way - the pocket has no pour - so the run stays down until y 9.8, where
-BTN crosses at y 9, and comes up for the last 5 mm into C5's + pad.
+x 27.11) and before the Pico's pads (from 28.1) there is one lane, at x 27.5,
+and on the top face RX_IN already crosses it at y 21.23. The bottom is free
+the whole way - the pocket has no pour - so the run stays down the whole
+lane and comes up once, at the hand end, into C5's + pad. (This paragraph
+described the state right after routing closed; the battery path, BTN, VREF
+divider and the test pads have all moved since - see the sections below.)
+
+## This session: net classes, the battery path, corners, and test points
+
+Four things were known to be wrong going in (README §0 of the layout brief);
+all four are fixed, plus the test points the previous session left for later.
+
+**The `Power` net class was never real.** `gen_schematic.py` wrote it into
+`handoff.kicad_pro`, but `pcbnew.BOARD.Save()` rewrites that file from the
+blank project the board was built under on every `gen_pcb.py` run, and
+silently dropped the class again - every "0.5 mm" track on the board was
+actually 0.25 mm, including BAT+ and SW_OUT threading the 0.94 mm gaps
+between Pico pads with 0.22 mm to spare either side. Fixed at the root: the
+net-class table now lives once, in `gen_schematic.py`, and `gen_pcb.py`
+re-merges it into the project file after every `Save()`. A `Rail` class
+(0.4 mm) was added for +3V3/AFE_3V3, sized to what their lanes actually hold.
+
+**The battery path crossed the board three times; it now crosses once.**
+BAT+, SW_OUT, D1_K and VSYS zigzagged between walls because SW1, D1 and JP5
+sat on the little-finger side, opposite J1. They now sit on the thumb wall
+with J3, in the run between it and SW1 - see *The board*, above, for the
+routing. The two pin-row crossings that remain neck to 0.4 mm through the
+gap and are 0.5 mm either side of it.
+
+**J3 no longer overhangs the thumb edge**, SW_OUT no longer U-turns around
+its own pad (it left with the whole battery path), the JP4 redundant loop
+went with the little-finger-side routing it was part of, and **every track
+corner is 45° or straight**, enforced by two new DRC rules rather than by
+eye. +3V3 came off the little-finger wall entirely: it now reaches R15 by
+crossing the board once, at the elbow, instead of running the full 47 mm
+edge at 0.375 mm clearance.
+
+### Test points: seven of the eight, TP1–TP7
+
+Priority order from the layout brief, all through-hole `TestPoint_Pad` so
+either face can be probed, each with a silk label:
+
+| Pad | Net | What it tells you |
+|---|---|---|
+| TP1 | GND | scope earth, beside U2's input stage, in the top pour |
+| TP2 | ADC0 | what the Pico actually samples |
+| TP3 | OUT1 | stage 1 output, before stage 2 |
+| TP4 | VREF | the 1.65 V bias, beside JP6 |
+| TP5 | /PAD | the receive node - **10× probe or better only**, it loads a 10 MΩ node |
+| TP6 | VSYS | ammeter +, after JP5 |
+| TP7 | D1_K | ammeter −, before JP5 (TP6/TP7 replace the old "clip JP5's own pads" position) |
+
+**AFE_3V3 (priority 5 in the brief) was dropped**, deliberately: C5's + lead
+is through-hole on that net and sits at the hand end in the open, which is
+already a better probe point than a 1.5 mm pad squeezed into the one lane
+past the antenna keep-out would have been - adding one there would have
+narrowed that lane's Rail-class track below its 0.4 mm floor. JP4 pad 2 is
+also still on that net if a jumper-point reading is wanted instead.
+
+## Still open
+
+The layout brief (`layout-prompt.md`) asks for a part-by-part placement
+justification (§1) and a full routing review (§2: via-by-via, thermal
+reliefs actually formed, 45° pad entries, the analogue guard ring) beyond
+what this session did. What ran this session touched placement only where a
+§0 fix forced it (the battery path, the VREF divider, R15's feed) and did
+not re-examine C3's loop length, the AFE column pitch (still 5.3 mm; 5.0 mm
+untested), the elbow block's pad size, or the mounting-hole insets. The
+professional-finish checklist (§4) is partly done - the board-edge legend,
+fab note, pin-1 marks and tightened DRC severities are in; a drill-size
+table, an explicit solder-mask-web check on JP3's pitch, and full-page
+plots for PCBWay have not been produced. Whoever picks this up next should
+re-read `layout-prompt.md` §1, §2 and §4 against the board as it now stands
+before assuming those sections are done.
