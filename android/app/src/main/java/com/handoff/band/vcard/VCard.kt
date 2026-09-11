@@ -70,7 +70,7 @@ class VCard(val lines: List<VLine>, val raw: String) {
          * begins with a space or a tab and belongs to the line before it.
          */
         fun parse(text: String): VCard {
-            val unfolded = buildList {
+            val unfolded = buildList<String> {
                 for (line in text.replace("\r\n", "\n").split('\n')) {
                     if (line.isEmpty()) continue
                     if ((line[0] == ' ' || line[0] == '\t') && isNotEmpty()) {

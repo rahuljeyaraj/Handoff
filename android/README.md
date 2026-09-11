@@ -51,6 +51,9 @@ Flash the band with `handoff.uf2` first — see the root
 The development plan's criteria, and how to check each one:
 
 1. **A fake card reaches the address book.** Pair, then tap *Fake card in 10 s*.
+   If the pairing chooser times out, *Scan* runs an unfiltered ten-second scan
+   and says whether this handset hears the band at all — hold the phone close
+   to the Pico; its transmit range is short.
    The band notifies `rx_vcard`; the card appears in the history list; tapping
    it opens the system contact editor prefilled.
 2. **Provisioning round-trips.** *Provision* → pick a contact or type one →

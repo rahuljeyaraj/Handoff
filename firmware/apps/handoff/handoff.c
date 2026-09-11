@@ -29,6 +29,8 @@
 #include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 
+#include "btstack_run_loop.h"
+
 #include "ble.h"
 #include "config.h"
 #include "flash.h"
@@ -55,8 +57,12 @@ static const char k_fake_card[] =
 static store_t s_store;
 static bool    s_flash_ok;
 
-/* Pending BLE_CTRL_FAKE_RX, in milliseconds since boot. 0 = nothing armed. */
-static volatile uint32_t s_fake_rx_due_ms;
+/*
+ * The delayed BLE_CTRL_FAKE_RX. A BTstack timer, so the send runs inside the
+ * BTstack context like every other call into ble.c — see the note above main()
+ * for why it is not the main loop reaching in under the async lock.
+ */
+static btstack_timer_source_t s_fake_rx_timer;
 
 /* ---------------------------------------------------------------------- */
 
@@ -121,7 +127,9 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
     switch (op) {
     case BLE_CTRL_FAKE_RX: {
         uint32_t delay_s = (len >= 1u) ? arg[0] : 0u;
-        s_fake_rx_due_ms = to_ms_since_boot(get_absolute_time()) + delay_s * 1000u;
+        btstack_run_loop_remove_timer(&s_fake_rx_timer);
+        btstack_run_loop_set_timer(&s_fake_rx_timer, delay_s * 1000u);
+        btstack_run_loop_add_timer(&s_fake_rx_timer);
         printf("handoff: fake rx_vcard armed for +%u s\n", (unsigned)delay_s);
         break;
     }
@@ -149,8 +157,9 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
     }
 }
 
-static void send_fake_card(void)
+static void send_fake_card(btstack_timer_source_t *ts)
 {
+    (void)ts;
     /* Sent as vCard TEXT, exactly as a received card will be at M12: the app
      * never sees the compact form, so what M2 tests is the format M12 ships. */
     bool sent = ble_notify_rx_vcard(k_fake_card, sizeof k_fake_card - 1u);
@@ -180,6 +189,19 @@ static void print_banner(void)
         printf("  not provisioned — write a card to my_vcard\n");
 }
 
+/*
+ * Everything that touches the radio runs inside the BTstack context: the
+ * ble.c callbacks, the fake-card timer, and the LED, which hangs off the
+ * CYW43 and is written from ble.c's connection events.
+ *
+ * Measured at M2, and the reason for that rule: with Bluetooth active, a call
+ * into the CYW43 from this thread — the LED ioctl, or ble_notify_rx_vcard()
+ * taken under the async-context lock — parked the core until the next
+ * Bluetooth interrupt, tens of seconds at a time. A card armed for +10 s went
+ * out only when the phone next wrote to the band. The main loop therefore
+ * does nothing but sleep; M12 puts the DSP here, and it must keep to the same
+ * rule or hand its results to a BTstack timer.
+ */
 int main(void)
 {
     stdio_init_all();
@@ -197,6 +219,8 @@ int main(void)
     if (store_load(&s_store) != STORE_OK && s_flash_ok)
         printf("handoff: flash holds no readable record\n");
 
+    btstack_run_loop_set_timer_handler(&s_fake_rx_timer, send_fake_card);
+
     ble_set_vcard_handler(on_my_vcard, NULL);
     ble_set_control_handler(on_control, NULL);
     ble_init();
@@ -204,25 +228,6 @@ int main(void)
     print_banner();
 
     for (;;) {
-        uint32_t due = s_fake_rx_due_ms;
-
-        if (due != 0u && to_ms_since_boot(get_absolute_time()) >= due) {
-            s_fake_rx_due_ms = 0;
-            /*
-             * ble.c's own callbacks run inside the BTstack context, but this
-             * one is the main loop reaching in, so it takes the lock. See the
-             * threading note at the top of ble.c.
-             */
-            async_context_t *ctx = cyw43_arch_async_context();
-            async_context_acquire_lock_blocking(ctx);
-            send_fake_card();
-            async_context_release_lock(ctx);
-        }
-
-        /* The LED is the only thing that says "advertising" when there is no
-         * console attached, which during a §13 body test there will not be. */
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, ble_connected() ? 1 : 0);
-
-        sleep_ms(50);
+        sleep_ms(1000);
     }
 }

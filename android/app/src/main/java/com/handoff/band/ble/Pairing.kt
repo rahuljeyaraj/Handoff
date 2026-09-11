@@ -1,7 +1,14 @@
 package com.handoff.band.ble
 
 import android.app.Activity
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.bluetooth.le.ScanFilter
 import android.companion.AssociationRequest
 import android.companion.BluetoothLeDeviceFilter
@@ -37,7 +44,7 @@ object Pairing {
 
     fun storedAddress(context: Context): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_ADDRESS, null)
+            .getString(KEY_ADDRESS, null)?.uppercase()
 
     fun remember(context: Context, address: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -100,12 +107,43 @@ object Pairing {
                 CompanionDeviceManager.EXTRA_ASSOCIATION,
                 android.companion.AssociationInfo::class.java
             )
-            association?.deviceMacAddress?.toString()?.let { return it }
+            // MacAddress.toString() is lowercase; BluetoothAdapter.getRemoteDevice
+            // rejects anything but uppercase hex, and rejects it by throwing.
+            association?.deviceMacAddress?.toString()?.uppercase()?.let { return it }
         }
 
         val device: BluetoothDevice? = data.getParcelableExtra(
             CompanionDeviceManager.EXTRA_DEVICE
         )
         return device?.address
+    }
+
+    /**
+     * Diagnostic only: an unfiltered ten-second scan, every result logged.
+     * For when the chooser above comes back empty and the question is whether
+     * this handset hears the band at all, or hears it and fails the filter.
+     */
+    @Suppress("MissingPermission")
+    fun debugScan(context: Context, onDone: (String) -> Unit) {
+        val scanner = BluetoothAdapter.getDefaultAdapter()?.bluetoothLeScanner
+            ?: return onDone("no LE scanner")
+        val seen = LinkedHashMap<String, String>()
+        val cb = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, r: ScanResult) {
+                val rec = r.scanRecord
+                val line = "${r.device.address} rssi=${r.rssi} name=${rec?.deviceName} " +
+                    "uuids=${rec?.serviceUuids} raw=${rec?.bytes?.joinToString("") { "%02x".format(it) }}"
+                if (seen.put(r.device.address, line) == null) Log.i("HandoffScan", line)
+            }
+            override fun onScanFailed(errorCode: Int) { Log.e("HandoffScan", "failed $errorCode") }
+        }
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+        scanner.startScan(null, settings, cb)
+        Handler(Looper.getMainLooper()).postDelayed({
+            scanner.stopScan(cb)
+            val hit = seen.values.firstOrNull { it.contains("48414e44-0001", ignoreCase = true) || it.contains("Handoff") }
+            onDone("scan: ${seen.size} devices, band ${hit ?: "NOT seen"}")
+        }, 10_000)
     }
 }

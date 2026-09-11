@@ -191,7 +191,7 @@ later:
    Cross-check the C codec against `tools/vcf.py` in both directions — same
    independent-implementation discipline as the modulation vectors.
 
-### M2 — Phone link — **built**
+### M2 — Phone link — **verified 11 Sep 2026, all six criteria**
 
 **Hardware: Pico 2 W + your Android phone. Nothing else. Fully parallel — start
 it today.**
@@ -258,6 +258,51 @@ Cannot prove: anything about the body link.
    is now `lib/link/chunk.c`, tested at every capacity from 20 bytes to 244,
    and the Android side runs the same cases against its own implementation.
    See [firmware-architecture.md §13.2](firmware-architecture.md).
+
+**Verified, on a OnePlus CPH2569 running Android 15.**
+
+| Criterion | Measured |
+|---|---|
+| Fake card → app DB → address book | contact 6475 "Björn Smári" in the contacts provider, org, phone and email intact |
+| Provision, power-cycle, read back | banner `provisioned: 82 compact bytes, record id 1` after a true power cycle; the flash backend CRC-16-checks header and blob on load |
+| From the contact picker | per-field preview, a field deselected; `61 compact bytes, record id 2` after reboot |
+| 23-byte floor | band sent at `ATT MTU 23` — ten 18-byte chunks — and every one of six received cards is byte-identical to the firmware constant |
+| Screen off, app backgrounded | card sent at 07:10:34 with the phone dozing and the launcher resumed landed in the database |
+| Bond across a power cycle | reconnected 1.5 s after the port came back, re-encrypted from the stored bond, no SMP, no dialog |
+
+**What running it found.** None of these would have been found by reading;
+three of them made the first criterion fail outright.
+
+1. **The main loop must not touch the CYW43 while Bluetooth is up.** The
+   original image polled the LED through the CYW43 every 50 ms and sent the
+   fake card from the main loop under the async-context lock. Traced with a
+   heartbeat: either call parked the core until the *next Bluetooth
+   interrupt* — 40 s at a time. A card armed for +10 s went out only when the
+   phone next wrote to the band. The send is now a BTstack timer, the LED is
+   written from `ble.c`'s connection events, and `main()` only sleeps. M12's
+   DSP loop inherits that rule; it is in the comment above `main()`.
+2. **Android 15 does not pair on the band's `Insufficient Encryption`
+   reply.** The rx_vcard CCCD write got the error, no pairing started, no
+   callback fired, and the operation queue stalled forever. The app now calls
+   `createBond()` explicitly before subscribing.
+3. **`CompanionDeviceManager` hands back a lowercase MAC**, and
+   `getRemoteDevice` throws on it. The service crashed the instant it
+   connected, taking the not-yet-flushed stored address with it.
+4. **`status` never reached the phone.** It was notified from inside the
+   write callbacks, where BTstack's outgoing buffer is reserved for the write
+   response, and the "drop it, the next one carries the same state" comment
+   was wrong: there was no next one. It is deferred to can-send-now now,
+   behind any vCard chunk in flight.
+5. **`close()` does not drop the ACL.** The MTU-floor toggle rebuilt the GATT
+   client, the new one rode the still-open link, and the band still saw
+   MTU 255 — the exact way criterion 4 could have passed by accident.
+   `BandClient.close()` disconnects first and the service waits for the link
+   to go.
+6. **The Pico's BLE transmit is weak.** The phone heard a −90 dBm device
+   across the room and not the band at desk distance; at 10 cm the band was
+   −30 dBm. A diagnostic *Scan* button (unfiltered, logs what it hears) is
+   what settled that, and it stays in the app. Worth measuring properly
+   before anyone wears one.
 
 **Not built, deliberately.** The "auto-save new handshakes to Contacts"
 setting of [architecture §11.3](firmware-architecture.md) is off by default and

@@ -159,6 +159,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun BandPanel(state: BandService.State?) {
         var floor by remember { mutableStateOf(false) }
+        var scanNote by remember { mutableStateOf<String?>(null) }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Band", style = MaterialTheme.typography.titleMedium)
@@ -185,9 +186,14 @@ class MainActivity : ComponentActivity() {
                 Text(it, style = MaterialTheme.typography.bodySmall,
                      color = MaterialTheme.colorScheme.error)
             }
+            scanNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { pair() }) { Text("Pair") }
+                Button(onClick = {
+                    scanNote = "scanning…"
+                    Pairing.debugScan(this@MainActivity) { scanNote = it }
+                }) { Text("Scan") }
                 Button(onClick = {
                     startActivity(Intent(this@MainActivity, ProvisionActivity::class.java))
                 }) { Text("Provision") }

@@ -10,10 +10,12 @@
  * Two things are worth knowing before changing anything here.
  *
  * EVERYTHING RUNS IN THE BTSTACK CONTEXT. On this board that is the cyw43
- * async context, not an interrupt and not core 1. The handlers below are
- * therefore allowed to call back into lib/record, but a caller from outside
- * — the main loop, say — must hold the cyw43 lock around any of the notify
- * functions. hal_pico.c and apps/handoff do; anything new must too.
+ * async context, not core 1. The handlers below are therefore allowed to call
+ * back into lib/record. Do NOT call the notify functions from the main loop,
+ * even under the cyw43 lock: measured at M2, a call into the CYW43 from thread
+ * mode with Bluetooth up parked that thread until the next Bluetooth
+ * interrupt, tens of seconds at a time. Anything that needs to send from
+ * outside hands the work to a BTstack timer (see apps/handoff) instead.
  *
  * NOTIFICATIONS ARE PACED, NOT QUEUED. ATT lets one notification be in flight
  * at a time, so a chunked vCard is pumped out of the CAN_SEND_NOW event
@@ -70,6 +72,7 @@ static chunk_rx_t s_my_vcard_rx;
 static chunk_tx_t s_rx_vcard_tx;
 static uint8_t    s_rx_vcard_buf[BLE_VCARD_MAX];
 static bool       s_rx_vcard_active;
+static bool       s_status_pending;   /* a status notify waiting for a buffer */
 
 static ble_status_t s_status;
 
@@ -299,6 +302,7 @@ static void reset_connection_state(void)
     s_sub_rx_vcard = false;
     s_sub_status = false;
     s_sub_telemetry = false;
+    s_status_pending = false;
     chunk_rx_init(&s_my_vcard_rx);
 }
 
@@ -320,11 +324,21 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
         if (hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE) {
             reset_connection_state();
             s_con = gap_subevent_le_connection_complete_get_connection_handle(packet);
+            /*
+             * The LED is the only thing that says "connected" when there is
+             * no console attached, which during a §13 body test there will
+             * not be. It is written here, in the BTstack context, and nowhere
+             * else: the LED hangs off the CYW43, and an ioctl to it from the
+             * main thread while Bluetooth is up stalled that thread until the
+             * next Bluetooth interrupt (M2, measured — see apps/handoff).
+             */
+            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
         }
         break;
 
     case HCI_EVENT_DISCONNECTION_COMPLETE:
         reset_connection_state();
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
         /*
          * Advertising stops on connection and BTstack does not restart it, so
          * a band that is disconnected while the wearer's phone is out of range
@@ -343,7 +357,18 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
         break;
 
     case ATT_EVENT_CAN_SEND_NOW:
-        pump_rx_vcard();
+        /*
+         * One notify per can-send-now. A vCard chunk in flight wins; status
+         * goes out on the next event, which the pump asks for anyway.
+         */
+        if (s_rx_vcard_active) {
+            pump_rx_vcard();
+            if (s_status_pending) att_server_request_can_send_now_event(s_con);
+        } else if (s_status_pending && s_sub_status) {
+            s_status_pending = false;
+            att_server_notify(s_con, H_STATUS_VALUE,
+                              (const uint8_t *)&s_status, sizeof s_status);
+        }
         break;
 
     case ATT_EVENT_DISCONNECTED:
@@ -479,13 +504,15 @@ bool ble_notify_status(const ble_status_t *st)
 
     /*
      * Status fits one notification at the floor, so it needs no pacing — but
-     * it can still collide with a vCard chunk in flight. Dropping it is
-     * correct: the next one carries the same state a moment later, and
-     * delivering the card matters more.
+     * it is almost always sent from inside a write callback (provisioning,
+     * a control opcode), where the outgoing buffer is reserved for the write
+     * response and a direct att_server_notify() fails. Measured at M2: not
+     * one status ever reached the phone that way. So it is deferred to the
+     * next can-send-now, behind any vCard chunk in flight.
      */
-    return att_server_notify(s_con, H_STATUS_VALUE,
-                             (const uint8_t *)&s_status,
-                             sizeof s_status) == ERROR_CODE_SUCCESS;
+    s_status_pending = true;
+    att_server_request_can_send_now_event(s_con);
+    return true;
 }
 
 bool ble_notify_telemetry(const void *scores, size_t len)

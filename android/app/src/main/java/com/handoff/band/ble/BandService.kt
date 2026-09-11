@@ -99,7 +99,35 @@ class BandService : LifecycleService(), BandClient.Listener {
     /** See [BandClient.forceMtuFloor] — an M2 exit criterion, not a debug toy. */
     var forceMtuFloor: Boolean
         get() = client?.forceMtuFloor ?: false
-        set(v) { client?.forceMtuFloor = v }
+        set(v) {
+            val c = client ?: return
+            if (c.forceMtuFloor == v) return
+            /*
+             * The ATT MTU is negotiated once per connection and cannot be
+             * lowered on a live link, so setting the flag alone would leave
+             * the band still notifying at the negotiated size. Rebuilding the
+             * client is what makes the README procedure -- turn the floor on
+             * and repeat 1 and 2 -- actually repeat at the floor.
+             */
+            val addr = _state.value.address ?: return
+            c.close()
+            _state.value = _state.value.copy(connected = false, ready = false, status = null)
+            /*
+             * close() alone does not drop the ACL: the stack keeps the link
+             * up for a moment and a new client opened straight away rides it,
+             * MTU and all -- measured, the "reconnect" took 70 ms and the band
+             * still saw 255. BandClient.close() now disconnects first, and
+             * this waits for the link to actually go before reconnecting.
+             */
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (client != null) return@postDelayed   // something else reconnected
+                client = BandClient(this, addr, this).also {
+                    it.forceMtuFloor = v
+                    it.connect()
+                }
+            }, 2000)
+            client = null
+        }
 
     // ---- BandClient.Listener --------------------------------------------
 

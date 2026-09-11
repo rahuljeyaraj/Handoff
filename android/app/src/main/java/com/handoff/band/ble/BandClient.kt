@@ -9,7 +9,10 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
 import java.util.ArrayDeque
@@ -60,6 +63,8 @@ class BandClient(
     var forceMtuFloor: Boolean = false
 
     private var gatt: BluetoothGatt? = null
+    private var device: BluetoothDevice? = null
+    private var bondWatch: BroadcastReceiver? = null
     private var mtu = Gatt.MIN_ATT_MTU
     private val rxAssembler = Assembler()
 
@@ -77,16 +82,68 @@ class BandClient(
             listener.onError("no Bluetooth adapter")
             return
         }
-        val device = adapter.getRemoteDevice(address)
-        gatt = device.connectGatt(context, /* autoConnect = */ true, callback,
+        val dev = adapter.getRemoteDevice(address)
+        device = dev
+        gatt = dev.connectGatt(context, /* autoConnect = */ true, callback,
             BluetoothDevice.TRANSPORT_LE)
     }
 
     fun close() {
         pending.clear()
         busy = false
-        gatt?.close()
+        stopBondWatch()
+        // disconnect() before close(): close() alone leaves the ACL up, and
+        // the next client would inherit its negotiated MTU (see BandService).
+        gatt?.let { runCatching { it.disconnect() }; it.close() }
         gatt = null
+    }
+
+    // ---- bonding ---------------------------------------------------------
+
+    /*
+     * Bond explicitly rather than trusting the stack to pair on the band's
+     * INSUFFICIENT_ENCRYPTION reply to the rx_vcard CCCD write. Measured on
+     * a OnePlus CPH2569 / Android 15: the reply arrives, no pairing starts,
+     * no callback ever fires, and the operation queue stalls forever. The
+     * OS pairing dialog still appears at the first moment the encrypted link
+     * is needed, which is the behaviour architecture §11.3 asks for.
+     */
+    private fun bonded(): Boolean =
+        device?.bondState == BluetoothDevice.BOND_BONDED
+
+    private fun bondThen(next: () -> Unit) {
+        val dev = device ?: return
+        if (bondWatch != null) return          // already waiting on one
+
+        val watch = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                val who: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                    i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                else @Suppress("DEPRECATION") i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                if (who?.address != dev.address) return
+
+                when (i.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)) {
+                    BluetoothDevice.BOND_BONDED -> { stopBondWatch(); next() }
+                    BluetoothDevice.BOND_NONE -> {
+                        stopBondWatch()
+                        listener.onError("pairing failed or was refused")
+                    }
+                }
+            }
+        }
+        bondWatch = watch
+        context.registerReceiver(watch,
+            IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+
+        if (!dev.createBond()) {
+            stopBondWatch()
+            listener.onError("could not start pairing")
+        }
+    }
+
+    private fun stopBondWatch() {
+        bondWatch?.let { runCatching { context.unregisterReceiver(it) } }
+        bondWatch = null
     }
 
     // ---- outbound --------------------------------------------------------
@@ -185,7 +242,22 @@ class BandClient(
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     listener.onConnectionChanged(connected = true, ready = false)
-                    g.requestMtu(247)   // discovery waits for the MTU answer
+                    /*
+                     * Asking for 247 is what makes rx_vcard arrive in one
+                     * chunk on a modern handset. The band sizes its notify
+                     * chunks from the NEGOTIATED MTU (ble.c notify_room()),
+                     * so forcing the floor app-side only shrinks the my_vcard
+                     * write direction unless we also decline to negotiate --
+                     * and then criterion 4 tests reassembly in neither
+                     * direction it claims to. Leaving the MTU at the 23-byte
+                     * default is the only thing that makes the band chunk.
+                     */
+                    if (forceMtuFloor) {
+                        mtu = Gatt.MIN_ATT_MTU
+                        g.discoverServices()
+                    } else {
+                        g.requestMtu(247)   // discovery waits for the MTU answer
+                    }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     pending.clear()
@@ -210,15 +282,16 @@ class BandClient(
             }
 
             /*
-             * Subscribing to rx_vcard is what triggers pairing: its CCCD is
-             * WRITE_ENCRYPTED in ble_service.gatt, so the write fails with
-             * INSUFFICIENT_AUTHENTICATION and Android transparently bonds and
-             * retries. That is deliberate — the pairing dialog appears when
-             * the app first needs the encrypted link, not on a bare connect.
+             * rx_vcard's CCCD is WRITE_ENCRYPTED in ble_service.gatt, so the
+             * bond has to exist before the subscribe goes out — see bondThen()
+             * for why it is made explicitly rather than left to the stack.
              */
-            queue { subscribe(Gatt.RX_VCARD) }
-            queue { subscribe(Gatt.STATUS) }
-            listener.onConnectionChanged(connected = true, ready = true)
+            val subscribeAll = {
+                queue { subscribe(Gatt.RX_VCARD) }
+                queue { subscribe(Gatt.STATUS) }
+                listener.onConnectionChanged(connected = true, ready = true)
+            }
+            if (bonded()) subscribeAll() else bondThen(subscribeAll)
         }
 
         override fun onDescriptorWrite(
