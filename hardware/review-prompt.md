@@ -85,8 +85,7 @@ debounce cap; debounce in firmware. Its jobs, so the next milestones have a
 bench control: force TX / force RX / provisioning mode / clear bond. Record
 that intent in the README.
 
-**Mounting holes — missing entirely.** Add four `Mechanical:MountingHole` (M2.5
-or M3, decide from the enclosure) so the board can be fixed in the box. This is
+**Mounting holes — missing entirely.** Add four `Mechanical:MountingHole` (M3) so the board can be fixed in the box. This is
 the most common omission on a first board.
 
 **Charger port.** The cell is charged off-board on a TP4056, which today means
