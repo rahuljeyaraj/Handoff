@@ -66,7 +66,13 @@ VIA_D, VIA_DRILL = 0.6, 0.3
 PICO_AT = (28.9, 60.6)                # where pad 1 lands
 PICO_ROT = 180
 ROW_LF, ROW_TH = 28.9, 11.12          # pins 1-20 / pins 21-40
-BRK_LF, BRK_TH = ROW_LF - 2.54, ROW_TH + 2.54   # breakout columns, inboard
+# Breakout columns sit OUTBOARD of their pin rows, between the row and the wall.
+# They were inboard, one hop into the channel, and that is what over-subscribed
+# it: two columns of pads plus two columns of 1206s plus an MSOP-8 in 10 mm.
+# Outboard they cost the channel nothing, and each pad is still a single hop
+# from its own pin. 8.6 keeps the thumb column clear of the cell pocket (x = 10)
+# and 31.2 keeps the little-finger column out of H4's 8 mm boss keep-out.
+BRK_LF, BRK_TH = 31.44, 8.6
 
 
 def pico_pin(n):
@@ -90,11 +96,12 @@ TOP, BOT = "F", "B"
 # Courtyards, measured from the footprints, are what set the pitches below:
 #   1206 hand-solder  4.99 x 2.35      MSOP-8   3.59 x 6.45 (at 270 deg)
 #   XH 2p 8.49 x 6.84   test pad 2.59   solder jumper 3.39 x 2.59
-# Column pitch is 5.3 mm because a vertical 1206 is 4.99 tall; the AFE's two
-# columns sit at x 16.7 and 23.3 because U2's courtyard is 3.59 wide and the
-# breakout columns at x 13.66 / 26.36 are 3.09 wide. There is no slack in this
-# channel: it is 10 mm and it holds three columns of parts.
-COL_L, COL_R = 16.7, 23.3
+# Column pitch is 5.3 mm because a vertical 1206 is 4.99 tall. With the breakout
+# pads moved outboard the channel is the full 16.2 mm between the pin rows'
+# pads, so the AFE's two columns open out to x 15.6 and 24.4: that is a 1.43 mm
+# lane each side of U2 and a 2.5 mm lane outboard of each column, where before
+# there was 0.33 mm and nothing.
+COL_L, COL_R = 15.6, 24.4
 PITCH = 5.3
 
 PLACE = {
@@ -131,7 +138,12 @@ PLACE = {
     # else touches it. With 1206 hand-solder pads that is as close to "butted up
     # to the pin" as the package allows.
     "U2":  ("@", 20.0, 32.0, 270, TOP),
-    "R2":  ("@", 19.675, 26.0, 270, TOP),   # pad 2 (HIZ) at y 27.55, in line with pin 3
+    # R2 sits 2 mm further toward the hand than the first pass put it. Its pad is
+    # 1.3 mm wide and lands on x 19.025-20.325, which is exactly over pins 3 and
+    # 2; at y 26.0 it left a 0.9 mm slot above U2's pad row and pins 1 and 2 had
+    # nowhere to escape to. At 24.0 the slot is 2.65 mm and takes two tracks.
+    # The cost is the 1 MOhm island: 8.4 mm of trace instead of 6.4.
+    "R2":  ("@", 19.675, 24.0, 270, TOP),   # pad 2 (HIZ) at y 25.55, in line with pin 3
     "R3":  ("@", COL_L, 26.0, 90, TOP),     # pad 1 (HIZ) at y 27.55
 
     # left column: stage-1 feedback, the interstage pair, the ADC cap, R10
@@ -172,9 +184,13 @@ PLACE = {
     "C6":  ("@", 33.0, 40.0, 180, BOT),     # DNP across JP2, between J5 and D1
     # TP11 and TP8 flank JP5 so an ammeter is a 3 mm clip, not a 24 mm reach.
     # They sit inboard of D1's pads, which are at x 34.4-36.6 on this face.
-    "TP11": ("@", 32.3, 45.0, 0, BOT),
-    "JP5": ("@", 32.3, 47.7, 0, BOT),
-    "TP8": ("@", 32.3, 50.4, 0, BOT),
+    # The ammeter cluster moves from x 32.3 to the board edge: x 32.3 is now the
+    # little-finger breakout column. TP11 and TP8 still flank JP5, and at the
+    # edge a clip has nothing to foul. D1's pads own x 34.4-36.6 on this face,
+    # so the column goes outboard of them, not between.
+    "TP11": ("@", 37.9, 45.0, 0, BOT),
+    "JP5": ("@", 37.9, 47.7, 0, BOT),
+    "TP8": ("@", 37.9, 50.4, 0, BOT),
 
     # LED series resistors, between J3 and the thumb row, on the bottom face
     "R12": ("@", 7.0, 14.9, 0, BOT),
@@ -213,16 +229,22 @@ for _ref, _x, _y in HOLES:
 TL, BL = "F.Cu", "B.Cu"
 
 ROUTES = [
-    # ---- expansion breakout pads: one hop from their own pin --------------
-    ("/GP0", TL, [(28.9, 60.6), (26.36, 60.6)]),
-    ("/GP1", TL, [(28.9, 58.06), (26.36, 58.06)]),
-    ("/GP4", TL, [(28.9, 47.9), (26.36, 47.9)]),
-    ("/GP5", TL, [(28.9, 45.36), (26.36, 45.36)]),
-    ("/GP20", TL, [(11.12, 25.04), (13.66, 25.04)]),
-    ("/GP21", TL, [(11.12, 27.58), (13.66, 27.58)]),
-    ("/GP27_ADC1", TL, [(11.12, 40.28), (13.66, 40.28)]),
-    ("/RUN", TL, [(11.12, 35.2), (13.66, 35.2)]),
-    ("+3V3", TL, [(11.12, 50.44), (13.66, 50.44)]),
+    # ---- expansion breakout pads: one hop OUTBOARD to their own pin --------
+    # The thumb five run on the bottom face so the top lane at x 9.7 stays
+    # clear: that lane is the only way past the antenna keep-out on this side.
+    ("/GP20", BL, [(11.12, 25.04), (8.6, 25.04)]),
+    ("/GP21", BL, [(11.12, 27.58), (8.6, 27.58)]),
+    ("/RUN", BL, [(11.12, 35.2), (8.6, 35.2)]),
+    ("/GP27_ADC1", BL, [(11.12, 40.28), (8.6, 40.28)]),
+    ("+3V3", BL, [(11.12, 50.44), (8.6, 50.44)]),
+
+    # The little-finger five stop at x 31.2, not on the pad centre: H4's 8 mm
+    # boss keep-out reaches x 31.5 and bars tracks, though not pads.
+    ("/GP0", BL, [(28.9, 60.6), (31.2, 60.6)]),
+    ("/GP1", BL, [(28.9, 58.06), (31.2, 58.06)]),
+    ("GND", BL, [(28.9, 55.52), (31.2, 55.52)]),
+    ("/GP4", BL, [(28.9, 47.9), (31.2, 47.9)]),
+    ("/GP5", BL, [(28.9, 45.36), (31.2, 45.36)]),
 
     # ---- the LED, straight across the thumb strip on the bottom face ------
     ("/LED_R", BL, [(11.12, 14.88), (8.55, 14.9)]),
@@ -249,51 +271,93 @@ ROUTES = [
     ("/PAD", BL, [(33.0, 16.75), (34.8, 16.75), (34.8, 22.3), (32.95, 22.3)]),
     ("/PAD", BL, [(38.05, 31.0), (38.8, 31.0), (38.8, 20.0), (34.8, 20.0)]),
 
-    # ---- RX_IN: the one net that crosses the pin row on the top layer -----
-    # It threads between pins 15 and 16 with 0.295 mm either side.
-    ("Net-(JP7-B)", TL, [(19.68, 24.45), (21.0, 24.45), (21.0, 23.77), (31.3, 23.77)]),
-    ("Net-(JP7-B)", BL, [(31.3, 23.77), (31.3, 22.3), (31.65, 22.3)]),
-    ("Net-(JP7-B)", BL, [(31.3, 23.77), (38.0, 23.77), (38.0, 22.3), (37.55, 22.3)]),
+    # ---- RX_IN threads the pin row between pins 16 and 17, at y 21.23 -----
+    # One gap further toward the hand than the first pass used. That leaves the
+    # whole y 23-25 band free, which is the only lane in which AFE_3V3 can get
+    # from the channel out to C5 at the hand end.
+    ("Net-(JP7-B)", TL, [(19.675, 22.45), (21.0, 22.45), (21.0, 21.23), (31.3, 21.23)]),
+    ("Net-(JP7-B)", BL, [(31.3, 21.23), (31.3, 22.3), (31.65, 22.3)]),
+    ("Net-(JP7-B)", TL, [(31.3, 21.23), (36.8, 21.23), (36.8, 22.3)]),
 
-    # ---- the 1 MOhm island: three pads, 3.0 x 2.3 mm, nothing else on it --
-    ("Net-(U2A-+)", TL, [(16.7, 27.55), (19.68, 27.55), (19.68, 29.89)]),
+    # ---- the 1 MOhm island: R3, R2 and pin 3, a T 8.4 mm end to end -------
+    ("Net-(U2A-+)", TL, [(15.6, 27.55), (19.675, 27.55), (19.675, 29.887)]),
+    ("Net-(U2A-+)", TL, [(19.675, 27.55), (19.675, 25.55)]),
 
-    # stage 1's feedback (U2 pin 2 -> R4.1, R5.1) and OUT1's hop from pin 1 to
-    # R4.2 are NOT routed: see "The AFE channel is over-subscribed" in
-    # hardware/README.md. R2's pad stops 0.225 mm short of U2's pin-1 pad, which
-    # is not a lane, and routing round it crosses the 1 MOhm island. The fix is a
-    # placement change, so it is left open rather than bodged.
+    # ---- stage 1 -----------------------------------------------------------
+    # Pin 2 leaves its pad twice: north into the 2.65 mm slot R2 vacated, and
+    # south under U2's body, where the island's vertical does not reach. That
+    # second escape is what the first pass could not find.
+    ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 27.2), (21.9, 27.2),
+                         (21.9, 25.75), (24.4, 25.75)]),
+    ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 31.3), (17.0, 31.3),
+                         (17.0, 29.65), (15.6, 29.65)]),
+    # OUT1: pin 1 -> R4.2 -> down the right outboard lane -> across to C1 in
+    # the gap between R8's two pads, which is the only 1.35 mm window there.
+    ("/OUT1", TL, [(20.975, 29.887), (20.975, 28.6), (25.7, 28.6),
+                   (25.7, 43.2), (16.5, 43.2)]),
+    ("/OUT1", TL, [(21.6, 43.2), (21.6, 48.5)]),
+    ("/OUT1", BL, [(21.6, 48.5), (21.6, 51.0), (22.8, 51.9)]),
+    ("/OUT1", TL, [(18.9, 43.2), (18.9, 54.4), (16.5, 56.0)]),
 
-    # ---- stage 2 input and feedback --------------------------------------
-    ("Net-(U2B-+)", TL, [(16.7, 40.24), (18.3, 40.24), (18.3, 34.11), (19.02, 34.11)]),
-    ("Net-(U2B-+)", TL, [(16.7, 34.95), (18.3, 34.95)]),
-    ("Net-(U2B--)", TL, [(19.68, 34.11), (19.68, 39.45), (23.3, 39.45)]),
-    ("Net-(U2B--)", TL, [(23.3, 39.45), (23.3, 41.65)]),
-    ("Net-(JP3-B)", TL, [(20.32, 34.11), (20.32, 36.35), (23.3, 36.35)]),
+    # ---- stage 2 -----------------------------------------------------------
+    # The lower row fans out planar: pin 5 west, then 6, 7 and 8 east in that
+    # order, each one lane further out than the pin to its right.
+    ("Net-(U2B-+)", TL, [(19.025, 34.112), (19.025, 35.4), (15.6, 35.4)]),
+    ("Net-(U2B-+)", TL, [(16.9, 35.4), (16.9, 40.237), (15.6, 40.237)]),
+    ("Net-(U2B--)", TL, [(19.675, 34.112), (19.675, 36.9), (22.6, 36.9),
+                         (22.6, 41.65), (24.4, 41.65)]),
+    ("Net-(U2B--)", TL, [(24.4, 41.65), (24.4, 39.45)]),
+    ("Net-(JP3-B)", TL, [(20.325, 34.112), (20.325, 36.1), (24.4, 36.1)]),
 
-    # ---- VREF: a bus down the outboard side of the left column ------------
-    ("VREF", TL, [(16.7, 24.45), (15.2, 24.45), (15.2, 38.05), (16.7, 38.05)]),
-    ("VREF", TL, [(15.2, 32.75), (16.7, 32.75)]),
+    # ---- VREF: the left outboard lane, with one dive so ADC0 can cross ----
+    ("VREF", TL, [(13.9, 24.45), (15.6, 24.45)]),
+    ("VREF", TL, [(13.9, 24.45), (13.9, 44.85)]),
+    ("VREF", TL, [(13.9, 32.75), (15.6, 32.75)]),
+    ("VREF", TL, [(13.9, 38.05), (15.6, 38.05)]),
+    # One dive, y 44.85 to 52.5. It is what lets ADC0, +3V3 and the divider's
+    # run out to C4 cross the bus on the top face instead of fighting it, and
+    # VREF is a DC reference - two vias in it cost nothing.
+    ("VREF", BL, [(13.9, 44.85), (13.9, 52.5)]),
+    ("VREF", TL, [(13.9, 52.5), (13.9, 55.0)]),
+
+    # ---- ADC0: C2 to pin 31, and down to the elbow block ------------------
+    ("/ADC0", TL, [(15.6, 45.538), (12.3, 45.538), (12.3, 37.74), (11.12, 37.74)]),
+
+
+    # ---- AFE supply: JP4 feeds C3 and U2 pin 8, R10 and C5 ----------------
+    ("/AFE_3V3", TL, [(20.975, 34.112), (24.4, 34.112)]),
+    ("/AFE_3V3", BL, [(20.0, 47.3), (20.0, 48.4)]),
+
+
+    # ---- the VREF divider: R10, R11, JP6 and C4 ---------------------------
+    ("Net-(JP6-A)", TL, [(15.6, 50.85), (17.6, 50.85), (17.6, 52.0)]),
+    ("Net-(JP6-A)", TL, [(24.4, 55.35), (21.4, 55.35)]),
+    ("Net-(JP6-A)", BL, [(21.4, 55.35), (21.4, 54.0), (18.2, 54.0), (17.3, 53.0)]),
+    # C4 sits at the hand end; x 9.7 is the only top lane past the antenna
+    # keep-out on this side, and the thumb breakout stubs are on the bottom
+    # face precisely so that it stays clear.
+    ("Net-(JP6-A)", TL, [(15.6, 50.85), (14.6, 51.71), (9.7, 51.71),
+                         (9.7, 6.0), (10.75, 4.5)]),
+
+    # ---- the elbow jumpers ------------------------------------------------
+    ("Net-(JP3-C)", TL, [(24.4, 46.95), (22.4, 46.95), (22.4, 49.8)]),
+    ("Net-(JP3-C)", BL, [(22.4, 49.8), (22.4, 50.4), (24.1, 50.4), (24.1, 51.9)]),
+    ("Net-(JP1-A)", TL, [(24.4, 50.05), (27.7, 50.05), (27.7, 56.6), (26.9, 56.6)]),
+    ("Net-(JP1-A)", BL, [(26.9, 56.6), (24.65, 56.3)]),
 
     # ---- power on the little-finger strip ---------------------------------
-    # SW_OUT crosses the board on the bottom face just below the pocket (y > 46),
-    # which is the only lane that is neither over the cell/pad nor in the jumper
-    # block. BAT+ does the same 1.2 mm higher.
     # Both long crossings run on the bottom face, threading the 2.54 mm gaps
-    # between the header rows' pads: 0.25 mm wide, ~0.2 mm each side. There is no
-    # lane for them on the top face - the AFE's two columns occupy x 22.4-24.2
-    # and 15.8-17.6 without a break from y 25 to 56.
-    # Two free bands exist between the header rows' pads, at y 41.55 and 44.09.
-    # BAT+ takes the first and SW_OUT the second, so they never have to cross.
+    # between the header rows' pads: 0.25 mm wide, ~0.2 mm each side. Two free
+    # bands exist, at y 41.55 and 44.09; BAT+ takes the first and SW_OUT the
+    # second, so they never have to cross.
     ("/SW_OUT", BL, [(6.3, 43.0), (4.8, 43.0), (4.8, 44.09), (30.5, 44.09),
                      (30.5, 42.5), (35.5, 42.5), (35.5, 43.0)], 0.25),
-    ("Net-(D1-K)", BL, [(35.5, 50.62), (34.0, 50.62), (34.0, 45.0), (33.05, 45.0)]),
-    ("Net-(D1-K)", BL, [(34.0, 47.7), (32.95, 47.7)]),
-    ("VSYS", BL, [(31.65, 47.7), (31.0, 47.7), (31.0, 50.4), (32.3, 50.4)]),
-    # VSYS back to pin 39 threads the elbow ends of both header rows, so it is
-    # narrowed to 0.3: at 0.5 it will not clear a 2.54 mm pitch pad pair.
-    ("VSYS", BL, [(31.0, 50.4), (31.0, 52.0)]),
-    ("VSYS", TL, [(31.0, 52.0), (31.0, 59.33), (12.5, 59.33), (12.5, 58.06), (11.12, 58.06)], 0.3),
+    ("Net-(D1-K)", BL, [(35.5, 50.62), (35.5, 45.0), (37.9, 45.0)]),
+    ("Net-(D1-K)", BL, [(37.9, 45.0), (39.5, 45.0), (39.5, 47.7), (38.55, 47.7)]),
+    ("VSYS", BL, [(37.25, 47.7), (37.25, 51.5), (37.25, 52.8), (30.2, 52.8)]),
+    ("VSYS", BL, [(37.9, 50.4), (37.25, 50.4)]),
+    ("VSYS", TL, [(30.2, 52.8), (30.2, 59.33), (12.5, 59.33), (12.5, 58.06),
+                  (11.12, 58.06)], 0.3),
     ("/BAT+", TL, [(33.0, 28.25), (33.0, 32.0), (31.5, 32.0), (31.5, 37.25), (33.0, 37.25)]),
     ("/BAT+", BL, [(33.85, 28.25), (35.0, 28.25), (35.0, 27.0), (36.05, 27.0)]),
     ("/BAT+", BL, [(33.0, 37.25), (33.0, 41.55), (3.5, 41.55),
@@ -301,8 +365,18 @@ ROUTES = [
 ]
 
 VIAS = [
-    ("Net-(JP7-B)", 31.3, 23.77),
-    ("VSYS", 31.0, 52.0),
+    ("Net-(JP7-B)", 31.3, 21.23),
+    ("VSYS", 30.2, 52.8),
+    ("/OUT1", 21.6, 48.5),
+    ("Net-(JP3-C)", 22.4, 49.8),
+    ("Net-(JP1-A)", 26.9, 56.6),
+    ("VREF", 13.9, 44.85),
+    ("VREF", 13.9, 52.5),
+    ("Net-(JP6-A)", 17.6, 52.0),
+    ("Net-(JP6-A)", 21.4, 55.35),
+    # The two pours are one net and have to be stitched, or DRC reports them
+    # unconnected. Four, all outside the cell pocket and the antenna keep-out.
+    ("GND", 6.0, 9.5), ("GND", 31.0, 7.0), ("GND", 2.0, 53.0), ("GND", 9.0, 33.0),
 ]
 
 # --------------------------------------------------------------------------
@@ -356,8 +430,8 @@ SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4"}
 REF_AT = {
     "U2": (0.0, 4.6), "SW1": (-3.0, -8.0),
     "TP1": (0.0, -1.6), "TP12": (0.0, -1.6), "TP10": (0.0, -1.6),
-    "TP9": (0.0, 1.9), "TP11": (2.8, 0.0), "TP8": (0.0, 2.1),
-    "JP5": (3.0, 0.0), "JP7": (0.0, 1.8), "JP2": (0.0, 1.8), "JP8": (0.0, 1.8),
+    "TP9": (0.0, 1.9), "TP11": (-2.8, 0.0), "TP8": (-2.1, 1.6),
+    "JP5": (-3.0, 0.0), "JP7": (0.0, 1.8), "JP2": (0.0, 1.8), "JP8": (0.0, 1.8),
     "JP4": (0.0, -1.7), "JP6": (0.0, -1.7), "JP3": (2.6, -2.6), "JP1": (0.0, 1.8),
     "TP6": (0.0, -1.6), "TP7": (0.0, -1.6), "TP5": (0.0, -1.6), "TP2": (0.0, -1.6),
     "TP3": (0.0, -1.6), "TP4": (0.0, 1.8), "TP13": (0.0, 1.8),

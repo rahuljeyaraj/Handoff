@@ -545,3 +545,41 @@ LED's legs, C4/C5 lead pitch, MCP6292 pin-1 mark) are unchanged. Added to them:
 strip and R10/R11 are in the channel. It is harmless — C4's 10 µF holds that
 node at 318 Ω at 50 Hz, so the trace picks up nothing that matters — but it is
 the longest high-impedance run on the board and worth knowing about at M7.
+
+## Moving the breakout pads out of the channel
+
+The owner's call on the three remedies was the second one: the ten expansion
+pads are low priority, take them outside, put them wherever there is space.
+
+They moved from inboard of their pin rows to outboard - x 8.6 on the thumb
+side, x 31.44 on the little-finger side, each pad still one hop from its own
+pin. That returns the channel under the Pico to the full 16.2 mm between the
+pin rows, and the AFE's two columns opened from x 16.7/23.3 to 15.6/24.4.
+
+Three consequential moves came with it, each forced by a measurement rather
+than by taste:
+
+* R2 is 2 mm further toward the hand. Its pad is 1.3 mm wide on x 19.025-20.325,
+  sitting over pins 3 and 2; at the old position the slot above U2's pad row was
+  0.9 mm and pins 1 and 2 could not escape. The 1 MOhm island grew 6.4 -> 8.4 mm.
+* TP11/JP5/TP8 went to the board edge at x 37.9, because x 32.3 is now the
+  little-finger breakout column and D1's pads own x 34.4-36.6.
+* The thumb breakout stubs are on the bottom face, reserving the top lane at
+  x 9.7 - the only route past the antenna keep-out on that side - for C4.
+
+The amplifier routes now. What is left open is 17 items, all in the elbow
+jumper block or in AFE_3V3's exit from the channel, and the cause is the same
+one the channel had: too many bottom-face jumper and test-pad bodies in too
+small an area. JP3's three pads alone wall off x 22.3-25.9, and OUT1 and
+AFE_3V3 both want the single 1.35 mm window between R8's pads at y 43.2.
+
+Nothing was bodged to close the gap: the board carries no shorts, no crossings
+and no clearance violations, and schematic parity is still 0.
+
+### Cost, for the record
+
+PCBWay quoted the owner **$5 for two layers at 24 h turnaround and $25 for four
+layers at 4-5 days**. Four layers would dissolve both remaining bottlenecks at
+once - a power plane and a signal layer make the elbow block and the AFE supply
+trivial - for $20 and three days. Two layers is still the target, but that is
+now a $20 decision rather than a design constraint.

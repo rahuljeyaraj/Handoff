@@ -354,80 +354,54 @@ are moved to the fab layer too: U1's is a 21 × 51 box drawn over everything tha
 deliberately lives under it. That is what the ten `lib_footprint_mismatch`
 warnings are — the only warnings the board reports, and all deliberate.
 
-### The AFE channel is over-subscribed — the one finding from laying it out
+### The breakout pads moved out, and the channel routes
 
-The floor plan puts the AFE in the 10 mm channel under the Pico *and* puts ten
-breakout pads in the same channel, one inboard of each pin. That was recorded as
-the cost of overturning design §12.3. Laying it out turns the cost into a number:
+The ten expansion pads used to sit **inboard** of their own pins, one hop into
+the channel under the Pico. That is what over-subscribed it: two columns of
+pads, two columns of 1206s and an MSOP-8 in 10 mm, with R2 stopping 0.225 mm
+short of U2 pin 1 and no routing lane anywhere.
 
-- the breakout columns take 3.09 mm of the 10 mm at x 13.66 and x 26.36;
-- the two 1206 columns take 2.35 mm each, at x 16.7 and x 23.3;
-- U2 takes 3.59 mm in the middle.
+They now sit **outboard**, between each pin row and the wall - x 8.6 on the
+thumb side, x 31.44 on the little-finger side. Each pad is still a single hop
+from its own pin, and the channel is the full 16.2 mm between the pin rows.
+With that the AFE columns open out to x 15.6 and 24.4, which gives a 1.43 mm
+lane each side of U2 and 2.5 mm outboard of each column.
 
-That is 14.5 mm of parts in 10 mm of width, overlapped only because the columns
-interleave in y. What is left is **no routing lane at all**: R2's pad stops
-0.225 mm short of U2's pin-1 pad, and the gap between each 1206 column and U2 is
-about 1.2 mm — one track, not two.
+Three other things had to move with them:
 
-The consequence is concrete. **Stage 1's feedback (U2 pin 2 → R4.1, R5.1) and
-OUT1's hop from pin 1 to R4.2 are not routed**, and neither are VREF's lower
-half, AFE_3V3, ADC0, the JP3/JP6 legs or the long +3V3 run — 27 unconnected
-items in all. Every route that *was* possible has been taken, including the one
-net that threads the Pico's pin row on the top layer (RX_IN, between pins 15 and
-16 with 0.295 mm either side) and the two long power crossings, which run on the
-bottom face in the 2.54 mm bands between the header rows' pads at y 41.55 and
-y 44.09. There is no third band.
+* **R2 went 2 mm toward the hand.** Its 1.3 mm pad lands on x 19.025-20.325,
+  directly over pins 3 and 2. At the old y it left a 0.9 mm slot above U2's pad
+  row and pins 1 and 2 had nowhere to escape. At y 24.0 the slot is 2.65 mm and
+  takes two tracks. The cost is the 1 MOhm island: 8.4 mm of trace, not 6.4.
+* **The ammeter cluster went to the board edge** (x 37.9). x 32.3 is now the
+  little-finger breakout column, and at the edge a clip has nothing to foul.
+* **The thumb breakout stubs run on the bottom face**, so the top lane at
+  x 9.7 stays clear. That lane is the only way past the antenna keep-out on the
+  thumb side, and C4 needs it.
 
-This is a placement problem, not a routing problem, so it has been left open
-rather than bodged with vias through the electrode pour. Three ways out, cheapest
-first:
+The amplifier now routes: both gain stages, the 1 MOhm island, the VREF bias
+bus, the interstage cap and the ADC filter. Pin 2 escapes its pad twice - north
+into the slot R2 vacated, and south under U2's body, where the island's
+vertical does not reach. That second escape is the one the first pass could not
+find.
 
-1. **Give the AFE one column instead of two.** The channel is 36 mm long; 15
-   passives on a 5.3 mm pitch need 80 mm of column, so one column does not fit —
-   *unless* the passives go to 0805, which is 2.0 mm wide and 3.4 mm pitch. That
-   frees a 3 mm lane down the middle and is a parts change, not a layout change.
-2. **Move the breakout pads out of the channel.** They are the reason §12.3 was
-   overturned in the first place. Ten pads on the hand strip, or a 2×5 block at
-   the elbow end, gives the AFE the full 16 mm between the pin rows.
-3. **Four layers.** PCBWay's 4-layer is barely dearer, and an inner ground plane
-   would also make the top pour a better electrode than it is with traces cut
-   through it.
+## What is still open, and where it moved to
 
-The owner's call, and it should be made before any more routing effort goes in.
+**17 unconnected items, no shorts and no clearance violations.** Every one of
+them is in one of two places, and neither is the AFE:
 
-### What the floor plan changed, including three rules it overturns
+1. **The elbow jumper block.** JP1, JP3, JP4, JP6 and six test pads occupy
+   x 15-26, y 49-60 on the bottom face. JP3's three pads alone wall off
+   x 22.3-25.9. Open there: TP3-JP3, TP5-JP6, TP4-JP1, JP4-TP6, JP4-R10,
+   TP2-OUT1, TP12-RX_IN and +3V3 to JP4 and R15.
+2. **The AFE supply leaving the channel.** OUT1 crosses the right column in the
+   only window there is - the 1.35 mm gap between R8's two pads at y 43.2 - and
+   AFE_3V3 needs the same window to reach JP4, R10 and C5. One window, two nets.
 
-The floor plan (`floorplan.svg`) settled the enclosure, and settling it
-contradicted three of the rules above. They are struck here rather than quietly
-edited away, because each one cost something real.
+Both are the same shape of problem the channel had: too many bottom-face
+jumper and test-pad bodies in too small an area. The cheapest fix is to thin
+the elbow block - several of those test pads exist for a bring-up step that
+happens once - or to give the AFE supply its own via down to the bottom face
+outside the cell pocket. Deliberately not bodged with vias through the
+electrode pour.
 
-- **Face assignment.** The AFE is SMD on the **top** face, in the 10 mm channel
-  under the Pico. The solder jumpers and test pads go on the **bottom** face, so
-  they stay reachable with the Pico socketed.
-- **No parts on the bottom face over the cell/pad footprint.** The stack sits
-  ~0.5 mm below the board, so any through-hole protrusion there eats the 1.5 mm
-  of solder clearance the section drawing allows.
-- **No bottom-side pour over the pad.** The TOP pour is the ground-plane
-  electrode; a bottom pour there would sit between the pad and the skin.
-- **Antenna keep-out at the hand end.** No copper under it. Thin escapes only,
-  for pins 16–24 — which is where the LED, and now BTN and ROLE, live.
-- **Design §12.3 is no longer met.** "Op-amp far from the Pico and its antenna"
-  above is **overturned**: the AFE is now directly under the Pico. Once the ten
-  breakout pads take their positions inboard of their own pins, the channel
-  under the Pico is the only contiguous area left on the board. This is a known
-  compromise, not an oversight. JP4 and the M7 bench-supply comparison are how
-  we find out what it costs — open JP4, run the AFE from a second cell, compare
-  noise floors. If the SMPS wins, the fix is a shield can or a different board,
-  not a re-route.
-- **Stacking the pad under the cell restores ~16 pF of pad-to-return shunt** —
-  the figure design §8.2 rejects for a two-sided board, and the rule "never put
-  PAD and ground plane on two faces of one board" above is **bent** by it. The
-  owner chose the stack so cell and pad share one four-sided pocket. Mitigation:
-  2–3 mm of foam between cell and pad, which is also what stops the cell chafing.
-  M7's loss measurement is the test; if it reads worse than the budget, the foam
-  gets thicker before anything else changes.
-- **The cell sits partly under the antenna keep-out.** Nothing else fits there
-  once the pad is centred, so the rule "antenna end away from J2" above is
-  **met only for J2** — the cell is a different intruder. If BLE range
-  disappoints, the fix is a smaller pad, not a smaller cell: the pad's area is
-  what the link budget can most afford to lose.
