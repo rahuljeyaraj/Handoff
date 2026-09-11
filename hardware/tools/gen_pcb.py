@@ -617,15 +617,17 @@ def build():
         s.SetLayer(pcbnew.Edge_Cuts)
         s.SetWidth(mm(0.1))
         board.Add(s)
-    # arcs, centre / start / end, clockwise round the outline
-    arcs = [((r, r), (r, 0), (0, r)), ((BW - r, r), (BW, r), (BW - r, 0)),
-            ((BW - r, BH - r), (BW - r, BH), (BW, BH - r)),
-            ((r, BH - r), (0, BH - r), (r, BH))]
-    for (cx, cy), (sx, sy), (ex, ey) in arcs:
+    # Corner arcs, given as start / mid / end. The mid point sits ON the
+    # corner (centre + r along the diagonal toward the board corner): given only
+    # a centre and two ends, pcbnew drew the 270-degree arc the long way round
+    # through the board, so every corner was a near-circle.
+    k = r * (1 - 1 / 2 ** 0.5)
+    arcs = [((r, 0), (k, k), (0, r)), ((BW, r), (BW - k, k), (BW - r, 0)),
+            ((BW - r, BH), (BW - k, BH - k), (BW, BH - r)),
+            ((0, BH - r), (k, BH - k), (r, BH))]
+    for (sx, sy), (mx, my), (ex, ey) in arcs:
         a = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_ARC)
-        a.SetCenter(vec(cx, cy))
-        a.SetStart(vec(sx, sy))
-        a.SetEnd(vec(ex, ey))
+        a.SetArcGeometry(vec(sx, sy), vec(mx, my), vec(ex, ey))
         a.SetLayer(pcbnew.Edge_Cuts)
         a.SetWidth(mm(0.1))
         board.Add(a)
