@@ -475,17 +475,19 @@ class Schematic:
 FP_R = "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
 FP_C = "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
 FP_CP = "Capacitor_THT:CP_Radial_D5.0mm_P2.50mm"
-FP_D41 = "Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal"
+FP_D41 = "Diode_THT:D_DO-41_SOD81_P7.62mm_Horizontal"
 FP_PICO = "Module:RaspberryPi_Pico_Common_THT"
 FP_MSOP8 = "Package_SO:MSOP-8_3x3mm_P0.65mm"
 FP_XH2 = "Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical"
 FP_XH4 = "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
-FP_SOCK10 = "Connector_PinSocket_2.54mm:PinSocket_1x10_P2.54mm_Vertical"
+# J4 is ten separate breakout pads, not a connector: see hardware/README.md
+FP_BRK = "TestPoint:TestPoint_THTPad_D2.0mm_Drill1.0mm"
 FP_TP = "TestPoint:TestPoint_Pad_D1.5mm"
 FP_JP = "Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm"
 FP_JP3 = "Jumper:SolderJumper-3_P1.3mm_Open_RoundedPad1.0x1.5mm"
 FP_BTN = "Button_Switch_THT:SW_PUSH_6mm"
-FP_HOLE = "MountingHole:MountingHole_3.2mm_M3"
+# 3.4 mm (ISO 273 medium) + the 8 mm boss keep-out; written by gen_mount_footprint.py
+FP_HOLE = "handoff:MountingHole_3.4mm_M3_Boss8mm"
 # drawn from the vendor drawing, see hardware/handoff.pretty
 FP_SW = "handoff:SW_Slide_SS-12F23G5"
 
@@ -699,8 +701,9 @@ def build() -> Schematic:
     # unused pins
     for num in ("35", "37"):
         s.no_connect(s.gpin("U1", num))
-    used_left = {"1": "GP0", "2": "GP1", "4": "GP2_TX", "6": "GP4", "7": "GP5", "19": "ROLE", "20": "BTN", "30": "RUN"}
-    used_right = {"21": "LED_R", "22": "LED_G", "24": "LED_B", "26": "GP20", "27": "GP21",
+    used_left = {"1": "GP0", "2": "GP1", "6": "GP4", "7": "GP5", "15": "GP11_TX",
+                 "16": "LED_B", "17": "LED_G", "19": "LED_R", "30": "RUN"}
+    used_right = {"21": "BTN", "22": "ROLE", "26": "GP20", "27": "GP21",
                   "31": "ADC0", "32": "GP27_ADC1"}
     gp_left = ["1", "2", "4", "5", "6", "7", "9", "10", "11", "12", "14", "15", "16", "17", "19", "20"]
     gp_right = ["21", "22", "24", "25", "26", "27", "29", "31", "32", "34"]
@@ -724,19 +727,19 @@ def build() -> Schematic:
     # =====================================================================
     s.text("ANALOGUE — TX drive, shared PAD, x121 receive chain (design §6.3, §6.4)", (110, 60), size=2.0, bold=True)
     Y = 100  # signal row
-    # -- TX: GP2 -> JP2 -> R1 -> PAD node
-    jp2 = s.place(JP, "JP2", "TX", (118, Y - 12), rot=0, fp=FP_JP, desc="Open as shipped: bridge with solder to connect GP2 to the pad (DC-coupled); or fit C6 instead",
+    # -- TX: GP11 -> JP2 -> R1 -> PAD node
+    jp2 = s.place(JP, "JP2", "TX", (118, Y - 12), rot=0, fp=FP_JP, desc="Open as shipped: bridge with solder to connect GP11 to the pad (DC-coupled); or fit C6 instead",
                   ref_at=(-3, 3), val_at=(1, 3))
     r1 = s.place(R, "R1", "1M", (134, Y - 12), rot=90, fp=FP_R, desc="TX safety resistor, design §13")
     a, b = s.gpin("JP2", "1"), s.gpin("JP2", "2")
-    s.wire((a[0] - 8, a[1]), a); s.label("GP2_TX", (a[0] - 8, a[1]), 0, "right bottom")
-    tp9 = s.place(TP, "TP9", "GP2 TX", (a[0] - 6, a[1] - 6), fp=FP_TP, desc="Test pad", ref_at=(1, -2), val_at=(1, 1))
+    s.wire((a[0] - 8, a[1]), a); s.label("GP11_TX", (a[0] - 8, a[1]), 0, "right bottom")
+    tp9 = s.place(TP, "TP9", "GP11 TX", (a[0] - 6, a[1] - 6), fp=FP_TP, desc="Test pad", ref_at=(1, -2), val_at=(1, 1))
     s.wire(s.gpin("TP9", "1"), (a[0] - 6, a[1]))
     s.wire(b, s.gpin("R1", "1"))
-    # C6, DNP, across JP2: AC-couples the TX drive so GP2's leakage (RP2350-E9) cannot reach the pad node.
+    # C6, DNP, across JP2: AC-couples the TX drive so GP11's leakage (RP2350-E9) cannot reach the pad node.
     # Fit only if the M3/M7 leakage measurement says so; then JP2 stays open.
     c6 = s.place(C, "C6", "330pF C0G (DNP)", (118, Y - 20), rot=90, fp=FP_C, dnp=True,
-                 desc="DNP. Optional TX DC block in parallel with JP2; fit instead of bridging JP2 if GP2 leakage biases the pad",
+                 desc="DNP. Optional TX DC block in parallel with JP2; fit instead of bridging JP2 if GP11 leakage biases the pad",
                  ref_at=(12, -1, "center"), val_at=(12, 1, "center"))
     c6a, c6b = s.gpin("C6", "1"), s.gpin("C6", "2")
     s.wire(a, (a[0], c6a[1]), c6a)
@@ -770,7 +773,7 @@ def build() -> Schematic:
     ina_p, ina_n, outa = s.gpin("U2", "3", 1), s.gpin("U2", "2", 1), s.gpin("U2", "1", 1)
     hiz = (ina_p[0] - 8, ina_p[1])
     s.wire(s.gpin("R2", "2"), hiz, ina_p)
-    r3 = s.place(R, "R3", "10M", (hiz[0], Y + 10), rot=0, fp=FP_R, desc="Biases the 10 MOhm node to VREF", ref_at=(-2, -1, "right"), val_at=(-2, 1, "right"))
+    r3 = s.place(R, "R3", "1M", (hiz[0], Y + 10), rot=0, fp=FP_R, desc="Biases the 10 MOhm node to VREF", ref_at=(-2, -1, "right"), val_at=(-2, 1, "right"))
     s.wire(hiz, s.gpin("R3", "1"))
     s.text("10 MOhm node: keep tiny, guard it (README)", (hiz[0] - 10, Y + 24), size=1.0)
     # feedback: R4 above the op-amp from OUT A back to -IN A; R5 from -IN A down to VREF
@@ -787,7 +790,7 @@ def build() -> Schematic:
     s.wire(r4b, (outa[0] + 2, r4b[1]), (outa[0] + 2, outa[1]))
     s.wire(outa, (outa[0] + 2, outa[1]))
     # -- interstage C1 / R6
-    c1 = s.place(C, "C1", "100nF", (outa[0] + 14, outa[1]), rot=90, fp=FP_C, desc="Interstage DC block")
+    c1 = s.place(C, "C1", "330pF C0G", (outa[0] + 14, outa[1]), rot=90, fp=FP_C, desc="Interstage DC block")
     s.wire((outa[0] + 2, outa[1]), (outa[0] + 7, outa[1]), s.gpin("C1", "1"))
     s.label("OUT1", (outa[0] + 7, outa[1]), 0, "left bottom")
     tp2 = s.place(TP, "TP2", "OUT1", (outa[0] + 5, outa[1] - 5), fp=FP_TP, desc="Test pad, stage 1 output", ref_at=(1, -3), val_at=(1, -1))
@@ -843,14 +846,14 @@ def build() -> Schematic:
     # a scope ground next to the analogue test pads (TP7 is up by U2's supply)
     tp13 = s.place(TP, "TP13", "GND", (adc_node[0] + 14, adc_node[1] + 6), fp=FP_TP, desc="Test pad, ground for the analogue probes", ref_at=(1, -3), val_at=(1, -1))
     s.wire(s.gpin("TP13", "1"), (adc_node[0] + 14, adc_node[1] + 8)); s.power("GND", (adc_node[0] + 14, adc_node[1] + 8))
-    s.text("Gain 11 x 11 = 121. Firmware holds GP2 high-Z with its input buffer OFF while receiving (RP2350-E9), so R1 does not load or bias the pad.", (110, 136), size=1.27)
+    s.text("Gain 11 x 11 = 121. Firmware holds GP11 high-Z with its input buffer OFF while receiving (RP2350-E9), so R1 does not load or bias the pad.", (110, 136), size=1.27)
     s.text("Every JP ships OPEN: bridge with solder to bring the board up one stage at a time (README order); wick off to isolate. No test pad on the 10 MOhm node on purpose.", (110, 138), size=1.27)
     s.text("JP3: centre -> R9. Blob to pin 3 = stage 2 (x121); move it to pin 1 = stage 1 only (x11) if stage 2 clips. C6 is DNP: fit it instead of bridging JP2 to AC-couple TX.", (110, 140), size=1.27)
 
     # =====================================================================
     # 6. STATUS LED  (bottom left)
     # =====================================================================
-    s.text("STATUS LED — RGB common cathode on GP16/17/18, direct-solder or JST-XH 4p", (12, 150), size=2.0, bold=True)
+    s.text("STATUS LED — RGB common cathode on GP14/13/12, direct-solder or JST-XH 4p", (12, 150), size=2.0, bold=True)
     LY = 168
     # J3 rot 0: pins on the left, rows LY (R), LY+2 (K), LY+4 (G), LY+6 (B); each series
     # resistor sits on its own pin row, staggered in x so nothing crosses.
@@ -884,23 +887,35 @@ def build() -> Schematic:
     # =====================================================================
     # 7. EXPANSION header (bottom middle)
     # =====================================================================
-    s.text("J4 EXPANSION — spare Pico pins for the next idea (1x10 female)", (150, 150), size=2.0, bold=True)
-    j4 = s.place(C10, "J4", "EXP 1x10", (170, 178), rot=0, fp=FP_SOCK10, desc="3V3 RUN GP0 GP1 GP4 GP5 GP20 GP21 GP27 GND",
-                 ref_at=(-2, -14), val_at=(-2, 14))
-    exp = ["+3V3", "RUN", "GP0", "GP1", "GP4", "GP5", "GP20", "GP21", "GP27_ADC1", "GND"]
-    for i, net in enumerate(exp, start=1):
-        p = s.gpin("J4", str(i))
+    s.text("E1-E10 EXPANSION — one breakout pad inboard of its own Pico pin", (150, 150), size=2.0, bold=True)
+    # Ten separate pads, not a 1x10 header. The floor plan puts each pad directly
+    # inboard of the Pico pin it breaks out, which is ten scattered positions -
+    # a single 1x10 footprint cannot describe that, and a connector symbol whose
+    # pins are nowhere near each other lies to anyone reading the sheet.
+    exp = [("E1", "+3V3", "3V3", 36), ("E2", "RUN", "RUN", 30), ("E3", "GP0", "GP0", 1),
+           ("E4", "GP1", "GP1", 2), ("E5", "GP4", "GP4", 6), ("E6", "GP5", "GP5", 7),
+           ("E7", "GP20", "GP20", 26), ("E8", "GP21", "GP21", 27),
+           ("E9", "GP27_ADC1", "GP27", 32), ("E10", "GND", "GND", 3)]
+    for i, (ref, net, lab, picopin) in enumerate(exp):
+        x = 176 + 34 * (i // 5)
+        y = 162 + 8 * (i % 5)
+        s.place(TP, ref, f"{lab} (pin {picopin})", (x, y), fp=FP_BRK,
+                desc=f"Expansion breakout pad, Pico pin {picopin} ({lab}); placed inboard of that pin",
+                ref_at=(-2, -2, "right"), val_at=(2, -2, "left"))
+        pin = s.gpin(ref, "1")
         if net == "+3V3":
-            s.wire(p, (p[0] - 6, p[1]), (p[0] - 6, p[1] - 3)); s.power("+3V3", (p[0] - 6, p[1] - 3))
+            s.wire(pin, (pin[0] - 6, pin[1])); s.power("+3V3", (pin[0] - 6, pin[1]), rot=270)
         elif net == "GND":
-            s.wire(p, (p[0] - 6, p[1]), (p[0] - 6, p[1] + 3)); s.power("GND", (p[0] - 6, p[1] + 3))
+            s.wire(pin, (pin[0] - 6, pin[1])); s.power("GND", (pin[0] - 6, pin[1]), rot=90)
         else:
-            s.wire(p, (p[0] - 6, p[1])); s.label(net, (p[0] - 6, p[1]), 0, "right bottom")
+            s.wire(pin, (pin[0] - 6, pin[1])); s.label(net, (pin[0] - 6, pin[1]), 0, "right bottom")
+    s.text("Through-hole, 2.0 mm pad / 1.0 mm drill: a wire solders in. RUN to GND is a reset.", (150, 205), size=1.0)
+    s.text("The spare ADC (GP27) is deliberate: a second analogue path is the likeliest hack this board will need.", (150, 207), size=1.0)
 
     # =====================================================================
     # 8. BUTTON, ROLE STRAP, MOUNTING  (bottom right)
     # =====================================================================
-    s.text("BUTTON (GP15), ROLE strap (GP14), MOUNTING", (238, 150), size=2.0, bold=True)
+    s.text("BUTTON (GP16), ROLE strap (GP17), MOUNTING", (238, 150), size=2.0, bold=True)
     BX, BY = 250, 164
     r15 = s.place(R, "R15", "10k", (BX, BY), rot=0, fp=FP_R, desc="BTN pull-up", ref_at=(2, -1), val_at=(2, 1))
     r15a, r15b = s.gpin("R15", "1"), s.gpin("R15", "2")
@@ -917,7 +932,7 @@ def build() -> Schematic:
     # JP8: strap GP14 to GND to pick the board's role for M6 (firmware enables the internal pull-up)
     jy = BY + 18
     jp8 = s.place(JP, "JP8", "ROLE", (BX + 8, jy), rot=0, fp=FP_JP,
-                  desc="Open as shipped: bridge to strap GP14 low = board role for M6 (internal pull-up in firmware)",
+                  desc="Open as shipped: bridge to strap GP17 low = board role for M6 (internal pull-up in firmware)",
                   ref_at=(-3, 3), val_at=(1, 3))
     a8, b8 = s.gpin("JP8", "1"), s.gpin("JP8", "2")
     s.wire((BX - 8, jy), a8); s.label("ROLE", (BX - 8, jy), 0, "right bottom")
@@ -925,7 +940,7 @@ def build() -> Schematic:
     for i in range(4):
         s.place(HOLE, f"H{i + 1}", "M3", (282 + 10 * i, BY + 2), fp=FP_HOLE, desc="Mounting hole, M3 clearance, unplated",
                 in_bom=False, ref_at=(0, -3, "center"), val_at=(0, 3, "center"))
-    s.text("H1-H4: 3.2 mm unplated, one per corner, not tied to GND", (274, BY + 8), size=1.0)
+    s.text("H1-H4: 3.4 mm unplated, 8 mm boss keep-out, one per corner, not tied to GND", (274, BY + 8), size=1.0)
 
     return s
 
@@ -939,15 +954,15 @@ EXPECTED_NETS = {
     "BAT+": {("J1", "2"), ("J5", "2"), ("SW1", "2"), ("TP10", "1")},
     "GND": {("J1", "1"), ("J5", "1"), ("U1", "3"), ("U1", "8"), ("U1", "13"), ("U1", "18"), ("U1", "23"),
             ("U1", "28"), ("U1", "33"), ("U1", "38"), ("U2", "4"), ("C3", "2"), ("C5", "2"), ("R11", "2"), ("C4", "2"),
-            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("J4", "10"), ("TP7", "1"), ("TP13", "1"), ("SW2", "2"), ("JP8", "2")},
+            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("TP7", "1"), ("TP13", "1"), ("SW2", "2"), ("JP8", "2")},
     "SW_OUT": {("SW1", "1"), ("D1", "2")},
     "D1_K": {("D1", "1"), ("JP5", "1"), ("TP11", "1")},
     "VSYS": {("JP5", "2"), ("U1", "39"), ("TP8", "1")},
-    "+3V3": {("U1", "36"), ("JP4", "1"), ("J4", "1"), ("R15", "1")},
+    "+3V3": {("U1", "36"), ("JP4", "1"), ("E1", "1"), ("R15", "1")},
     "AFE_3V3": {("JP4", "2"), ("U2", "8"), ("C3", "1"), ("C5", "1"), ("R10", "1"), ("TP6", "1")},
     "VREF_DIV": {("R10", "2"), ("R11", "1"), ("C4", "1"), ("JP6", "1")},
     "VREF": {("JP6", "2"), ("R3", "2"), ("R5", "2"), ("R6", "2"), ("R8", "2"), ("TP5", "1")},
-    "GP2_TX": {("U1", "4"), ("JP2", "1"), ("C6", "1"), ("TP9", "1")},
+    "GP11_TX": {("U1", "15"), ("JP2", "1"), ("C6", "1"), ("TP9", "1")},
     "JP2_R1": {("JP2", "2"), ("C6", "2"), ("R1", "1")},
     "PAD": {("R1", "2"), ("JP7", "1"), ("J2", "1"), ("TP1", "1")},
     "RX_IN": {("JP7", "2"), ("R2", "1"), ("TP12", "1")},
@@ -959,23 +974,23 @@ EXPECTED_NETS = {
     "OUT2": {("U2", "7"), ("R7", "2"), ("JP3", "3"), ("TP3", "1")},
     "JP3_R9": {("JP3", "2"), ("R9", "1")},
     "R9_JP1": {("R9", "2"), ("JP1", "1")},
-    "BTN": {("U1", "20"), ("R15", "2"), ("SW2", "1")},
-    "ROLE": {("U1", "19"), ("JP8", "1")},
+    "BTN": {("U1", "21"), ("R15", "2"), ("SW2", "1")},
+    "ROLE": {("U1", "22"), ("JP8", "1")},
     "ADC0": {("JP1", "2"), ("C2", "1"), ("TP4", "1"), ("U1", "31")},
-    "LED_R": {("U1", "21"), ("R12", "1")},
-    "LED_G": {("U1", "22"), ("R13", "1")},
-    "LED_B": {("U1", "24"), ("R14", "1")},
+    "LED_R": {("U1", "19"), ("R12", "1")},
+    "LED_G": {("U1", "17"), ("R13", "1")},
+    "LED_B": {("U1", "16"), ("R14", "1")},
     "J3_R": {("R12", "2"), ("J3", "1")},
     "J3_G": {("R13", "2"), ("J3", "3")},
     "J3_B": {("R14", "2"), ("J3", "4")},
-    "RUN": {("U1", "30"), ("J4", "2")},
-    "GP0": {("U1", "1"), ("J4", "3")},
-    "GP1": {("U1", "2"), ("J4", "4")},
-    "GP4": {("U1", "6"), ("J4", "5")},
-    "GP5": {("U1", "7"), ("J4", "6")},
-    "GP20": {("U1", "26"), ("J4", "7")},
-    "GP21": {("U1", "27"), ("J4", "8")},
-    "GP27_ADC1": {("U1", "32"), ("J4", "9")},
+    "RUN": {("U1", "30"), ("E2", "1")},
+    "GP0": {("U1", "1"), ("E3", "1")},
+    "GP1": {("U1", "2"), ("E4", "1")},
+    "GP4": {("U1", "6"), ("E5", "1")},
+    "GP5": {("U1", "7"), ("E6", "1")},
+    "GP20": {("U1", "26"), ("E7", "1")},
+    "GP21": {("U1", "27"), ("E8", "1")},
+    "GP27_ADC1": {("U1", "32"), ("E9", "1")},
 }
 
 
@@ -1077,7 +1092,7 @@ def check(sch_path: Path) -> int:
         m = re.match(r"\|\s*((?:[A-Z]+\d+(?:\s*,\s*)?)+)\s*\|", line)
         if m:
             readme_refs |= {r.strip() for r in m.group(1).split(",")}
-    copper_only = {r for r in bom_refs if re.match(r"(TP|JP|H)\d+$", r)}
+    copper_only = {r for r in bom_refs if re.match(r"(TP|JP|H|E)\d+$", r)}
     for r in sorted(bom_refs - copper_only - readme_refs):
         print(f"BOM ref {r} is not in the README parts table"); fails += 1
     for r in sorted(readme_refs - bom_refs):

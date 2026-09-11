@@ -319,3 +319,111 @@ Status after the owner checked the parts on 11 Sep 2026 is in bold.
   figure from bio-potential practice, not a measurement of this pad.
 - The RP2350's ordinary (non-E9) leakage: datasheet limit ±1 µA, typical nA;
   the design only works at the typical figure, which is why M3 measures it.
+
+---
+
+## Changelog — 11 Sep 2026, bringing the schematic up to the floor plan
+
+The floor plan (`floorplan.svg`) was settled after this review was signed off,
+and settling it invalidated decisions the schematic still encoded. What changed,
+why, and what it cost.
+
+### Pin moves
+
+| Net | Was | Now | Why |
+|---|---|---|---|
+| `LED_R` / `LED_G` / `LED_B` | GP16 / GP17 / GP18 (pins 21/22/24) | GP14 / GP13 / GP12 (pins 19/17/16) | J3 sits hard against the left edge opposite row A. Its four pins now face pins 16–19 straight across: four ~7 mm traces, no crossings, and the cathode lands on pin 18, a Pico GND pin that is already there. The LED's legs bend 90° into the header with no pigtail |
+| `BTN` | GP15 (pin 20) | GP16 (pin 21) | displaced by the LED; lands on row B beside SW2 |
+| `ROLE` | GP14 (pin 19) | GP17 (pin 22) | displaced by the LED; lands on row B beside JP8 |
+| `GP2_TX` → `GP11_TX` | GP2 (pin 4) | GP11 (pin 15) | GP2 was never special — §2.4 established that E9 hits every bank-0 pin equally. Pin 15 is directly opposite the R2/R3 island, so R1 butts up to the island with a short perpendicular entry instead of a 24 mm run alongside it. Less copper running beside the only critical node on the board |
+
+The alternative re-homing for BTN/ROLE — GP22 (pin 29) and GP19 (pin 25) — was
+checked and rejected. It clears the antenna keep-out, but the escapes then have
+to detour around J2 and the corner boss to reach SW2 and JP8 at the hand end:
+more copper near the antenna, not less. Pins 21 and 22 sit 1.3 mm and 1.6 mm
+inside the keep-out's edge, and both nets are static DC — a pull-up input read
+once at boot, and a strap to GND. Nothing switching or RF-carrying goes under
+the antenna.
+
+### J4 is no longer a connector
+
+Ten separate through-hole breakout pads, **E1–E10**, each placed inboard of its
+own Pico pin: 3V3 (36), RUN (30), GP0 (1), GP1 (2), GP4 (6), GP5 (7), GP20 (26),
+GP21 (27), GP27 (32), GND (3). 2.0 mm pad on a 1.0 mm drill.
+
+The nets are unchanged. Ten `TestPoint` symbols were chosen over a 1×10 symbol
+with a scattered footprint for two reasons: a single 1×10 footprint cannot
+describe ten positions on both sides of the board, and a connector symbol whose
+pins are nowhere near each other lies to anyone reading the sheet. It also makes
+the netlist oracle stricter — `EXPECTED_NETS` now names `("E7", "1")` rather
+than `("J4", "7")`, so a mis-numbered header pin can no longer hide inside a net
+that still has the right number of nodes. The 1×10 female comes off the parts
+table; the 1×40 strip is now only the Pico's two 1×20s.
+
+### Values settled, both of them the review's own recommendations
+
+- **R3 10 MΩ → 1 MΩ** (§2.3). Recovery on a body falls from 3.6 ms to 0.36 ms —
+  inside the §9.7 budget with margin, where it was missed by 3.6× — and the
+  leakage a high-Z TX pin can inject before stage 1 clips rises from 15 nA to
+  145 nA. Cost: 0.6 dB at 200 kHz, 2.4 dB at 40 kHz. Uses the R1/R2 part.
+- **C1 100 nF → 330 pF C0G** (§2.2). The interstage high-pass moves from 15.9 Hz
+  to 4.8 kHz: 40 dB at 50 Hz, and stage 2's hum limit rises 11× to 147 mV at the
+  10 MΩ node, which makes stage 1 the binding constraint instead. The interstage
+  time constant falls from 10 ms to 33 µs, so the "13 ms more" recovery term in
+  §2.3 vanishes whatever firmware does. Cost: −0.06 dB at 40 kHz. Uses the C2
+  part.
+
+Both are value-only swaps on pads that did not move, so M7 can still A/B them
+against the design-doc values. Keep the 10 MΩ (Robu 574992) for that comparison.
+
+### Physical
+
+- **D1 → the 7.62 mm horizontal DO-41 footprint.** The 10.16 mm one does not fit
+  the 9.5 mm strip between J5 and the corner boss. The owner measured the actual
+  1N5819 against 7.62 mm on 11 Sep 2026: it fits, so D1 stays on the
+  little-finger strip and SW2 keeps its centred position at x = 20. §5.6 closed.
+- **H1–H4 → `handoff:MountingHole_3.4mm_M3_Boss8mm`**, a new project footprint
+  (`tools/gen_mount_footprint.py`), because KiCad 10 ships 3.2, 3.5 and 3.7 mm
+  and no keep-out on any of them. 3.4 mm is the ISO 273 medium clearance: the
+  board is screwed into a printed boss carrying a 5 mm brass insert, so the screw
+  is never a locating feature and the extra 0.2 mm swallows the boss's position
+  tolerance. The 8 mm keep-out rides in the footprint rather than being drawn on
+  the board, so DRC enforces it wherever the hole goes and it cannot be forgotten
+  on the fourth corner. Still unplated and untied — design §8.4, exactly one
+  ground-plane connection.
+
+### What it cost — three compromises, stated plainly
+
+1. **Design §12.3 is no longer met.** "Op-amp far from the Pico and its antenna"
+   is overturned: the AFE is now SMD on the top face in the 10 mm channel
+   *directly under the Pico*. Once the ten breakout pads take their positions
+   inboard of their own pins, that channel is the only contiguous area left. This
+   is a decision, not an oversight, and it is measurable: open JP4, run the AFE
+   from a second cell or a bench supply at TP6, compare noise floors — M7, the
+   experiment §2.8 already specified. If the SMPS wins, the answer is a shield
+   can or a different board, not a re-route.
+2. **Stacking the pad under the cell restores roughly 16 pF of pad-to-return
+   shunt** — the figure design §8.2 rejects for a two-sided board. The owner
+   chose the stack so cell and pad share one four-sided pocket. The mitigation is
+   2–3 mm of foam between cell and pad, which also stops the cell chafing. M7's
+   loss measurement is the test; if it reads worse than the budget, the foam gets
+   thicker before anything else changes.
+3. **The cell sits partly under the antenna keep-out.** Nothing else fits there
+   once the pad is centred. If BLE range disappoints, the fix is a smaller pad,
+   not a smaller cell — pad area is what the link budget can most afford to lose.
+
+### Housekeeping
+
+`hardware/tools/floorplan.py` is deleted. It was the superseded first draft: a
+54 × 65 board with the origin at the elbow/thumb corner and +y toward the hand,
+against the settled 40 × 62 with +y toward the elbow. It wrote to the *same*
+`hardware/floorplan.svg` path as `gen_floorplan.py`, so running it would have
+silently replaced the real floor plan with a plan of a board that no longer
+exists. (The brief recorded it and `floorplan.svg` as untracked; they were in
+fact already committed in 194b4d3.)
+
+### Still open
+
+§5.2 (SS-12F23G5 ear pitch), §5.4 (JST-XH against the LED's 2.54 mm legs),
+§5.5 (C4/C5 lead pitch) and §5.9 (MCP6292 pin-1 mark) are unchanged and still
+want calipers before assembly. §5.1, §5.3, §5.6, §5.7 and §5.8 are closed.

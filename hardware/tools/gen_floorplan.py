@@ -21,7 +21,7 @@ PW, PH = 21.0, 51.0
 PX, PY = (BOARD_W - PW) / 2, 11.0             # Pico centred across the board
 ANT_H = 11.0                                   # antenna keep-out, hand end
 ROW_A, ROW_B = PX + 1.6, PX + PW - 1.6         # header rows: pins 1-20 / 21-40
-BRK_A, BRK_B = ROW_A + 2.54, ROW_B - 2.54      # breakout pads, inboard
+BRK_X_A, BRK_X_B = ROW_A + 2.54, ROW_B - 2.54  # breakout pad columns, inboard
 P0 = 60.6                                      # y of pin 1 and pin 40
 
 
@@ -33,8 +33,9 @@ def pin_b(n):
     return P0 - (40 - n) * 2.54
 
 
-J4_A = [(1, "GP0"), (2, "GP1"), (3, "GND"), (6, "GP4"), (7, "GP5")]
-J4_B = [(26, "GP20"), (27, "GP21"), (30, "RUN"), (32, "GP27"), (36, "3V3")]
+# E1-E10: one breakout pad inboard of its own Pico pin (not a connector)
+BRK_A = [(1, "GP0"), (2, "GP1"), (3, "GND"), (6, "GP4"), (7, "GP5")]
+BRK_B = [(26, "GP20"), (27, "GP21"), (30, "RUN"), (32, "GP27"), (36, "3V3")]
 LED_PINS = [(19, "R"), (18, "K"), (17, "G"), (16, "B")]
 
 STACK = (10.0, 16.0, 20.0, 30.0)               # cell over pad, centred, 20 x 30
@@ -107,12 +108,12 @@ class View:
         for n in range(1, 21):
             self.hole(ROW_A, pin_a(n))
             self.hole(ROW_B, pin_b(n + 20))
-        for n, _ in J4_A:
-            self.hole(BRK_A, pin_a(n), r=0.75)
-            self.line(ROW_A + 0.6, pin_a(n), BRK_A - 0.8, pin_a(n), "#6b3f8a", 0.7)
-        for n, _ in J4_B:
-            self.hole(BRK_B, pin_b(n), r=0.75)
-            self.line(ROW_B - 0.6, pin_b(n), BRK_B + 0.8, pin_b(n), "#6b3f8a", 0.7)
+        for n, _ in BRK_A:
+            self.hole(BRK_X_A, pin_a(n), r=0.75)
+            self.line(ROW_A + 0.6, pin_a(n), BRK_X_A - 0.8, pin_a(n), "#6b3f8a", 0.7)
+        for n, _ in BRK_B:
+            self.hole(BRK_X_B, pin_b(n), r=0.75)
+            self.line(ROW_B - 0.6, pin_b(n), BRK_X_B + 0.8, pin_b(n), "#6b3f8a", 0.7)
 
     def xh2(self, y, label, fill="#f0e4f6"):
         """A 2-pin JST-XH, through-hole, pins in a row along y."""
@@ -155,7 +156,7 @@ t.rect(15.0, BOARD_H + WALL - 0.3, 10.0, 2.0, "#fff", "#aaa", 0.8)
 t.text(29.5, BOARD_H + 4.4, "USB out the elbow edge", 8, anchor="end", fill="#333")
 t.text(20.0, 21.8, "U1  Pico 2 W, socketed", 8.5, fill="#2a5d9f")
 t.pico_pins()
-t.text(BOARD_W / 2, -8.6, "J4 = one breakout pad inboard of its own pin", 8.5, fill="#4b2a63")
+t.text(BOARD_W / 2, -8.6, "E1-E10 = one breakout pad inboard of its own pin", 8.5, fill="#4b2a63")
 
 t.rect(AFE[0], AFE[1], AFE[2], AFE[3], "#fdead0", "#c26a12", 1.5, rx=1)
 t.rect(15.5, 25.0, 9.0, 4.6, "#fff4e3", "#c26a12", 1.0, dash="3,2")
@@ -210,7 +211,7 @@ t.text(38.2, 46.8, "D1 + JP5", 7.5, fill="#333", rot=-90)
 
 for n, lab in ((39, "VSYS"), (33, "AGND"), (31, "GP26")):
     t.text(ROW_B - 1.2, pin_b(n) + 0.6, lab, 6, anchor="end", fill="#1d3f6e")
-t.text(ROW_A + 1.2, pin_a(4) + 0.6, "GP2", 6, anchor="start", fill="#1d3f6e")
+t.text(ROW_A + 1.2, pin_a(15) + 0.6, "GP11 TX", 6, anchor="start", fill="#1d3f6e")
 
 # =========================================================================
 # 2 - BOTTOM SIDE
