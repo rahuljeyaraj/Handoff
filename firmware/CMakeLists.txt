@@ -37,6 +37,12 @@ add_library(handoff_lib STATIC
     lib/hal_pico/tlm_usb.c
 )
 
+# lib/hal_pico/pio_carrier.pio -> pio_carrier.pio.h, by the SDK's pioasm. The
+# state machine programs M3 needs are assembled at build time; none of the
+# instruction encodings are written by hand.
+pico_generate_pio_header(handoff_lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/hal_pico/pio_carrier.pio)
+
 target_include_directories(handoff_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/hal
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/dsp

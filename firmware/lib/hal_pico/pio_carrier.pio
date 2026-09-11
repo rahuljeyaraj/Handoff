@@ -1,0 +1,48 @@
+;
+; Handoff — carrier generation, OOK gating and self-measurement. M3.
+; design §10.1, §6.3; development plan M3.
+;
+; TWO STATE MACHINES ON ONE PAD, which is what lets M3 measure itself with no
+; external hardware at all: the PIO input mux reads the pad independently of
+; whichever peripheral is driving it, so the counter below sees the carrier the
+; generator above is producing without a jumper, a scope, or a second board.
+;
+
+;
+; carrier_out — one pad bit per state-machine cycle.
+;
+; The state machine is clocked at TWICE the carrier, so one instruction is one
+; half-period and a mark chip is the bit pattern 1010…, a space chip is zeros.
+;
+; This is deliberately a bit stream rather than a counted toggle loop. A loop
+; that pulls a chip and then toggles N times spends different numbers of cycles
+; on the mark path and the space path unless every branch is hand-balanced, and
+; an unbalanced branch shifts every chip after the first gated one — which is
+; precisely what M3's third exit criterion ("gating on and off is chip-aligned")
+; exists to catch. With one bit per cycle the alignment is a property of the
+; data, not of the control flow, and there is nothing left to get wrong.
+;
+; Autopull refills the OSR, so a starved FIFO stalls the pad at its last level
+; rather than emitting a half chip.
+;
+.program carrier_out
+.wrap_target
+    out pins, 1
+.wrap
+
+;
+; edge_count — count rising edges on the same pad.
+;
+; x is preloaded with 0xFFFFFFFF by the CPU and decremented once per rising
+; edge, so the count is 0xFFFFFFFF minus whatever x holds when the gate closes.
+; Waiting for the low first means a pad that is already high when the gate
+; opens cannot contribute a spurious first edge.
+;
+; Clocked at full system speed: at 200 kHz the pad changes every 375 cycles, so
+; there is no question of missing one.
+;
+.program edge_count
+count:
+    wait 0 pin 0
+    wait 1 pin 0
+    jmp x--, count

@@ -1,13 +1,107 @@
-/* Handoff — score stream and triggered raw bursts over USB CDC. STUB until M4. */
+/*
+ * Handoff — score stream and triggered raw bursts over USB CDC. M4.
+ * See tlm.h for the format decision and why it went this way.
+ *
+ * The score stream is continuous and cheap: 20 kB/s, which full-speed CDC
+ * carries without thinking about it. Raw ADC is 1 MB/s and is therefore never
+ * continuous — it is captured into RAM on a trigger and dumped afterwards, at
+ * whatever rate the host cares to read.
+ *
+ * Scores go out as text rather than binary. It costs about three times the
+ * bytes and buys a stream that survives being looked at in a terminal, which
+ * during a §14.1 body test is the difference between noticing that the link
+ * died and not. 20 kB/s of text is still a fifth of what CDC will carry.
+ */
 #include "tlm.h"
 
-void tlm_usb_init(uint16_t decimate) { (void)decimate; }
-void tlm_usb_score(uint16_t score)   { (void)score; }
-void tlm_usb_event(const char *text) { (void)text; }
-void tlm_usb_raw_trigger(void)       { }
-bool tlm_usb_raw_busy(void)          { return false; }
+#include <stdio.h>
+#include <string.h>
+
+#include "pico/stdlib.h"
+
+#include "adc_ring.h"
+
+#define RAW_SAMPLES ((HANDOFF_ADC_FS_HZ / 1000) * TLM_RAW_BURST_MS)
+
+static uint16_t s_decimate;
+static uint16_t s_phase;
+
+static int16_t  s_raw[RAW_SAMPLES];
+static size_t   s_raw_n;
+static bool     s_raw_arming;
+
+void tlm_usb_init(uint16_t decimate)
+{
+    s_decimate = decimate;
+    s_phase    = 0;
+}
+
+void tlm_usb_score(uint16_t score)
+{
+    if (s_decimate == 0u) return;
+    if (++s_phase < s_decimate) return;
+    s_phase = 0;
+    printf("s %u\n", (unsigned)score);
+}
+
+void tlm_usb_event(const char *text)
+{
+    printf("e %s\n", text ? text : "");
+}
+
+/* ---------------------------------------------------------------------- */
+
+void tlm_usb_raw_trigger(void)
+{
+    s_raw_n      = 0;
+    s_raw_arming = true;
+}
+
+bool tlm_usb_raw_busy(void) { return s_raw_arming; }
+
+/*
+ * Called from the sample path with each block. Kept out of the header because
+ * only the owner of the block loop can call it, and it must not be mistaken
+ * for something the protocol layer may reach for.
+ */
+void tlm_usb_raw_feed(const int16_t *samples, size_t n)
+{
+    size_t room;
+
+    if (!s_raw_arming) return;
+
+    room = RAW_SAMPLES - s_raw_n;
+    if (n > room) n = room;
+
+    memcpy(&s_raw[s_raw_n], samples, n * sizeof s_raw[0]);
+    s_raw_n += n;
+
+    if (s_raw_n >= RAW_SAMPLES) s_raw_arming = false;
+}
+
+void tlm_usb_raw_dump(void)
+{
+    size_t i;
+
+    printf("r %u\n", (unsigned)s_raw_n);
+    for (i = 0; i < s_raw_n; i++) printf("%d\n", (int)s_raw[i]);
+    printf("r end\n");
+}
+
+/* ---------------------------------------------------------------------- */
 
 void tlm_sink(void *ctx, hal_tlm_kind_t kind, const void *data, size_t len)
 {
-    (void)ctx; (void)kind; (void)data; (void)len;
+    (void)ctx;
+
+    switch (kind) {
+    case HAL_TLM_SCORE:
+        if (data && len >= sizeof(uint16_t)) tlm_usb_score(*(const uint16_t *)data);
+        break;
+    case HAL_TLM_EVENT:
+        if (data) tlm_usb_event((const char *)data);
+        break;
+    default:
+        break;
+    }
 }
