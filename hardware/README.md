@@ -11,6 +11,7 @@ the schematic implements its §6/§7 netlist with the changes listed under
 |---|---|
 | `handoff.kicad_pro` / `handoff.kicad_sch` | the project and its single schematic sheet |
 | `handoff.kicad_sym` | project symbol library: Pico 2 W and MCP6292 (the stock library has neither) |
+| `handoff.pretty/` | project footprints: the SS-12F23G5 slide switch, drawn from the vendor drawing |
 | `tools/gen_schematic.py` | generated the schematic from the §7 netlist and checks it with `kicad-cli` (ERC + netlist diff). One-shot bootstrap; once the sheet is edited by hand in KiCad, the generator is history, not source |
 
 Validate after any edit:
@@ -39,9 +40,9 @@ without changing the footprint.
 | R12, R13, R14 | 330 Ω | 1206 | 575088 | 3 |
 | C1, C3 | 100 nF X7R 50 V (TCC1206X7R104J500DT) | 1206 | R153721 | 2 |
 | C2 | 330 pF C0G/NP0 50 V (KEMET C1206C331J5GACTU) | 1206 | R111869 | 1 |
-| C4 | 10 µF 63 V electrolytic | radial through-hole, 5 mm dia / 2.0 mm pitch assumed — check the can before layout | 1090083 | 1 |
+| C4 | 10 µF 63 V electrolytic | radial through-hole, 5 mm dia, 2.54 mm lead pitch (KiCad `CP_Radial_D5.0mm_P2.50mm`) | 1090083 | 1 |
 | D1 | 1N5819 Schottky 40 V 1 A | DO-41, horizontal | R241509 | 1 |
-| SW1 | SS-12F23G5 slide switch, SPDT (1P2T), right-angle, 5 mm handle | 3 pins, 2.5 mm pitch — **needs a custom footprint from the datasheet** | R132611 | 1 |
+| SW1 | SS-12F23G5 slide switch, SPDT (1P2T), right-angle, 5 mm handle | 3 terminals at 3.0 mm pitch + 2 mounting ears, `handoff:SW_Slide_SS-12F23G5` | R132611 | 1 |
 | D2 | RGB LED, common cathode, 5 mm, clear (5-pack) | off-board: solders into J3 or plugs in via a 4-pin XH pigtail | R183455 | 1 |
 | J1 | JST-XH 2.54 straight 2-pin male (battery) | through-hole | — | 1 |
 | J2 | JST-XH 2.54 straight 2-pin male (electrodes) | through-hole | — | 1 |
@@ -100,6 +101,14 @@ there measures the probe.
 (I²C0), GP20, GP21, GP27 (ADC1), GND. The spare ADC input is there on purpose — a
 second analogue path is the most likely "hack" this board will ever need. RUN to
 GND is a reset.
+
+**SW1 footprint (`handoff.pretty/SW_Slide_SS-12F23G5`)**, from the vendor
+drawing: terminals 0.8 × 0.45 mm at 3.0 mm pitch (centre = common = symbol pin
+2), mounting ears 12.9 mm overall (holes at ±6.05, 1.15 mm drill for the ±0.2
+tolerance), body 8.7 × 5.5 mm standing 3.3 mm behind the pin row with the 5 mm
+handle vertical, 3.5 mm travel. Confirm the body-to-pin-row offset against a
+real part before the board goes out; it is the one dimension read off a small
+drawing rather than stated.
 
 **SMPS mode pin.** Design §10.4 says tie GP23 high. Wrong for a 2 W — that is a
 firmware call on WL_GPIO1 (see README). Nothing on the board.

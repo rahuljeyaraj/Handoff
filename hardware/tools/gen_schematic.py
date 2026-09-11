@@ -468,7 +468,7 @@ class Schematic:
 # --------------------------------------------------------------------------
 FP_R = "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
 FP_C = "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
-FP_CP = "Capacitor_THT:CP_Radial_D5.0mm_P2.00mm"
+FP_CP = "Capacitor_THT:CP_Radial_D5.0mm_P2.50mm"
 FP_D41 = "Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal"
 FP_PICO = "Module:RaspberryPi_Pico_Common_THT"
 FP_MSOP8 = "Package_SO:MSOP-8_3x3mm_P0.65mm"
@@ -477,9 +477,8 @@ FP_XH4 = "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
 FP_SOCK10 = "Connector_PinSocket_2.54mm:PinSocket_1x10_P2.54mm_Vertical"
 FP_TP = "TestPoint:TestPoint_Pad_D1.5mm"
 FP_JP = "Jumper:SolderJumper-2_P1.3mm_Bridged_RoundedPad1.0x1.5mm"
-# placeholder: same pin arrangement (3 in a row, right angle) as the SS-12F23,
-# but 2.54 mm pitch and CK's body. Replace with handoff:SW_SS-12F23G5 at layout.
-FP_SW = "Button_Switch_THT:SW_Slide_SPDT_Angled_CK_OS102011MA1Q"
+# drawn from the vendor drawing, see hardware/handoff.pretty
+FP_SW = "handoff:SW_Slide_SS-12F23G5"
 
 
 # --------------------------------------------------------------------------
@@ -879,6 +878,10 @@ def write_project():
     (HW / "sym-lib-table").write_text(
         '(sym_lib_table\n  (version 7)\n'
         f'  (lib (name "handoff")(type "KiCad")(uri "${{KIPRJMOD}}/{PROJECT}.kicad_sym")(options "")(descr "Handoff project symbols"))\n)\n',
+        encoding="utf-8")
+    (HW / "fp-lib-table").write_text(
+        '(fp_lib_table\n  (version 7)\n'
+        '  (lib (name "handoff")(type "KiCad")(uri "${KIPRJMOD}/handoff.pretty")(options "")(descr "Handoff project footprints"))\n)\n',
         encoding="utf-8")
 
 
