@@ -8,7 +8,7 @@
 	(property "Reference" "REF**"
 		(at 0 -5 0)
 		(layer "F.SilkS")
-		(uuid "158c6919-ed4c-4f5f-abe8-e36991259937")
+		(uuid "f7b45737-0216-45ea-844b-5508def13189")
 		(effects
 			(font
 				(size 1 1)
@@ -19,7 +19,7 @@
 	(property "Value" "MountingHole_3.4mm_M3_Boss8mm"
 		(at 0 5 0)
 		(layer "F.Fab")
-		(uuid "022c8135-704d-44ab-869d-485397a28ba2")
+		(uuid "bce253a5-b5a6-4a18-80fa-28059320cb98")
 		(effects
 			(font
 				(size 1 1)
@@ -32,7 +32,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "08509ffe-1138-4c8e-81dc-8dd328fa1937")
+		(uuid "98852ea1-160b-4a06-a2e5-1020288a23b3")
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -45,7 +45,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "9d34b0ad-537b-44b6-81ad-d7877962970f")
+		(uuid "23e4f5a7-0e4c-4a23-a2ee-05745d16af41")
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -64,7 +64,7 @@
 		)
 		(fill none)
 		(layer "F.SilkS")
-		(uuid "baafabb4-3c57-48b4-a197-9450c59e4bcc")
+		(uuid "1adc7571-d459-44e0-ae0b-5de15f7adee3")
 	)
 	(fp_circle
 		(center 0 0)
@@ -75,7 +75,7 @@
 		)
 		(fill none)
 		(layer "F.Fab")
-		(uuid "921a16e4-a806-4ef7-a24e-322d3834bdec")
+		(uuid "fc684c31-a69f-44ef-b58d-cfef53b2c8fe")
 	)
 	(fp_circle
 		(center 0 0)
@@ -86,7 +86,7 @@
 		)
 		(fill none)
 		(layer "Dwgs.User")
-		(uuid "54d1158f-3935-4ac4-9e91-57251fbcb278")
+		(uuid "dd2e2056-c714-497c-9446-1052924fbc26")
 	)
 	(fp_circle
 		(center 0 0)
@@ -97,12 +97,12 @@
 		)
 		(fill none)
 		(layer "F.CrtYd")
-		(uuid "8b572cdf-b812-4063-831d-a4ea2a8b8737")
+		(uuid "e7f828ba-d4a6-4597-8dd5-7210341eaf47")
 	)
 	(fp_text user "boss 8"
 		(at 0 -6.2 0)
 		(layer "Dwgs.User")
-		(uuid "cf05e840-d1b8-481a-96a8-4867c835e20e")
+		(uuid "3ca79793-0a74-4818-be79-803e5dff4672")
 		(effects
 			(font
 				(size 0.6 0.6)
@@ -116,11 +116,11 @@
 		(drill 3.4)
 		(layers "F&B.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(uuid "e719d42c-f050-4cef-8a4d-5b4d352accd1")
+		(uuid "d2869392-a513-4257-8694-25834abd4573")
 	)
 	(zone
 		(layers "F.Cu" "B.Cu")
-		(uuid "d34cc424-9d5a-402f-a527-4e55ebd23cc3")
+		(uuid "ca50ea73-20c6-48d0-8308-3280a67c963b")
 		(name "Boss Keep Out")
 		(hatch full 0.5)
 		(connect_pads
@@ -130,6 +130,9 @@
 		(keepout
 			(tracks not_allowed)
 			(vias not_allowed)
+			# Pads stay ALLOWED here only because the hole's own NPTH pad sits in
+			# the middle of this keep-out and would report itself. gen_pcb.py's
+			# report() checks every other pad against the boss circle instead.
 			(pads allowed)
 			(copperpour not_allowed)
 			(footprints allowed)

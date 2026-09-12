@@ -159,7 +159,7 @@
         "solder_mask_to_copper_clearance": 0.0,
         "use_height_for_length_calcs": true,
         "solder_mask_clearance": 0.0,
-        "solder_mask_min_width": 0.0,
+        "solder_mask_min_width": 0.1,
         "allow_blind_buried_vias": false,
         "allow_microvias": false
       },
@@ -356,6 +356,10 @@
       {
         "netclass": "Power",
         "pattern": "/D1_K"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "/MOT_SW"
       },
       {
         "netclass": "Rail",

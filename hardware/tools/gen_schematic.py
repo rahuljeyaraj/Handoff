@@ -482,10 +482,21 @@ class Schematic:
 # --------------------------------------------------------------------------
 # Footprints (all stock KiCad 10 except SW1, see hardware/README.md)
 # --------------------------------------------------------------------------
+# Two passive sizes, deliberately. 1206 stays wherever the part is only made
+# in it here (1 M, 1k5) or where the value is a C0G/X7R the 0603 order does not
+# cover (330 pF, 100 nF); everything re-ordered as 0603 uses FP_R06. The bulk
+# 10 uF is no longer an electrolytic at all - see FP_C08.
 FP_R = "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
+FP_R06 = "Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder"
 FP_C = "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
-FP_CP = "Capacitor_THT:CP_Radial_D5.0mm_P2.50mm"
+# C4/C5 were CP_Radial_D5.0mm_P2.50mm, a 5 mm radial electrolytic. They are now
+# MLCC in 0805: non-polarised, 4 mm shorter, and they move to the bottom face
+# (the routes that fed them were already there, through the old part's leads).
+FP_C08 = "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 FP_D41 = "Diode_THT:D_DO-41_SOD81_P7.62mm_Horizontal"
+FP_SOD123 = "Diode_SMD:D_SOD-123"
+FP_SOT23 = "Package_TO_SOT_SMD:SOT-23"
+FP_HDR2 = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
 FP_PICO = "Module:RaspberryPi_Pico_Common_THT"
 FP_MSOP8 = "Package_SO:MSOP-8_3x3mm_P0.65mm"
 FP_XH2 = "Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical"
@@ -512,7 +523,6 @@ def build() -> Schematic:
     # ---- symbols ---------------------------------------------------------
     R = s.use("Device", "R")
     C = s.use("Device", "C")
-    CP = s.use("Device", "C_Polarized")
     DSCH = s.use("Device", "D_Schottky")
     LED = s.use("Device", "LED_RGBK")
     BAT = s.use("Device", "Battery_Cell")
@@ -521,6 +531,8 @@ def build() -> Schematic:
     JP = s.use("Jumper", "SolderJumper_2_Open")
     JP3S = s.use("Jumper", "SolderJumper_3_Open")
     BTN = s.use("Switch", "SW_Push")
+    NFET = s.use("Transistor_FET", "AO3400A")
+    MOTOR = s.use("Motor", "Motor_DC")
     HOLE = s.use("Mechanical", "MountingHole")
     C2 = s.use("Connector_Generic", "Conn_01x02")
     C4 = s.use("Connector_Generic", "Conn_01x04")
@@ -629,9 +641,9 @@ def build() -> Schematic:
     # 2. VREF bias  (mid top)
     # =====================================================================
     s.text("VREF = 3V3/2 = 1.65 V (design §6.2)", (110, 14), size=2.0, bold=True)
-    r10 = s.place(R, "R10", "100k", (120, 26), fp=FP_R, desc="VREF divider, top")
-    r11 = s.place(R, "R11", "100k", (120, 40), fp=FP_R, desc="VREF divider, bottom")
-    c4 = s.place(CP, "C4", "10uF 63V", (132, 40), fp=FP_CP, desc="VREF hold-up, electrolytic, + to VREF")
+    r10 = s.place(R, "R10", "100k", (120, 26), fp=FP_R06, desc="VREF divider, top")
+    r11 = s.place(R, "R11", "100k", (120, 40), fp=FP_R06, desc="VREF divider, bottom")
+    c4 = s.place(C, "C4", "10uF 100V", (132, 40), fp=FP_C08, desc="VREF hold-up, 0805 MLCC")
     top = s.gpin("R10", "1"); mid1 = s.gpin("R10", "2"); mid2 = s.gpin("R11", "1"); bot = s.gpin("R11", "2")
     c4p, c4n = s.gpin("C4", "1"), s.gpin("C4", "2")
     # the divider hangs off the AFE side of JP4, so a bench supply on JP4 pad 2 powers the whole analogue side
@@ -660,7 +672,7 @@ def build() -> Schematic:
     s.text("U2 supply — AFE_3V3 behind JP4 (design §6.4 decoupling + C5 bulk)", (190, 14), size=2.0, bold=True)
     u2c = s.place(OPA, "U2", "MCP6292-E/MS", (204, 36), unit=3, fp=FP_MSOP8, ref_at=(-4, -1, "right"), val_at=(-4, 1, "right"))
     c3 = s.place(C, "C3", "100nF", (220, 36), fp=FP_C, desc="U2 decoupling, across pins 8 and 4")
-    c5 = s.place(CP, "C5", "10uF 63V", (230, 36), fp=FP_CP, desc="U2 bulk decoupling against the Pico SMPS, + to AFE_3V3")
+    c5 = s.place(C, "C5", "10uF 100V", (230, 36), fp=FP_C08, desc="U2 bulk decoupling against the Pico SMPS, 0805 MLCC")
     vp, vn = s.gpin("U2", "8", 3), s.gpin("U2", "4", 3)
     c3a, c3b = s.gpin("C3", "1"), s.gpin("C3", "2")
     c5a, c5b = s.gpin("C5", "1"), s.gpin("C5", "2")
@@ -701,10 +713,10 @@ def build() -> Schematic:
     # unused pins
     for num in ("35", "37"):
         s.no_connect(s.gpin("U1", num))
-    used_left = {"1": "GP0", "2": "GP1", "6": "GP4", "7": "GP5", "15": "GP11_TX",
+    used_left = {"5": "GP3", "6": "GP4", "7": "GP5", "15": "GP11_TX",
                  "19": "ROLE", "20": "BTN", "30": "RUN"}
     used_right = {"22": "LED_R", "24": "LED_G", "25": "LED_B", "26": "GP20", "27": "GP21",
-                  "31": "ADC0", "32": "GP27_ADC1"}
+                  "29": "GP22", "31": "ADC0", "32": "GP27_ADC1", "34": "MOT_DRV"}
     gp_left = ["1", "2", "4", "5", "6", "7", "9", "10", "11", "12", "14", "15", "16", "17", "19", "20"]
     gp_right = ["21", "22", "24", "25", "26", "27", "29", "31", "32", "34"]
     for num in gp_left + ["30"]:
@@ -772,8 +784,8 @@ def build() -> Schematic:
     s.text("10 MOhm node: keep tiny, guard it (README)", (hiz[0] - 10, Y + 24), size=1.0)
     # feedback: R4 above the op-amp from OUT A back to -IN A; R5 from -IN A down to VREF
     fb1 = (ina_n[0] - 2, ina_n[1])
-    r5 = s.place(R, "R5", "10k", (fb1[0], fb1[1] + 6), rot=0, fp=FP_R, desc="Stage 1 gain set: 1 + R4/R5 = 11", ref_at=(2, -1), val_at=(2, 1))
-    r4 = s.place(R, "R4", "100k", (ina_n[0] + 8, ina_n[1] - 12), rot=90, fp=FP_R, desc="Stage 1 feedback")
+    r5 = s.place(R, "R5", "10k", (fb1[0], fb1[1] + 6), rot=0, fp=FP_R06, desc="Stage 1 gain set: 1 + R4/R5 = 11", ref_at=(2, -1), val_at=(2, 1))
+    r4 = s.place(R, "R4", "100k", (ina_n[0] + 8, ina_n[1] - 12), rot=90, fp=FP_R06, desc="Stage 1 feedback")
     s.wire(ina_n, fb1, s.gpin("R5", "1"))
     r3b, r5b = s.gpin("R3", "2"), s.gpin("R5", "2")
     assert r3b[1] == r5b[1]
@@ -790,15 +802,15 @@ def build() -> Schematic:
     c1b = s.gpin("C1", "2")
     in2 = (c1b[0] + 4, c1b[1])
     s.wire(c1b, in2)
-    r6 = s.place(R, "R6", "100k", (in2[0], in2[1] + 10), rot=0, fp=FP_R, desc="Re-bias stage 2 +IN to VREF", ref_at=(-2, -1, "right"), val_at=(-2, 1, "right"))
+    r6 = s.place(R, "R6", "100k", (in2[0], in2[1] + 10), rot=0, fp=FP_R06, desc="Re-bias stage 2 +IN to VREF", ref_at=(-2, -1, "right"), val_at=(-2, 1, "right"))
     s.wire(in2, s.gpin("R6", "1"))
     # -- stage 2
     u2b = s.place(OPA, "U2", "MCP6292-E/MS", (in2[0] + 14, in2[1] + 2), unit=2, fp=FP_MSOP8, ref_at=(-1, 0, "center"), hide_value=True)
     inb_p, inb_n, outb = s.gpin("U2", "5", 2), s.gpin("U2", "6", 2), s.gpin("U2", "7", 2)
     s.wire(in2, inb_p)
     fb2 = (inb_n[0] - 2, inb_n[1])
-    r8 = s.place(R, "R8", "10k", (fb2[0], fb2[1] + 6), rot=0, fp=FP_R, desc="Stage 2 gain set: 1 + R7/R8 = 11", ref_at=(2, -1), val_at=(2, 1))
-    r7 = s.place(R, "R7", "100k", (inb_n[0] + 8, inb_n[1] - 12), rot=90, fp=FP_R, desc="Stage 2 feedback")
+    r8 = s.place(R, "R8", "10k", (fb2[0], fb2[1] + 6), rot=0, fp=FP_R06, desc="Stage 2 gain set: 1 + R7/R8 = 11", ref_at=(2, -1), val_at=(2, 1))
+    r7 = s.place(R, "R7", "100k", (inb_n[0] + 8, inb_n[1] - 12), rot=90, fp=FP_R06, desc="Stage 2 feedback")
     s.wire(inb_n, fb2, s.gpin("R8", "1"))
     r6b, r8b = s.gpin("R6", "2"), s.gpin("R8", "2")
     assert r6b[1] == r8b[1]
@@ -849,7 +861,7 @@ def build() -> Schematic:
                                                    ("R13", "LED_G", "G", "3", 42, 6, 56),
                                                    ("R14", "LED_B", "B", "4", 50, 10, 58)):
         jp = s.gpin("J3", pinnum)
-        r = s.place(R, ref, "330", (x, jp[1] + drop), rot=90, fp=FP_R, desc=f"LED {colour} series",
+        r = s.place(R, ref, "100", (x, jp[1] + drop), rot=90, fp=FP_R06, desc=f"LED {colour} series",
                     **({"ref_at": (-2, -2, "center"), "val_at": (3, -2, "center")} if drop == 0 else {}))
         pa, pb = s.gpin(ref, "1"), s.gpin(ref, "2")
         s.wire((pa[0] - 4, pa[1]), pa); s.label(net, (pa[0] - 4, pa[1]), 0, "right bottom")
@@ -878,10 +890,15 @@ def build() -> Schematic:
     # inboard of the Pico pin it breaks out, which is ten scattered positions -
     # a single 1x10 footprint cannot describe that, and a connector symbol whose
     # pins are nowhere near each other lies to anyone reading the sheet.
-    exp = [("E1", "+3V3", "3V3", 36), ("E2", "RUN", "RUN", 30), ("E3", "GP0", "GP0", 1),
-           ("E4", "GP1", "GP1", 2), ("E5", "GP4", "GP4", 6), ("E6", "GP5", "GP5", 7),
+    # Pins 1, 2 and 3 are OUT: at x 31.44 on the little-finger wall their pads
+    # reach x 32.19, which is 3.3 mm from H4's centre - inside the 8 mm boss the
+    # mounting screw stands in. The wall is only free between J5's housing and
+    # that boss, which is pins 5-8, so GP0/GP1 give way to GP3 and a ground pad
+    # beside the others, and GP1's slot moves to GP22 on the thumb row.
+    exp = [("E1", "+3V3", "3V3", 36), ("E2", "RUN", "RUN", 30), ("E3", "GP3", "GP3", 5),
+           ("E4", "GP22", "GP22", 29), ("E5", "GP4", "GP4", 6), ("E6", "GP5", "GP5", 7),
            ("E7", "GP20", "GP20", 26), ("E8", "GP21", "GP21", 27),
-           ("E9", "GP27_ADC1", "GP27", 32), ("E10", "GND", "GND", 3)]
+           ("E9", "GP27_ADC1", "GP27", 32), ("E10", "GND", "GND", 8)]
     for i, (ref, net, lab, picopin) in enumerate(exp):
         x = 176 + 34 * (i // 5)
         y = 162 + 8 * (i % 5)
@@ -905,11 +922,12 @@ def build() -> Schematic:
     # a ground for the scope's clip next to the AFE, the ADC input, stage 1's
     # output, the bias, the AFE supply, the pad (10x probe only), and the
     # ammeter pair either side of JP5. Same through-hole pad as E1-E10.
-    s.text("TP1-TP7 TEST PADS — bring-up order (README)", (222, 150), size=2.0, bold=True)
+    s.text("TP1-TP8 TEST PADS — bring-up order (README)", (222, 150), size=2.0, bold=True)
     tps = [("TP1", "GND", "GND, scope clip, beside U2"), ("TP2", "ADC0", "ADC input"),
            ("TP3", "OUT1", "stage 1 output"), ("TP4", "VREF", "1.65 V bias"),
            ("TP5", "PAD", "receive node: 10x probe only"),
-           ("TP6", "VSYS", "ammeter +, after JP5"), ("TP7", "D1_K", "ammeter -, before JP5")]
+           ("TP6", "VSYS", "ammeter +, after JP5"), ("TP7", "D1_K", "ammeter -, before JP5"),
+           ("TP8", "AFE_3V3", "AFE supply behind JP4 - C5 is SMD now, so its lead is no longer a probe point")]
     for i, (ref, net, what) in enumerate(tps):
         x = 248 + 34 * (i // 4)
         y = 162 + 8 * (i % 4)
@@ -921,7 +939,8 @@ def build() -> Schematic:
             s.power(net, (pin[0] - 6, pin[1]), rot=90 if net == "GND" else 270)
         else:
             s.label(net, (pin[0] - 6, pin[1]), 0, "right bottom")
-    s.text("TP5 loads a 10 MOhm node through R1: a 10x probe or better, never a meter. TP6/TP7 straddle JP5: the ammeter position. AFE_3V3 is probed on C5's + lead.", (222, 205), size=1.0)
+    s.text("TP5 loads a 10 MOhm node through R1: a 10x probe or better, never a meter. TP6/TP7 straddle JP5: the ammeter position.", (222, 205), size=1.0)
+    s.text("TP8 is new: C4 and C5 are 0805 MLCC now, so the through-hole + lead that used to be the AFE_3V3 probe point is gone.", (222, 207), size=1.0)
     s.text("The spare ADC (GP27) is deliberate: a second analogue path is the likeliest hack this board will need.", (150, 207), size=1.0)
 
     # =====================================================================
@@ -929,7 +948,7 @@ def build() -> Schematic:
     # =====================================================================
     s.text("BUTTON (GP15), ROLE strap (GP14), MOUNTING", (238, 150), size=2.0, bold=True)
     BX, BY = 250, 164
-    r15 = s.place(R, "R15", "10k", (BX, BY), rot=0, fp=FP_R, desc="BTN pull-up", ref_at=(2, -1), val_at=(2, 1))
+    r15 = s.place(R, "R15", "10k", (BX, BY), rot=0, fp=FP_R06, desc="BTN pull-up", ref_at=(2, -1), val_at=(2, 1))
     r15a, r15b = s.gpin("R15", "1"), s.gpin("R15", "2")
     s.wire(r15a, (r15a[0], r15a[1] - 2)); s.power("+3V3", (r15a[0], r15a[1] - 2))
     nb = (BX, BY + 5)
@@ -954,6 +973,75 @@ def build() -> Schematic:
                 in_bom=False, ref_at=(0, -3, "center"), val_at=(0, 3, "center"))
     s.text("H1-H4: 3.4 mm unplated, 8 mm boss keep-out, one per corner, not tied to GND", (274, BY + 8), size=1.0)
 
+    # =====================================================================
+    # 9. HAPTIC  (bottom, below the LED block)  - new
+    # =====================================================================
+    # A 10 mm coin motor is an inductive load drawing ~100 mA from a 3 V rail:
+    # more than a GPIO can source by an order of magnitude, so it is switched
+    # low-side by an N-channel MOSFET, and its collapse is caught by D3.
+    #
+    # Why VSYS and not +3V3: the Pico's own regulator has to carry the RP2350,
+    # the CYW43439 radio and the whole analogue side. Hanging a 100 mA pulsed
+    # load on it would put motor current through the same rail that feeds
+    # AFE_3V3 through JP4. VSYS is 2.6-3.8 V, which is what a 3 V coin motor
+    # wants, and it is diode-protected by D1 against a reversed cell.
+    s.text("HAPTIC — 10 mm coin motor on VSYS, low-side AO3400A, gate on GP28", (12, 194), size=2.0, bold=True)
+    HY = 208
+    q1 = s.place(NFET, "Q1", "AO3400A", (60, HY), rot=0, fp=FP_SOT23,
+                 desc="Low-side motor switch, N-channel 30 V / 5.2 A, 27 mOhm at 4.5 V, SOT-23",
+                 ref_at=(5, 2), val_at=(5, 4))
+    qg, qs, qd = s.gpin("Q1", "1"), s.gpin("Q1", "2"), s.gpin("Q1", "3")
+    # -- gate chain: GP28 -> R16 -> gate, with R17 holding the gate down ------
+    # R17 is not optional. Between power-up and the first firmware write - and
+    # through every BOOTSEL reset - GP28 is an input, so without a pull-down
+    # the gate floats and the motor may run. 100 k against a 100 R series
+    # resistor loses 3 mV of drive, which is nothing.
+    r16 = s.place(R, "R16", "100", (qg[0] - 12, qg[1]), rot=90, fp=FP_R06,
+                  desc="Q1 gate series", ref_at=(0, -2, "center"), val_at=(0, 2, "center"))
+    r16a, r16b = s.gpin("R16", "1"), s.gpin("R16", "2")
+    s.wire((r16a[0] - 6, r16a[1]), r16a)
+    s.label("MOT_DRV", (r16a[0] - 6, r16a[1]), 0, "right bottom")
+    gate_t = (qg[0] - 6, qg[1])
+    s.wire(r16b, gate_t, qg)
+    r17 = s.place(R, "R17", "100k", (gate_t[0], gate_t[1] + 3), rot=0, fp=FP_R06,
+                  desc="Q1 gate pull-down: holds the motor off while GP28 is an input",
+                  ref_at=(2, -1), val_at=(2, 1))
+    r17a, r17b = s.gpin("R17", "1"), s.gpin("R17", "2")
+    assert r17a == gate_t          # R17 hangs straight off the gate node, no stub
+    s.wire(r17b, (r17b[0], r17b[1] + 1)); s.power("GND", (r17b[0], r17b[1] + 1))
+    s.wire(qs, (qs[0], qs[1] + 2)); s.power("GND", (qs[0], qs[1] + 2))
+    # -- drain, the motor, and the flyback diode -----------------------------
+    sw = qd
+    s.label("MOT_SW", (sw[0] + 2, sw[1]), 0, "left bottom")
+    top = (sw[0], sw[1] - 6)
+    # rot 270 puts the cathode uppermost, so the diode reads the way it sits:
+    # anode on the switched node, cathode on VSYS, reverse-biased until Q1 opens.
+    d3 = s.place(DSCH, "D3", "1N5819W", (sw[0] + 10, sw[1] - 3), rot=270, fp=FP_SOD123,
+                 desc="Motor flyback, Schottky 40 V 1 A, SOD-123", ref_at=(-2, -2, "right"), val_at=(-2, 0, "right"))
+    d3k, d3a = s.gpin("D3", "1"), s.gpin("D3", "2")
+    s.wire(sw, (d3a[0], sw[1]), d3a)
+    s.wire(d3k, (d3k[0], top[1]), top)
+    s.power("VSYS", top, rot=0)
+    # J6: two 2.54 mm through-holes at the elbow. The motor's flying leads
+    # solder straight in, or a 2-pin header takes a plug - the same choice the
+    # LED has at J3. Pin 1 is the switched (low) side on every 2-pin connector
+    # on this board, J1 and J5 included.
+    j6 = s.place(C2, "J6", "MOT 1x02 2.54", (sw[0] + 26, sw[1]), rot=0, mirror="x", fp=FP_HDR2,
+                 desc="Motor, 2 x 2.54 mm THT. Pin 1 = MOT_SW (switched), pin 2 = VSYS",
+                 ref_at=(2, -4), val_at=(0, 4, "center"))
+    j6p1, j6p2 = s.gpin("J6", "1"), s.gpin("J6", "2")
+    s.wire((j6p1[0] - 6, j6p1[1]), j6p1); s.label("MOT_SW", (j6p1[0] - 6, j6p1[1]), 0, "right bottom")
+    s.wire((j6p2[0] - 6, j6p2[1]), j6p2); s.power("VSYS", (j6p2[0] - 6, j6p2[1]), rot=270)
+    # the motor itself, off-board on its leads, shown by net name like D2
+    m1 = s.place(MOTOR, "M1", "1034 coin 10mm 3V", (j6p1[0] + 16, j6p1[1] + 2), rot=0,
+                 in_bom=True, on_board=False, desc="Coin vibration motor, off-board, leads into J6",
+                 ref_at=(5, -2), val_at=(5, 2))
+    m1p, m1n = s.gpin("M1", "1"), s.gpin("M1", "2")
+    s.wire(m1p, (m1p[0], m1p[1] - 2)); s.power("VSYS", (m1p[0], m1p[1] - 2), rot=0)
+    s.wire(m1n, (m1n[0] - 6, m1n[1])); s.label("MOT_SW", (m1n[0] - 6, m1n[1]), 0, "right bottom")
+    s.text("(M1 drawn for reference: it is the motor whose leads go into J6, not a board component.)  D3 is the flyback path: without it the", (150, 210), size=1.0)
+    s.text("motor's collapse drives Q1's drain well above VSYS at every turn-off.  Firmware: GP28 high runs the motor - never during an RX window.", (150, 213), size=1.0)
+
     # Copper-only items are not purchasable parts, so they are not in the BOM.
     # Their footprints already carry exclude_from_bom; saying the same thing on
     # the symbol is what makes the PCB's schematic-parity check a real test
@@ -974,14 +1062,20 @@ EXPECTED_NETS = {
     "BAT+": {("J1", "2"), ("J5", "2"), ("SW1", "2")},
     "GND": {("J1", "1"), ("J5", "1"), ("U1", "3"), ("U1", "8"), ("U1", "13"), ("U1", "18"), ("U1", "23"),
             ("U1", "28"), ("U1", "33"), ("U1", "38"), ("U2", "4"), ("C3", "2"), ("C5", "2"), ("R11", "2"), ("C4", "2"),
-            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("SW2", "2"), ("JP8", "2"), ("TP1", "1")},
+            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("SW2", "2"), ("JP8", "2"), ("TP1", "1"),
+            ("Q1", "2"), ("R17", "2")},
     "SW_OUT": {("SW1", "1"), ("D1", "2")},
     "D1_K": {("D1", "1"), ("JP5", "1"), ("TP7", "1")},
-    "VSYS": {("JP5", "2"), ("U1", "39"), ("TP6", "1")},
+    # M1, like BT1 and D2, is off-board (on_board=False) and so is not in the netlist
+    "VSYS": {("JP5", "2"), ("U1", "39"), ("TP6", "1"), ("D3", "1"), ("J6", "2")},
     "+3V3": {("U1", "36"), ("JP4", "1"), ("E1", "1"), ("R15", "1")},
-    "AFE_3V3": {("JP4", "2"), ("U2", "8"), ("C3", "1"), ("C5", "1"), ("R10", "1")},
+    "AFE_3V3": {("JP4", "2"), ("U2", "8"), ("C3", "1"), ("C5", "1"), ("R10", "1"), ("TP8", "1")},
     "VREF_DIV": {("R10", "2"), ("R11", "1"), ("C4", "1"), ("JP6", "1")},
     "VREF": {("JP6", "2"), ("R3", "2"), ("R5", "2"), ("R6", "2"), ("R8", "2"), ("TP4", "1")},
+    # haptic: gate chain, then the switched low side of the motor
+    "MOT_DRV": {("U1", "34"), ("R16", "1")},
+    "MOT_G": {("R16", "2"), ("R17", "1"), ("Q1", "1")},
+    "MOT_SW": {("Q1", "3"), ("D3", "2"), ("J6", "1")},
     "GP11_TX": {("U1", "15"), ("JP2", "1"), ("C6", "1")},
     "JP2_R1": {("JP2", "2"), ("C6", "2"), ("R1", "1")},
     "PAD": {("R1", "2"), ("JP7", "1"), ("J2", "1"), ("TP5", "1")},
@@ -1004,8 +1098,8 @@ EXPECTED_NETS = {
     "J3_G": {("R13", "2"), ("J3", "3")},
     "J3_B": {("R14", "2"), ("J3", "4")},
     "RUN": {("U1", "30"), ("E2", "1")},
-    "GP0": {("U1", "1"), ("E3", "1")},
-    "GP1": {("U1", "2"), ("E4", "1")},
+    "GP3": {("U1", "5"), ("E3", "1")},
+    "GP22": {("U1", "29"), ("E4", "1")},
     "GP4": {("U1", "6"), ("E5", "1")},
     "GP5": {("U1", "7"), ("E6", "1")},
     "GP20": {("U1", "26"), ("E7", "1")},
@@ -1024,7 +1118,7 @@ EXPECTED_NETS = {
 #                  because the one lane past the antenna keep-out is 0.99 mm
 #   Default 0.25   everything else
 NET_CLASSES = {
-    "Power": (0.5, ("GND", "VSYS", "/BAT+", "/SW_OUT", "/D1_K")),
+    "Power": (0.5, ("GND", "VSYS", "/BAT+", "/SW_OUT", "/D1_K", "/MOT_SW")),
     "Rail": (0.4, ("+3V3", "/AFE_3V3")),
 }
 
@@ -1071,7 +1165,10 @@ def board_settings():
             "min_text_height": 0.8,
             "min_text_thickness": 0.08,
             "solder_mask_clearance": 0.0,
-            "solder_mask_min_width": 0.0,
+            # 0.0 switched the minimum-web test off. 0.1 mm is the dam PCBWay's
+            # green mask holds; it is what JP1-JP8's 0.3 mm pad gaps and the
+            # MSOP-8's 0.25 mm ones are checked against.
+            "solder_mask_min_width": 0.1,
             "min_resolved_spokes": 2,
             "max_error": 0.005,
             "allow_blind_buried_vias": False,

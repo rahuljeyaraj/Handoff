@@ -158,6 +158,9 @@ text = f"""(footprint "MountingHole_3.4mm_M3_Boss8mm"
 		(keepout
 			(tracks not_allowed)
 			(vias not_allowed)
+			# Pads stay ALLOWED here only because the hole's own NPTH pad sits in
+			# the middle of this keep-out and would report itself. gen_pcb.py's
+			# report() checks every other pad against the boss circle instead.
 			(pads allowed)
 			(copperpour not_allowed)
 			(footprints allowed)

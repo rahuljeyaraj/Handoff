@@ -64,6 +64,7 @@ BW, BH, CORNER = 40.0, 62.0, 3.0
 EDGE_CLEAR = 0.3                      # copper to board edge (the fab minimum)
 EDGE_MARGIN = 0.5                     # what the layout actually keeps to the edge
 HOLES = [("H1", 4.5, 4.5), ("H2", 35.5, 4.5), ("H3", 4.5, 57.5), ("H4", 35.5, 57.5)]
+BOSS_R = 4.0                          # the 8 mm enclosure boss, as gen_mount_footprint draws it
 
 # The cell/pad pocket, from the floor plan: 20 x 30 centred. Nothing on the
 # bottom face here (the stack sits ~0.5 mm below the board) and no bottom pour
@@ -110,8 +111,40 @@ def gap(n, m):
 
 
 # E1-E10: one breakout pad outboard of its own pin (README, Expansion)
-BREAKOUT = {"E1": 36, "E2": 30, "E3": 1, "E4": 2, "E5": 6,
-            "E6": 7, "E7": 26, "E8": 27, "E9": 32, "E10": 3}
+# Pins 1, 2 and 3 are not here. A pad at x 31.44 reaches x 32.19, which is
+# 3.31 mm from H4's centre and so inside the 8 mm boss the M3 screw stands in -
+# DRC does not see it because the boss keep-out bars tracks, not pads. The
+# little-finger wall is clear only between J5's housing (ends y 40.24) and that
+# boss (starts y 53.5), which is pins 5-8. GP0 and GP1 give way to GP3 and a
+# ground pad; GP1's breakout moves to GP22 on the thumb row.
+BREAKOUT = {"E1": 36, "E2": 30, "E3": 5, "E4": 29, "E5": 6,
+            "E6": 7, "E7": 26, "E8": 27, "E9": 32, "E10": 8}
+
+# --------------------------------------------------------------------------
+# A route point that means "the centre of this pad", resolved against the real
+# footprint after placement.
+#
+# Every endpoint in ROUTES used to be a literal, which meant each one silently
+# encoded its part's package: a 1206 hand-solder pad sits 1.55 mm from the
+# body centre and an 0603 one 0.9125 mm, so re-ordering the 100 k / 10 k / 100 R
+# in 0603 moved twenty-odd track ends off their pads at once. P() says which
+# pad is meant and lets pcbnew work out where it is; dx/dy give a point a fixed
+# offset from it (the start of a 45, a lane that has to stay in line with a pad
+# row). Lane coordinates that are not pads stay literal.
+# --------------------------------------------------------------------------
+class Pad:
+    __slots__ = ("ref", "num", "dx", "dy")
+
+    def __init__(self, ref, num, dx=0.0, dy=0.0):
+        self.ref, self.num, self.dx, self.dy = ref, num, dx, dy
+
+    def __repr__(self):
+        return f"P({self.ref}.{self.num}{self.dx:+g}{self.dy:+g})"
+
+
+def P(ref, num, dx=0.0, dy=0.0):
+    return Pad(ref, num, dx, dy)
+
 
 # --------------------------------------------------------------------------
 # Placement. (anchor, x, y, rotation, layer)
@@ -161,12 +194,19 @@ PLACE = {
     "D1":  ("1", 4.5, 29.8, 270, TOP),
     "JP5": ("@", 4.0, 26.9, 180, BOT),    # pad 1 D1_K west, pad 2 VSYS east
 
-    # ---- hand strip: SW2 centred, the two electrolytics either side -----
+    # ---- hand strip: SW2 centred, the two bulk caps either side ---------
     # SW2's courtyard is 9.59 x 7.59, so it fills x 15.2-24.8 on its own; C4 and
     # C5 take what is left either side of it.
+    #
+    # C4 and C5 were 5 mm radial electrolytics on the TOP face, and every track
+    # that fed them ran on the BOTTOM and reached them through their through-hole
+    # leads. As 0805 MLCC they have no leads, so they move to the bottom face -
+    # where their tracks already were - and each is anchored on pad 1, on the
+    # exact point the old part's + lead stood. That keeps both nets' routes
+    # unchanged, and hands the top face 26 mm2 of electrode back.
     "SW2": ("@", 16.75, 2.75, 0, TOP),
-    "C4":  ("@", 10.75, 4.5, 0, TOP),
-    "C5":  ("@", 26.75, 4.5, 0, TOP),
+    "C4":  ("1", 10.75, 5.2, 180, BOT),   # + on the divider run down x 10.75
+    "C5":  ("1", 26.75, 4.5, 180, BOT),   # + where the radial's + lead was
     # The VREF divider sits with C4, its own hold-up capacitor, on the bottom
     # face of the hand strip, instead of at the elbow. That is 46 mm less
     # divider net, and it frees the one top-face lane on the thumb side of
@@ -197,7 +237,7 @@ PLACE = {
     "R3":  ("@", COL_L, 26.0, 90, TOP),     # pad 1 (HIZ) at y 27.55
 
     # left column: stage-1 feedback, the interstage pair, the ADC cap
-    "R5":  ("@", COL_L, 31.2, 270, TOP),    # FB1 pad toward pin 2
+    "R5":  ("@", COL_L, 30.5625, 270, TOP),  # FB1 pad on 29.65, where the 1206 put it
     "R6":  ("@", COL_L, 36.5, 270, TOP),    # IN2 pad 2.5 mm from pin 5
     "C1":  ("@", COL_L, 41.8, 90, TOP),
     "C2":  ("@", COL_L, 47.1, 270, TOP),
@@ -268,6 +308,37 @@ PLACE = {
     "TP5": ("@", 38.05, 36.0, 0, BOT),
     "TP6": ("@", 6.6, (25.04 + 27.58) / 2, 0, BOT),
     "TP7": ("@", 1.9, 31.5, 0, BOT),   # ref/value text default is fine on the fab layer here
+    # TP8 is the eighth of the eight the README asked for. It was dropped last
+    # session because C5's + lead was through-hole and made a better probe
+    # point than a pad would have; C5 is 0805 now, so that reason is gone.
+    "TP8": ("@", 27.5, 8.2, 0, BOT),
+
+    # ---- haptic: the motor driver, bottom face at the thumb end of the elbow
+    # This is the only free ground left on the board: x 12-18 between the Pico's
+    # thumb pin row and JP1, below JP4. It is also the right place electrically -
+    # VSYS arrives at pin 39 (11.12, 58.06), two millimetres away, so the motor's
+    # 100 mA pulses never travel the length of the board, and it is 10 mm of
+    # board and a ground pour away from the AFE channel.
+    # J6's holes sit at x 14.9, not on the Pico's own pin lane: the gate has to
+    # come south past them on the top face and a 0603 pad needs 0.98 mm of it.
+    "J6":  ("1", 14.9, 53.7, 0, BOT),     # pad 1 MOT_SW (north), pad 2 VSYS
+    # 180, so the drain (pad 3) faces east toward J6's switched hole and D3,
+    # and the gate and source face the wall. At 0 the drain track would have to
+    # cross both of them.
+    "Q1":  ("@", 15.0, 60.0, 180, BOT),
+    # D3 is on the TOP face: the bottom strip holds J6 and Q1 and nothing else
+    # fits. One via closes the flyback loop, which is the only via in it.
+    "D3":  ("@", 16.9, 58.6, 270, TOP),
+    # The gate chain runs on the top face, where the lane past the pin row is
+    # not contested: on the bottom, VSYS already owns it. R16 sits beside
+    # pin 34 (GP28) so the drive leaves the module through its series resistor
+    # before it goes anywhere.
+    # R16 stands on end in the 1.5 mm lane between the Pico's thumb pads and
+    # C2's courtyard; R17 lies across the lane below it so the gate run enters
+    # its pad 1 from the north and leaves it south - a shunt part that the run
+    # passes straight through, not a T. Both pad columns are on x 13.5875.
+    "R16": ("@", 13.5875, 47.9, 270, TOP),
+    "R17": ("@", 14.5, 51.3, 0, TOP),
 }
 for _ref, _pin in BREAKOUT.items():
     _x, _y = pico_pin(_pin)
@@ -308,21 +379,21 @@ ROUTES = [
     ("/GP21", BL, [pico_pin(27), (BRK_TH, pico_pin(27)[1])]),
     ("/RUN", BL, [pico_pin(30), (BRK_TH, pico_pin(30)[1])]),
     ("/GP27_ADC1", BL, [pico_pin(32), (BRK_TH, pico_pin(32)[1])]),
+    ("/GP22", BL, [pico_pin(29), (BRK_TH, pico_pin(29)[1])]),
     ("+3V3", BL, [pico_pin(36), (BRK_TH, pico_pin(36)[1])]),
     # The little-finger five stop at x 31.2, not on the pad centre: H4's 8 mm
     # boss keep-out reaches x 31.5 and bars tracks, though not pads.
-    ("/GP0", BL, [pico_pin(1), (31.2, pico_pin(1)[1])]),
-    ("/GP1", BL, [pico_pin(2), (31.2, pico_pin(2)[1])]),
+    ("/GP3", BL, [pico_pin(5), (31.2, pico_pin(5)[1])]),
     ("/GP4", BL, [pico_pin(6), (31.2, pico_pin(6)[1])]),
     ("/GP5", BL, [pico_pin(7), (31.2, pico_pin(7)[1])]),
 
     # ---- the LED, straight across the thumb strip on the bottom face ------
-    ("/LED_R", BL, [pico_pin(22), (9.05, 14.91)]),
-    ("/LED_G", BL, [pico_pin(24), (9.05, 19.95)]),
-    ("/LED_B", BL, [pico_pin(25), (9.05, 22.47)]),
-    ("/J3_R", BL, [(4.0, 14.94), (5.95, 14.91)]),
-    ("/J3_G", BL, [(4.0, 19.94), (5.95, 19.95)]),
-    ("/J3_B", BL, [(4.0, 22.44), (5.95, 22.47)]),
+    ("/LED_R", BL, [pico_pin(22), P("R12", "1")]),
+    ("/LED_G", BL, [pico_pin(24), P("R13", "1")]),
+    ("/LED_B", BL, [pico_pin(25), P("R14", "1")]),
+    ("/J3_R", BL, [(4.0, 14.94), P("R12", "2")]),
+    ("/J3_G", BL, [(4.0, 19.94), P("R13", "2")]),
+    ("/J3_B", BL, [(4.0, 22.44), P("R14", "2")]),
 
     # ---- the battery path, all on the thumb wall ---------------------------
     # BAT+: J1 to J5 on the top face (the connector pins are through-hole, so
@@ -355,7 +426,7 @@ ROUTES = [
     # BTN: from R15 up the little-finger wall on the bottom face (a static
     # line, 0.25 mm, 0.68 mm from the edge), west along pin 20's row into the
     # pin, then on the top face round the antenna keep-out's corner to SW2.
-    ("/BTN", BL, [(38.05, 46.63), (39.2, 45.48), (39.2, 13.34), (38.2, 12.34), pico_pin(20)]),
+    ("/BTN", BL, [P("R15", "2"), (39.2, 44.8425), (39.2, 13.34), (38.2, 12.34), pico_pin(20)]),
     ("/BTN", TL, [pico_pin(20), (28.9, 11.3), (27.3, 9.7), (25.6, 8.0), (25.6, 5.9),
                   (23.25, 3.55), (23.25, 2.75)]),
     ("/BTN", BL, [(16.75, 2.75), (23.25, 2.75)]),    # SW2's two pad-1s
@@ -386,10 +457,10 @@ ROUTES = [
     # ---- stage 1 -----------------------------------------------------------
     # Pin 2 leaves its pad twice: north into the 2.65 mm slot R2 vacated, and
     # south under U2's body, where the island's vertical does not reach.
-    ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 27.2), (21.9, 27.2),
-                         (21.9, 25.75), (24.4, 25.75)]),
+    ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 27.2),
+                         P("R4", "1", -2.5, 0.8125), P("R4", "1", -1.6875), P("R4", "1")]),
     ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 31.3), (17.0, 31.3),
-                         (17.0, 29.65), (15.6, 29.65)]),
+                         P("R5", "1", 1.4), P("R5", "1")]),
     # OUT1: pin 1 -> R4.2 -> down the OUTERMOST of the three east lanes -> and
     # then across to C1 on the bottom face, not the top.
     #
@@ -405,7 +476,8 @@ ROUTES = [
     # leaves the lane by diving: the bottom face at y 43.36, C1's own pad row,
     # is empty across the whole channel. Two vias, and nothing on the top
     # face crosses the channel between the AFE and the elbow.
-    ("/OUT1", TL, [(20.975, 29.887), (20.975, 28.85), (24.4, 28.85), (27.2, 28.85), (27.2, 43.362)]),
+    ("/OUT1", TL, [(20.975, 29.887), P("R4", "2", -3.425), P("R4", "2"),
+                   P("R4", "2", 2.8), (27.2, 43.362)]),
     ("/OUT1", BL, [(27.2, 43.362), (21.8, 43.362), (17.2, 43.362)]),
     ("/OUT1", TL, [(17.2, 43.362), (15.6, 43.362)]),
     # the branch to JP3: up out of the corridor at x 21.8, straight down the
@@ -417,15 +489,15 @@ ROUTES = [
     # ---- stage 2 -----------------------------------------------------------
     # The lower row fans out planar: pin 5 west, then 6, 7 and 8 east in that
     # order, each one lane further out than the pin to its right.
-    ("Net-(U2B-+)", TL, [(19.025, 34.112), (19.025, 34.95), (15.6, 34.95)]),
-    ("Net-(U2B-+)", TL, [(15.6, 34.95), (16.9, 36.25), (16.9, 38.937), (15.6, 40.237)]),
-    ("Net-(U2B--)", TL, [(19.675, 34.112), (19.675, 36.9), (22.6, 36.9),
-                         (22.6, 41.65), (24.4, 41.65)]),
-    ("Net-(U2B--)", TL, [(24.4, 41.65), (24.4, 39.45)]),
-    ("Net-(JP3-B)", TL, [(20.325, 34.112), (20.325, 36.35), (24.4, 36.35)]),
+    ("Net-(U2B-+)", TL, [(19.025, 34.112), P("R6", "1", 3.425), P("R6", "1")]),
+    ("Net-(U2B-+)", TL, [P("R6", "1"), P("R6", "1", 1.3, 1.3), (16.9, 38.937), (15.6, 40.237)]),
+    ("Net-(U2B--)", TL, [(19.675, 34.112), (19.675, 37.6), (22.6, 37.6),
+                         P("R7", "1", -1.8), P("R7", "1")]),
+    ("Net-(U2B--)", TL, [P("R7", "1"), P("R8", "1")]),
+    ("Net-(JP3-B)", TL, [(20.325, 34.112), P("R7", "2", -4.075), P("R7", "2")]),
     # OUT2 on to JP3: the innermost east lane, then one via down to the
     # jumper pad. It enters lowest of the three, so nothing crosses it.
-    ("Net-(JP3-B)", TL, [(24.4, 36.35), (25.7, 36.35), (25.7, 48.3)]),
+    ("Net-(JP3-B)", TL, [P("R7", "2"), P("R7", "2", 1.3), (25.7, 48.3)]),
     ("Net-(JP3-B)", BL, [(25.7, 48.3), (24.8, 49.2), (24.8, 50.44)]),
 
     # ---- VREF: the left outboard lane, from R8's return up to the divider --
@@ -434,9 +506,11 @@ ROUTES = [
     # continues up the lane between the thumb row and the antenna keep-out
     # (x 12.45: 0.46 mm from the pads, 0.34 from the keep-out) to one via at
     # the hand end, where JP6 is.
-    ("VREF", TL, [(24.4, 44.75), (22.8, 44.75), (22.8, 41.6), (13.9, 41.6), (13.9, 39.75), (15.6, 38.05)]),
-    ("VREF", TL, [(15.6, 38.05), (13.9, 36.35), (13.9, 34.45), (15.6, 32.75)]),
-    ("VREF", TL, [(15.6, 32.75), (13.9, 31.05), (13.9, 26.15), (15.6, 24.45)]),
+    ("VREF", TL, [P("R8", "2"), P("R8", "2", -1.6), (22.8, 41.6), (13.9, 41.6),
+                  P("R6", "2", -1.7, 1.7), P("R6", "2")]),
+    ("VREF", TL, [P("R6", "2"), P("R6", "2", -1.7, -1.7), P("R5", "2", -1.7, 1.7), P("R5", "2")]),
+    ("VREF", TL, [P("R5", "2"), P("R5", "2", -0.9), P("R5", "2", -1.7, -0.8),
+                  (13.9, 26.15), (15.6, 24.45)]),
     ("VREF", TL, [(15.6, 24.45), (X_VREF_N, 21.3), (X_VREF_N, 11.05)]),
     ("VREF", BL, [(X_VREF_N, 11.05), (9.2, 11.05)]),
     ("VREF", BL, [(9.2, 11.05), (7.25, 11.05), (6.5, 10.3)]),
@@ -444,7 +518,7 @@ ROUTES = [
     # ---- the VREF divider at the hand end: R10, R11, JP6 and C4 ------------
     # C4's + lead is through-hole, so the divider net is four short hops on the
     # bottom face and R10's supply pad is fed straight off the run to C5.
-    ("Net-(JP6-A)", BL, [(10.75, 1.9), (10.75, 4.5), (10.75, 7.65), (11.5, 8.4)]),
+    ("Net-(JP6-A)", BL, [P("R10", "2"), P("C4", "1"), (10.75, 7.65), P("R11", "1")]),
     ("Net-(JP6-A)", BL, [(11.5, 8.4), (11.5, 8.65), (10.4, 9.75), (9.2, 9.75)]),
 
     # ---- ADC0: C2 to pin 31 up the inner lane, and down to JP1 -------------
@@ -466,8 +540,9 @@ ROUTES = [
     # the top face RX_IN crosses it; so this runs on the bottom face, which is
     # free the whole way (the pocket has no pour) into C5's through-hole +
     # lead, and on between SW2's pad rows to R10.
-    ("/AFE_3V3", BL, [(26.5, 34.163), (27.5, 33.163), (27.5, 5.45), (26.75, 4.5)]),
-    ("/AFE_3V3", BL, [(26.75, 4.5), (26.25, 5.0), (15.3, 5.0), (15.3, 2.7), (14.5, 1.9), (13.87, 1.9)]),
+    ("/AFE_3V3", BL, [(26.5, 34.163), (27.5, 33.163), P("TP8", "1"), (27.5, 5.45), P("C5", "1")]),
+    ("/AFE_3V3", BL, [P("C5", "1"), (26.25, 5.0), (15.3, 5.0), (15.3, 2.7),
+                      P("R10", "1", 1.925), P("R10", "1")]),
 
     # ---- +3V3: pin 36 straight into JP4, and one branch to R15 -------------
     # Pin 36 is on y 50.44 and so is JP4's pad: 4.7 mm of straight track. The
@@ -475,13 +550,41 @@ ROUTES = [
     # the jumper pads, and crosses the little-finger row between pins 6 and 7.
     ("+3V3", BL, [pico_pin(36), (15.85, 50.44)]),
     ("+3V3", BL, [(15.85, 50.44), (15.85, 47.6), (16.25, 47.2), (26.8, 47.2),
-                  (27.37, Y_3V3_LF), (34.95, Y_3V3_LF)]),
+                  (27.37, Y_3V3_LF), P("R15", "1")]),
 
     # ---- the elbow jumpers ------------------------------------------------
     ("Net-(JP3-C)", TL, [(24.4, 46.95), (23.5, 47.85), (23.5, 48.4)]),
     ("Net-(JP3-C)", BL, [(23.5, 48.4), (23.5, 50.44)]),
     ("Net-(JP1-A)", TL, [(24.4, 50.05), (24.4, 53.0), (23.4, 54.0)]),
     ("Net-(JP1-A)", BL, [(23.4, 54.0), (22.15, 54.0)]),
+
+    # ---- haptic ------------------------------------------------------------
+    # The gate chain, top face. GP28 leaves pin 34 into R16 and goes south down
+    # the one lane between the thumb pin row and J6's holes that the bottom
+    # face cannot offer: on the bottom that lane is 1.23 mm wide and VSYS, at
+    # 0.5 mm, already has it. Two 0.25 mm tracks would not fit beside it.
+    ("/MOT_DRV", TL, [pico_pin(34), (12.35, 45.36), (13.5875, 46.5975), P("R16", "1")]),
+    # U1 pin 33 is AGND and used to reach the electrode through the 0.96 mm pour
+    # sliver between the Pico's thumb pads and the ADC0 lane. MOT_DRV leaving
+    # pin 34 crosses that sliver - 0.25 mm of track plus two 0.2 mm clearances
+    # is 0.65 of it - so AGND gets an explicit tie instead: west on the bottom
+    # face, out of the cell pocket, into the bottom pour. That is a better
+    # ground than the sliver was.
+    ("GND", BL, [pico_pin(33), (9.0, 42.82)]),
+    # One straight line from R16 through R17's pad and on to the via: the
+    # pull-down is in the middle of the run, so there is no branch to make an
+    # angle at.
+    ("Net-(Q1-G)", TL, [P("R16", "2"), P("R17", "1"), (13.5875, 57.8), (12.8, 58.5875)]),
+    ("Net-(Q1-G)", BL, [(12.8, 58.5875), (12.8, 60.5), (13.25, 60.95), P("Q1", "1")]),
+    # VSYS: two millimetres from pin 39 into J6's supply hole, then on to D3's
+    # cathode. The motor's current never leaves this corner of the board.
+    ("VSYS", BL, [pico_pin(39), (12.6, 56.58), (12.6, 56.24), P("J6", "2")]),
+    ("VSYS", TL, [P("J6", "2"), (16.19, 56.24), P("D3", "1")]),
+    # MOT_SW: J6's switched hole east and down into Q1's drain, and D3's anode
+    # onto the same pad through the one via in the flyback loop.
+    ("/MOT_SW", BL, [P("J6", "1"), (16.0, 53.7), (16.5, 54.2), (16.5, 60.0), P("Q1", "3")]),
+    ("/MOT_SW", TL, [P("D3", "2"), (16.9, 61.15)]),
+    ("/MOT_SW", BL, [(16.9, 61.15), (16.5, 60.75), (16.5, 60.0)]),
 ]
 
 VIAS = [
@@ -497,6 +600,9 @@ VIAS = [
     # AFE_3V3: the lane start doubles as the drop to the bottom face for the
     # run north; the other is the end of the lane, under the elbow block to JP4
     ("/AFE_3V3", 26.5, 34.163), ("/AFE_3V3", 26.5, 48.8),
+    ("GND", 9.0, 42.82),
+    ("Net-(Q1-G)", 12.8, 58.5875),
+    ("/MOT_SW", 16.9, 61.15),
     # The two pours are one net and have to be stitched, or DRC reports them
     # unconnected. Four, all outside the cell pocket and the antenna keep-out.
     ("GND", 5.0, 11.7), ("GND", 31.0, 7.0), ("GND", 2.0, 53.0), ("GND", 7.0, 33.0),
@@ -513,7 +619,9 @@ TEXTS = [
     ("B.SilkS", 23.5, 59.7, "OUT1", 0), ("B.SilkS", 6.5, 12.1, "VREF", 0),
     ("B.SilkS", 38.05, 37.7, "PAD", 0),
     ("B.SilkS", 5.5, 24.8, "VSYS", 0), ("B.SilkS", 1.9, 30.1, "D1K", 0),
-    ("B.SilkS", 20.0, 60.7, "JP1-8: OPEN = ISOLATED", 0),
+    ("B.SilkS", 22.5, 60.8, "JP1-8 = OPEN", 0),
+    # J6 takes the motor leads and has no silk of its own (NO_SILK_REF)
+    ("B.SilkS", 13.3, 51.4, "MOT", 0),
     # J3's pin order, the LED's lead order, beside the housing
     ("F.SilkS", 6.9, 14.94, "R", 0), ("F.SilkS", 6.9, 17.44, "K", 0),
     ("F.SilkS", 6.9, 19.94, "G", 0), ("F.SilkS", 6.9, 22.44, "B", 0),
@@ -527,8 +635,9 @@ TEXTS = [
 FAB_NOTE = ("Cmts.User", 20.0, 31.0,
             "HANDOFF rev A - 2 layer, 40 x 62 mm, 1.6 mm FR-4, 1 oz Cu, "
             "HASL lead-free, green mask, white silk. Min track/space 0.25/0.2 "
-            "(design), 0.15 (fab floor). Min drill 0.3 (vias), 0.7 (test pads). "
-            "H1-H4 3.4 mm unplated.", 0)
+            "(design), 0.15 (fab floor). Min solder-mask dam 0.1. Drills 0.3 / "
+            "0.7 / 0.95 / 1.0 / 1.1 / 1.15 PTH and 3.4 NPTH - see build/drills.md. "
+            "H1-H4 3.4 mm unplated, each inside an 8 mm enclosure boss.", 0)
 
 # --------------------------------------------------------------------------
 # Netlist
@@ -574,7 +683,16 @@ SILK_H = 0.8        # PCBWay's minimum legible silk height
 # and no information. The four JST bodies are 6.84 mm deep on a 9 mm pitch, so
 # their boxes touch each other; the mounting rings run into the corner radius.
 # Every one of these parts is unambiguous from its pads and its reference.
-SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4"}
+SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4",
+               "J6"}
+
+# References that would otherwise earn silk by their prefix but have nowhere to
+# put it: J6, Q1 and D3 are packed into 6 x 9 mm at the elbow, between JP4's
+# silk and the JP1-8 legend, and three more labels there collide with what is
+# already printed. Only the TEXT goes to F.Fab/B.Fab - D3's cathode bar and
+# Q1's pin-1 mark stay on silk, because a hand-assembled diode needs its band
+# - and the "MOT" legend below names J6.
+NO_SILK_REF = {"J6", "Q1", "D3"}
 
 # Reference text, placed as (dx, dy[, rotation]) from the footprint's own origin.
 REF_AT = {
@@ -583,9 +701,10 @@ REF_AT = {
     "J1": (3.9, 4.65, 90), "J2": (3.9, 3.85, 90), "J5": (3.9, 4.65, 90), "R10": (0.0, 0.0),
     "J3": (0.0, -3.5),
     "JP5": (-2.5, 0.0, 90), "JP6": (0.0, -2.3), "JP7": (0.0, 1.8), "JP2": (0.0, 1.8),
-    "JP8": (0.0, -1.8), "JP4": (0.0, 1.9), "JP3": (0.0, 1.9), "JP1": (0.0, 1.8),
+    "JP8": (0.0, -1.8), "JP4": (1.5, 1.9), "JP3": (0.0, 1.9), "JP1": (0.0, 1.8),
     "E3": (0.0, -1.3), "H1": (0.0, 5.0), "H2": (0.0, 5.0), "H3": (0.0, -5.0), "H4": (0.0, -5.0),
     "TP5": (-3.0, 0.0), "TP7": (3.0, 0.0),
+    "Q1": (0.0, -2.5), "D3": (-2.6, 0.0), "J6": (-2.4, 1.3),
 }
 
 # Fitted only if the GP11 leakage measurement at M3 says so (README, E9)
@@ -599,7 +718,7 @@ def silkscreen(fp, ref):
     v.SetLayer(pcbnew.F_Fab if fp.GetLayer() == pcbnew.F_Cu else pcbnew.B_Fab)
     r = fp.Reference()
     prefix = ref.rstrip("0123456789")
-    keep = prefix in SILK_REFS
+    keep = prefix in SILK_REFS and ref not in NO_SILK_REF
     if keep:
         r.SetLayer(pcbnew.F_SilkS if fp.GetLayer() == pcbnew.F_Cu else pcbnew.B_SilkS)
         r.SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(SILK_H), pcbnew.FromMM(SILK_H)))
@@ -774,6 +893,30 @@ def build():
         out.Append(mm(px), mm(py))
     board.Add(ka)
 
+    # ---- the AGND sliver, removed ---------------------------------------
+    # Between the Pico's thumb pad column and the ADC0 lane the top pour is
+    # 0.96 mm wide, walled north by ADC0's run into pin 31 and south by
+    # MOT_DRV's out of pin 34. It is 10 mm2 of copper that reaches nothing but
+    # U1 pin 33 (AGND), through two thermal spokes, and AGND now has an
+    # explicit tie west to the bottom pour instead. Left to fill it is an
+    # isolated island and a starved thermal relief; removed, the pad is clean.
+    sl = pcbnew.ZONE(board)
+    sl.SetIsRuleArea(True)
+    sl.SetDoNotAllowZoneFills(True)
+    sl.SetDoNotAllowFootprints(False)
+    sl.SetDoNotAllowTracks(False)
+    sl.SetDoNotAllowVias(False)
+    sl.SetDoNotAllowPads(False)
+    sls = pcbnew.LSET()
+    sls.addLayer(pcbnew.F_Cu)
+    sl.SetLayerSet(sls)
+    sl.SetZoneName("AGND sliver - no top pour, AGND is tied explicitly")
+    so = sl.Outline()
+    so.NewOutline()
+    for px, py in ((10.1, 37.9), (13.05, 37.9), (13.05, 46.0), (10.1, 46.0)):
+        so.Append(mm(px), mm(py))
+    board.Add(sl)
+
     # ---- ground pours ---------------------------------------------------
     gnd = netmap["GND"]
     for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
@@ -795,9 +938,22 @@ def build():
         board.Add(z)
 
     # ---- tracks and vias -------------------------------------------------
+    def where(pt):
+        """Resolve a P() pad reference to board millimetres; pass tuples through."""
+        if not isinstance(pt, Pad):
+            return pt
+        fp = placed.get(pt.ref)
+        if fp is None:
+            raise SystemExit(f"route names pad {pt.ref}.{pt.num}, which is not placed")
+        pad = next((p for p in fp.Pads() if p.GetNumber() == pt.num), None)
+        if pad is None:
+            raise SystemExit(f"{pt.ref} has no pad {pt.num!r}")
+        pos = pad.GetPosition()
+        return (round(pcbnew.ToMM(pos.x) + pt.dx, 4), round(pcbnew.ToMM(pos.y) + pt.dy, 4))
+
     layer_of = {"F.Cu": pcbnew.F_Cu, "B.Cu": pcbnew.B_Cu}
     for route in ROUTES:
-        net, layer, pts = route[0], route[1], route[2]
+        net, layer, pts = route[0], route[1], [where(q) for q in route[2]]
         if net not in netmap:
             raise SystemExit(f"route for unknown net {net!r}")
         w = mm(route[3] if len(route) > 3 else WIDTH.get(net, TRACK))
@@ -866,6 +1022,27 @@ def report(board, placed, nets):
                 if o:
                     print(f"  OUTSIDE {ref} {pcbnew.LayerName(txt.GetLayer())} text {o}")
                     bad += 1
+    # No pad inside an enclosure boss. The boss is a printed cylinder round each
+    # mounting hole that takes a brass insert: anything under it cannot be
+    # soldered and cannot be reached. The footprint's keep-out says "pads
+    # allowed" because the hole's own NPTH pad sits in the middle of it and
+    # would report itself, so the test is here instead. This is what put E3, E4
+    # and E10 (Pico pins 1, 2 and 3) 3.3 mm from H4's centre for three sessions.
+    for hx, hy in ((x, y) for _r, x, y in HOLES):
+        for ref, fp in placed.items():
+            if ref.startswith("H"):
+                continue
+            for pad in fp.Pads():
+                pp = pad.GetPosition()
+                px, py = pcbnew.ToMM(pp.x), pcbnew.ToMM(pp.y)
+                sz = pad.GetSize()
+                r = max(pcbnew.ToMM(sz.x), pcbnew.ToMM(sz.y)) / 2
+                d = ((px - hx) ** 2 + (py - hy) ** 2) ** 0.5
+                if d - r < BOSS_R + 0.25:
+                    print(f"  IN BOSS {ref}.{pad.GetNumber()} at {px:.2f},{py:.2f} is "
+                          f"{d - r:.2f} mm from the hole at {hx},{hy} (boss radius {BOSS_R})")
+                    bad += 1
+
     for d in board.GetDrawings():
         if d.Type() == pcbnew.PCB_TEXT_T and d.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS):
             o = outside(d.GetBoundingBox(), EDGE_MARGIN)
@@ -927,6 +1104,64 @@ def summary(board):
                      if t.Type() == pcbnew.PCB_TRACE_T})
     print(f"  {len(vias)} vias; drills {sorted(set(round(d, 2) for d in drills))}; "
           f"track widths {widths}")
+    drill_table(board)
+
+
+def drill_table(board):
+    """The fab's tool list: every distinct hole, how many, plated or not, and
+    what asks for it. Written to build/drills.md and echoed here, because a
+    board hands over with a drill table or it does not hand over."""
+    from collections import defaultdict
+    tools = defaultdict(lambda: {"n": 0, "plated": set(), "who": set()})
+    for t in board.GetTracks():
+        if t.Type() == pcbnew.PCB_VIA_T:
+            e = tools[round(pcbnew.ToMM(t.GetDrillValue()), 2)]
+            e["n"] += 1
+            e["plated"].add("PTH")
+            e["who"].add("via")
+    for fp in board.GetFootprints():
+        for pad in fp.Pads():
+            d = pcbnew.ToMM(pad.GetDrillSize().x)
+            if not d:
+                continue
+            e = tools[round(d, 2)]
+            e["n"] += 1
+            e["plated"].add("NPTH" if pad.GetAttribute() == pcbnew.PAD_ATTRIB_NPTH else "PTH")
+            e["who"].add(fp.GetReference())
+    lines = ["| Drill (mm) | Holes | Plating | Used by |", "|---|---|---|---|"]
+    for d in sorted(tools):
+        e = tools[d]
+        who = sorted(e["who"], key=lambda s: (s[0].isdigit(), s))
+        if len(who) > 6:
+            who = who[:6] + [f"+{len(e['who']) - 6} more"]
+        lines.append(f"| {d:.2f} | {e['n']} | {'/'.join(sorted(e['plated']))} | {', '.join(who)} |")
+    (BUILD / "drills.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  {len(tools)} drill sizes, {sum(e['n'] for e in tools.values())} holes "
+          f"-> build/drills.md")
+
+
+def plots():
+    """Gerbers, drill files and their map, into build/plot - what PCBWay is
+    actually sent. Regenerated every run so the fab pack can never be stale."""
+    out = BUILD / "plot"
+    out.mkdir(parents=True, exist_ok=True)
+    for f in out.glob("*"):
+        f.unlink()
+    layers = ("F.Cu,B.Cu,F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,"
+              "Edge.Cuts,F.Fab,B.Fab,Cmts.User")
+    r = run_cli("pcb", "export", "gerbers", "--layers", layers,
+                "--no-protel-ext", "--subtract-soldermask", "-o", str(out), str(PCB))
+    if r.returncode:
+        print("  gerber export failed:", r.stdout.strip() or r.stderr.strip())
+        return 1
+    r = run_cli("pcb", "export", "drill", "--format", "excellon", "--excellon-separate-th",
+                "--generate-map", "--map-format", "gerberx2", "-o", str(out) + "/", str(PCB))
+    if r.returncode:
+        print("  drill export failed:", r.stdout.strip() or r.stderr.strip())
+        return 1
+    n = len(list(out.glob("*")))
+    print(f"  fab pack: {n} files in build/plot")
+    return 0
 
 
 def write_drc_rules():
@@ -934,7 +1169,14 @@ def write_drc_rules():
     which it does not model, plus the two conventions it does not enforce
     unless asked: no right-angle corners, no stub segments."""
     bare = sorted(BREAKOUT) + [f"TP{i}" for i in range(1, 20)]
-    es = " || ".join(f"A.Reference == '{r}' || B.Reference == '{r}'" for r in bare)
+    # Either side may be a bare pad - a test pad genuinely can sit inside a
+    # switch's courtyard - but NEITHER may be a mounting hole. Written without
+    # that second half the rule also excused a breakout pad overlapping H4's
+    # 8 mm boss, which is how E3, E4 and E10 sat on it undetected.
+    holes = [r for r, _x, _y in HOLES]
+    es = "({}) && ({})".format(
+        " || ".join(f"A.Reference == '{r}' || B.Reference == '{r}'" for r in bare),
+        " && ".join(f"A.Reference != '{h}' && B.Reference != '{h}'" for h in holes))
     text = f"""(version 1)
 
 # The Pico 2 W is SOCKETED, in two 1x20 female headers: its own PCB sits about
@@ -1007,7 +1249,9 @@ def main():
     print(f"wrote {PCB}")
     if "--no-check" in sys.argv:
         return fails
-    return fails + max(0, drc())
+    fails += max(0, drc())
+    fails += plots()
+    return fails
 
 
 if __name__ == "__main__":
