@@ -495,6 +495,7 @@ FP_C = "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
 FP_C08 = "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 FP_D41 = "Diode_THT:D_DO-41_SOD81_P7.62mm_Horizontal"
 FP_SOD123 = "Diode_SMD:D_SOD-123"
+FP_SMB = "Diode_SMD:D_SMB"
 FP_SOT23 = "Package_TO_SOT_SMD:SOT-23"
 FP_HDR2 = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
 FP_PICO = "Module:RaspberryPi_Pico_Common_THT"
@@ -614,7 +615,8 @@ def build() -> Schematic:
     s.wire(tap_n, (tap_n[0], tap_n[1] + 6), (j5p1[0] - 2, tap_n[1] + 6), (j5p1[0] - 2, j5p1[1]), j5p1)   # BAT- under J1
     s.power("GND", (tap_n[0], tap_n[1] + 6))
     s.no_connect(swc)
-    d1 = s.place(DSCH, "D1", "1N5819", (swa[0] + 10, swa[1]), rot=180, fp=FP_D41, desc="VSYS OR-ing / reverse polarity",
+    d1 = s.place(DSCH, "D1", "SS220F", (swa[0] + 10, swa[1]), rot=180, fp=FP_SMB,
+                 desc="VSYS OR-ing / reverse polarity, Schottky 200 V 2 A, SMB",
                  ref_at=(0, -3, "center"), val_at=(0, 3, "center"))
     da, dk = s.gpin("D1", "2"), s.gpin("D1", "1")  # A, K
     s.wire(swa, da)

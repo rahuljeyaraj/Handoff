@@ -409,14 +409,23 @@ ROUTES = [
                    (12.7, Y_BATP_TH - 0.5), (12.2, Y_BATP_TH)]),
     ("/BAT+", BL, [(12.2, Y_BATP_TH), (10.0, Y_BATP_TH)], NECK),
     ("/BAT+", BL, [(10.0, Y_BATP_TH), (6.93, Y_BATP_TH), (6.3, 46.0)]),
-    # SW_OUT: pin 1 north-west, past the switch's mounting ear, into D1's anode
+    # SW_OUT: pin 1 north-west, past the switch's mounting ear, into D1's anode.
+    # D1 is SMD (SMB) now, F.Cu only: the old bend point becomes a via and a
+    # short F.Cu stub continues straight on to the pad (still x = 4.5, so the
+    # via-to-pad leg is collinear with the B.Cu leg above it, not a corner).
     ("/SW_OUT", BL, [(6.3, 43.0), (4.5, 41.2), (4.5, 37.42)]),
+    ("/SW_OUT", TL, [(4.5, 37.42), P("D1", "2")]),
     # D1's cathode to JP5, and JP5 to VSYS. VSYS goes through TP7 to the top
     # face, threads between E7 and E8, and runs the lane between the breakout
     # pads and the pin row (0.97 mm: 0.28 mm each side of a 0.5 mm track)
-    # straight down into pin 39 from the north-west.
-    ("/D1_K", BL, [(4.5, 29.8), (3.35, 28.65), (3.35, 26.9)]),
-    ("/D1_K", BL, [(4.5, 29.8), (2.8, 31.5), (1.9, 31.5)]),
+    # straight down into pin 39 from the north-west. D1's cathode (pad 1) is
+    # also F.Cu only: each branch's old 45-degree bend point becomes a via,
+    # with a short F.Cu stub on into the pad at the same 45, so the angle at
+    # the via is unchanged (135 degrees, same as it always was at the pad).
+    ("/D1_K", BL, [(3.35, 26.9), (3.35, 28.65)]),
+    ("/D1_K", TL, [(3.35, 28.65), P("D1", "1")]),
+    ("/D1_K", BL, [(1.9, 31.5), (2.8, 31.5)]),
+    ("/D1_K", TL, [(2.8, 31.5), P("D1", "1")]),
     ("VSYS", BL, [(4.65, 26.9), (5.24, Y_VSYS_E), (6.6, Y_VSYS_E)]),
     ("VSYS", TL, [(6.6, Y_VSYS_E), (X_VSYS - 0.49, Y_VSYS_E), (X_VSYS, Y_VSYS_E + 0.49),
                   (X_VSYS, 58.06 - 0.49), (X_VSYS + 0.49, 58.06), pico_pin(39)]),
@@ -603,6 +612,10 @@ VIAS = [
     ("GND", 9.0, 42.82),
     ("Net-(Q1-G)", 12.8, 58.5875),
     ("/MOT_SW", 16.9, 61.15),
+    # D1 became SMD (SMB) when it swapped from a THT diode; its three approach
+    # tracks used to end on the THT pad itself and now go via-to-F.Cu at what
+    # used to be their last 45-degree bend, so the angle there is unchanged.
+    ("/SW_OUT", 4.5, 37.42), ("/D1_K", 3.35, 28.65), ("/D1_K", 2.8, 31.5),
     # The two pours are one net and have to be stitched, or DRC reports them
     # unconnected. Four, all outside the cell pocket and the antenna keep-out.
     ("GND", 5.0, 11.7), ("GND", 31.0, 7.0), ("GND", 2.0, 53.0), ("GND", 7.0, 33.0),
@@ -683,8 +696,11 @@ SILK_H = 0.8        # PCBWay's minimum legible silk height
 # and no information. The four JST bodies are 6.84 mm deep on a 9 mm pitch, so
 # their boxes touch each other; the mounting rings run into the corner radius.
 # Every one of these parts is unambiguous from its pads and its reference.
+# D1's SMB body outline (with its cathode bar) sits close enough to TP7 that
+# the bar clips TP7's solder mask; the part's own moulded band still marks
+# polarity for assembly, so the on-board outline is not load-bearing.
 SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4",
-               "J6"}
+               "J6", "D1"}
 
 # References that would otherwise earn silk by their prefix but have nowhere to
 # put it: J6, Q1 and D3 are packed into 6 x 9 mm at the elbow, between JP4's

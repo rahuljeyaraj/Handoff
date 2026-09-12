@@ -8945,7 +8945,7 @@
 				)
 			)
 		)
-		(property "Value" "1N5819"
+		(property "Value" "SS220F"
 			(at 83.8200 34.2900 0)
 			(effects
 				(font
@@ -8953,7 +8953,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Diode_THT:D_DO-41_SOD81_P7.62mm_Horizontal"
+		(property "Footprint" "Diode_SMD:D_SMB"
 			(at 83.8200 30.4800 0)
 			(effects
 				(font
@@ -8971,7 +8971,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "VSYS OR-ing / reverse polarity"
+		(property "Description" "VSYS OR-ing / reverse polarity, Schottky 200 V 2 A, SMB"
 			(at 83.8200 30.4800 0)
 			(effects
 				(font

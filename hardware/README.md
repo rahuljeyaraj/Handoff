@@ -62,7 +62,7 @@ without changing the footprint.
 | C1, C2 | 330 pF C0G/NP0 50 V (KEMET C1206C331J5GACTU) | 1206 | R111869 | 2 |
 | C4, C5 | 10 µF MLCC (106), marked 100 V | **0805**, non-polarised | MakerBazar 1491785836-10P | 2 (pack of 10) |
 | C6 | **DNP** — 330 pF C0G, the C2 part, fitted only if GP11 leakage turns out to matter (see *Deviations*) | 1206 | R111869 | 0 |
-| D1 | 1N5819 Schottky 40 V 1 A | DO-41, horizontal, **7.62 mm** lead pitch (body measured against it, 11 Sep 2026) | R241509 | 1 |
+| D1 | SS220F Schottky 200 V 2 A | **SMB** (DO-214AA) | Slkor R193098 | 1 |
 | SW1 | SS-12F23G5 slide switch, SPDT (1P2T), right-angle, 5 mm handle | 3 terminals at 3.0 mm pitch + 2 mounting ears, `handoff:SW_Slide_SS-12F23G5` | R132611 | 1 |
 | D2 | RGB LED, common cathode, 5 mm, clear (5-pack) | off-board: solders into J3 or plugs in via a 4-pin XH pigtail | R183455 | 1 |
 | SW2 | Tactile push button 6 × 6 × 5 mm, 4 legs | through-hole, `Button_Switch_THT:SW_PUSH_6mm` | 618182 | 1 |
@@ -98,8 +98,10 @@ and the MSOP-to-DIP adapter (perfboard only).
 that is battery powered but still gets plugged into USB for flashing: the Pico's
 internal Schottky ORs VBUS into VSYS, and this external one stops VSYS from
 back-driving the battery. It also makes a reversed battery plug harmless (nothing
-powers up) instead of destructive. Cost: ~0.35 V, leaving 2.6–3.8 V on VSYS
-against a 1.8–5.5 V input range.
+powers up) instead of destructive. **Now SS220F (Slkor, 200 V 2 A, SMB/DO-214AA)**,
+replacing the 1N5819 DO-41 — see *This session*. Cost: ~0.85 V at 100 mA (SS220F's
+higher Vf than 1N5819's ~0.35 V, being rated for four times the voltage), leaving
+~2.5–3.75 V on VSYS against a 1.8–5.5 V input range.
 
 **A haptic motor was added, on VSYS behind an N-FET.** Not in the design
 doc at all — it arrived with this session's parts order. M1 is off-board on
@@ -637,6 +639,19 @@ against it yet. Any 40 V 1 A Schottky in SOD-123 does (1N5819W, B5819W, SS14 in
 SOD-123). Fitting nothing is *not* the fallback — the drain rings above VSYS at
 every turn-off without it.
 
+**D3 was tried as SS220F (SMB) and does not fit here.** D1 and D3 were both
+candidates for the SS220F Schottky (Slkor, 200 V 2 A, SMB/DO-214AA, R193098) —
+a single SKU covering both diodes. D1 took the swap cleanly (see *This
+session* below). D3 did not: SMB's courtyard is 4.5 × 7.3 mm against SOD-123's
+2.3 × 4.7 mm, and the motor block is a 6 × 9 mm pocket with J6, Q1, R16 and R17
+already in it. Placed, SMB's body swallowed J6's own pad, hung 0.27 mm off the
+board edge, and clipped the solder mask of both J6 and TP2 — four independent
+collisions, not a clearance nit. D3 is back to 1N5819W/SOD-123 pending a
+decision: either order a second, smaller-package Schottky for D3 alone, or
+move D3 off the motor block to somewhere with 7.3 mm to spare and accept the
+longer VSYS/MOT_SW run (loop inductance is not a real concern for a GPIO-PWM'd
+10 mm vibration motor, unlike a fast switching supply).
+
 ### The passives: 0603 where the order changed, 1206 where it did not
 
 | Value | Refs | Package | Note |
@@ -755,6 +770,35 @@ is 0.65 mm of it — so AGND now runs west on the bottom face, out of the cell
 pocket, into the bottom pour, and the sliver is removed by a rule area rather
 than left to fill as an isolated island with a starved thermal relief. That is a
 better ground than the sliver was.
+
+### D1: THT DO-41 to SMD SMB (SS220F)
+
+D1 moved from a 1N5819 in a through-hole DO-41 to an SS220F (Slkor, 200 V 2 A)
+in an SMB (DO-214AA), the same SKU as the motor's flyback diode — see
+*Deviations* for why D3 could not follow it. The package change broke three
+things, all of them the same root cause D3 hit too: a THT pad is copper on
+both faces, so both approach tracks used to just end on the pad; an SMD pad is
+F.Cu only.
+
+* **Both approach tracks were stranded on B.Cu.** SW_OUT and D1_K used to
+  route to D1 on the bottom face and land straight on the THT pad. Fix: each
+  track's *existing* 45° bend point became a via, with a short F.Cu stub
+  continuing on to the pad. Reusing the bend point (rather than a fresh via
+  right at the pad) matters — the angle a via's two tracks meet at is checked
+  by the `track_angle` DRU rule the same as any other corner, so the via had
+  to land somewhere the geometry was already a legal 45.
+* **D1_K's own pad location has a false symmetry.** `PLACE["D1"]` anchors
+  pad 1 (cathode) at a fixed point regardless of footprint, so D1_K's two
+  branches still reached the right x,y — but pad 1 on SMB is the *far* end of
+  a symmetric 4.3 mm pad-to-pad pitch, not the fixed reference end of an
+  asymmetric 7.62 mm DO-41 (pad 1 at the origin, pad 2 7.62 mm away). Anode
+  (pad 2) moved from 7.62 mm to 4.3 mm out — SW_OUT's approach track needed
+  its final stub shortened to match, not just re-layered.
+* **The cathode-bar silk clipped TP7's mask.** SMB's body outline (with its
+  cathode bar, on F.SilkS) is bigger than SOD-123's and now reaches past
+  TP7, 1.4 mm away. D1 joined `SILK_STRIP` — its outline moves to the fab
+  layer, like SW1's and the connectors'. The part's own moulded band still
+  marks polarity for assembly; only the on-board copy of it is gone.
 
 ## Still open
 
