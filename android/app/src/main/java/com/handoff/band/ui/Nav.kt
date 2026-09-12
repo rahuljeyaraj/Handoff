@@ -47,6 +47,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     val state by band.state.collectAsState()
     val view = bandView(state)
     val theme by prefs.theme.collectAsState()
+    val sort by prefs.sort.collectAsState()
 
     // Until the card is persisted locally (a later step), the band's own word
     // is the only source: nag only when it positively reports no card.
@@ -69,6 +70,8 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 contacts = contacts,
                 band = view,
                 cardSet = cardSet,
+                sort = sort,
+                onSort = prefs::setSort,
                 onContact = { promote.launch(Promote.intentFor(VCard.parse(it.vcard))) },
                 onBand = { nav.navigate(Routes.BAND) },
                 onSetUpCard = { nav.navigate(Routes.CARD) },
@@ -81,8 +84,10 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 band = view,
                 cardSummary = cardSummary,
                 theme = theme,
+                sort = sort,
                 appVersion = appVersion(context),
                 onTheme = prefs::setTheme,
+                onSort = prefs::setSort,
                 onCard = { nav.navigate(Routes.CARD) },
                 onBand = { nav.navigate(Routes.BAND) },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },

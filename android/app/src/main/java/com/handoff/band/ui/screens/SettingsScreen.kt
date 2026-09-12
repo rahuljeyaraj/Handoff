@@ -55,14 +55,17 @@ fun SettingsScreen(
     band: BandView,
     cardSummary: String,
     theme: Prefs.Theme,
+    sort: Prefs.Sort,
     appVersion: String,
     onTheme: (Prefs.Theme) -> Unit,
+    onSort: (Prefs.Sort) -> Unit,
     onCard: () -> Unit,
     onBand: () -> Unit,
     onAdvanced: () -> Unit,
     onBack: () -> Unit,
 ) {
     var themeDialog by remember { mutableStateOf(false) }
+    var sortDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -93,6 +96,8 @@ fun SettingsScreen(
             )
 
             SectionHeader("Contacts")
+            SettingsRow("Sort order", icon = HandoffIcons.Sort, subtitle = sort.label,
+                        onClick = { sortDialog = true })
             SettingsRow("Save to phone automatically", icon = HandoffIcons.PhoneAdd,
                         chevron = false,
                         trailing = { Switch(checked = false, onCheckedChange = null, enabled = false) })
@@ -115,10 +120,22 @@ fun SettingsScreen(
     }
 
     if (themeDialog) {
-        ThemeDialog(theme, onPick = { onTheme(it); themeDialog = false },
-                    onDismiss = { themeDialog = false })
+        ChoiceDialog("Theme", Prefs.Theme.entries, theme, { it.label },
+                     onPick = { onTheme(it); themeDialog = false },
+                     onDismiss = { themeDialog = false })
+    }
+    if (sortDialog) {
+        ChoiceDialog("Sort order", Prefs.Sort.entries, sort, { it.label },
+                     onPick = { onSort(it); sortDialog = false },
+                     onDismiss = { sortDialog = false })
     }
 }
+
+val Prefs.Sort.label: String
+    get() = when (this) {
+        Prefs.Sort.NEWEST -> "Newest first"
+        Prefs.Sort.AZ -> "A to Z"
+    }
 
 val Prefs.Theme.label: String
     get() = when (this) {
@@ -128,20 +145,27 @@ val Prefs.Theme.label: String
     }
 
 @Composable
-private fun ThemeDialog(current: Prefs.Theme, onPick: (Prefs.Theme) -> Unit, onDismiss: () -> Unit) {
+private fun <T> ChoiceDialog(
+    title: String,
+    options: List<T>,
+    current: T,
+    label: (T) -> String,
+    onPick: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Theme") },
+        title = { Text(title) },
         text = {
             Column {
-                for (t in Prefs.Theme.entries) {
+                for (t in options) {
                     Row(
                         Modifier.fillMaxWidth().clickable { onPick(t) }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(selected = t == current, onClick = { onPick(t) })
                         Spacer(Modifier.width(8.dp))
-                        Text(t.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(label(t), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }

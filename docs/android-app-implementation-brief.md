@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: Phase 1 in progress on `app/customer-facing` — steps 1–2 done.** Keep this line current — when you finish a phase, tick
+**Status: Phase 1 in progress on `app/customer-facing` — steps 1–3 done.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -46,7 +46,7 @@ Nothing in firmware changes. Each step should build and run on its own.
 - [x] **2. Navigation.** Contacts as home with the band status line; Settings;
   Band; Your contact card; Advanced. Move all four bench tools out of
   `MainActivity` into Advanced — keep them working, they are M2 exit criteria.
-- [ ] **3. Search and sort.** Search replaces the app bar in place and matches
+- [x] **3. Search and sort.** Search replaces the app bar in place and matches
   name *and* organisation. Sort toggles between newest-first and A–Z.
 - [ ] **4. Contact detail and edit screens.** New `note` column. "Save to phone"
   becomes a secondary action and keeps using `Intents.Insert` with no

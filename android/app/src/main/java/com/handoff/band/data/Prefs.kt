@@ -17,6 +17,9 @@ class Prefs private constructor(context: Context) {
 
     enum class Theme { SYSTEM, LIGHT, DARK }
 
+    /** Newest first is the order you want right after a conference (§5). */
+    enum class Sort { NEWEST, AZ }
+
     private val sp = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
     private val _theme = MutableStateFlow(
@@ -30,9 +33,21 @@ class Prefs private constructor(context: Context) {
         _theme.value = t
     }
 
+    private val _sort = MutableStateFlow(
+        sp.getString(KEY_SORT, null)?.let { runCatching { Sort.valueOf(it) }.getOrNull() }
+            ?: Sort.NEWEST
+    )
+    val sort: StateFlow<Sort> = _sort
+
+    fun setSort(s: Sort) {
+        sp.edit { putString(KEY_SORT, s.name) }
+        _sort.value = s
+    }
+
     companion object {
         private const val FILE = "handoff.prefs"
         private const val KEY_THEME = "theme"
+        private const val KEY_SORT = "sort"
 
         @Volatile private var instance: Prefs? = null
 
