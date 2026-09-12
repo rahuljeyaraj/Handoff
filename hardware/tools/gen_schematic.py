@@ -508,8 +508,8 @@ FP_TP = "TestPoint:TestPoint_Pad_D1.5mm"
 FP_JP = "Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm"
 FP_JP3 = "Jumper:SolderJumper-3_P1.3mm_Open_RoundedPad1.0x1.5mm"
 FP_BTN = "Button_Switch_THT:SW_PUSH_6mm"
-# 3.4 mm (ISO 273 medium) + the 8 mm boss keep-out; written by gen_mount_footprint.py
-FP_HOLE = "handoff:MountingHole_3.4mm_M3_Boss8mm"
+# 3.4 mm (ISO 273 medium) + the 6 mm boss keep-out; written by gen_mount_footprint.py
+FP_HOLE = "handoff:MountingHole_3.4mm_M3_Boss6mm"
 # drawn from the vendor drawing, see hardware/handoff.pretty
 FP_SW = "handoff:SW_Slide_SS-12F23G5"
 
@@ -715,10 +715,13 @@ def build() -> Schematic:
     # unused pins
     for num in ("35", "37"):
         s.no_connect(s.gpin("U1", num))
-    used_left = {"5": "GP3", "6": "GP4", "7": "GP5", "15": "GP11_TX",
-                 "19": "ROLE", "20": "BTN", "30": "RUN"}
-    used_right = {"22": "LED_R", "24": "LED_G", "25": "LED_B", "26": "GP20", "27": "GP21",
-                  "29": "GP22", "31": "ADC0", "32": "GP27_ADC1", "34": "MOT_DRV"}
+    # GP3/GP4/GP5/GP20/GP21/GP22/GP27 and RUN appeared here only because
+    # E1-E10 broke them out. The expansion pads are gone, so those pins are
+    # no-connect like every other unused one: a label on a pin that goes
+    # nowhere is a lie to whoever reads the sheet next.
+    used_left = {"15": "GP11_TX", "19": "ROLE", "20": "BTN"}
+    used_right = {"22": "LED_R", "24": "LED_G", "25": "LED_B",
+                  "31": "ADC0", "34": "MOT_DRV"}
     gp_left = ["1", "2", "4", "5", "6", "7", "9", "10", "11", "12", "14", "15", "16", "17", "19", "20"]
     gp_right = ["21", "22", "24", "25", "26", "27", "29", "31", "32", "34"]
     for num in gp_left + ["30"]:
@@ -885,71 +888,48 @@ def build() -> Schematic:
     s.text("(D2 drawn for reference: it is the LED that plugs into J3, not a board component)", (12, 190), size=1.0)
 
     # =====================================================================
-    # 7. EXPANSION header (bottom middle)
-    # =====================================================================
-    s.text("E1-E10 EXPANSION — one breakout pad inboard of its own Pico pin", (150, 150), size=2.0, bold=True)
-    # Ten separate pads, not a 1x10 header. The floor plan puts each pad directly
-    # inboard of the Pico pin it breaks out, which is ten scattered positions -
-    # a single 1x10 footprint cannot describe that, and a connector symbol whose
-    # pins are nowhere near each other lies to anyone reading the sheet.
-    # Pins 1, 2 and 3 are OUT: at x 31.44 on the little-finger wall their pads
-    # reach x 32.19, which is 3.3 mm from H4's centre - inside the 8 mm boss the
-    # mounting screw stands in. The wall is only free between J5's housing and
-    # that boss, which is pins 5-8, so GP0/GP1 give way to GP3 and a ground pad
-    # beside the others, and GP1's slot moves to GP22 on the thumb row.
-    exp = [("E1", "+3V3", "3V3", 36), ("E2", "RUN", "RUN", 30), ("E3", "GP3", "GP3", 5),
-           ("E4", "GP22", "GP22", 29), ("E5", "GP4", "GP4", 6), ("E6", "GP5", "GP5", 7),
-           ("E7", "GP20", "GP20", 26), ("E8", "GP21", "GP21", 27),
-           ("E9", "GP27_ADC1", "GP27", 32), ("E10", "GND", "GND", 8)]
-    for i, (ref, net, lab, picopin) in enumerate(exp):
-        x = 176 + 34 * (i // 5)
-        y = 162 + 8 * (i % 5)
-        s.place(TP, ref, f"{lab} (pin {picopin})", (x, y), fp=FP_BRK,
-                desc=f"Expansion breakout pad, Pico pin {picopin} ({lab}); placed inboard of that pin",
-                ref_at=(-2, -2, "right"), val_at=(2, -2, "left"))
-        pin = s.gpin(ref, "1")
-        if net == "+3V3":
-            s.wire(pin, (pin[0] - 6, pin[1])); s.power("+3V3", (pin[0] - 6, pin[1]), rot=270)
-        elif net == "GND":
-            s.wire(pin, (pin[0] - 6, pin[1])); s.power("GND", (pin[0] - 6, pin[1]), rot=90)
-        else:
-            s.wire(pin, (pin[0] - 6, pin[1])); s.label(net, (pin[0] - 6, pin[1]), 0, "right bottom")
-    s.text("Through-hole, 1.5 mm pad / 0.7 mm drill: a wire solders in. RUN to GND is a reset.", (150, 205), size=1.0)
-
-    # =====================================================================
     # 8. TEST PADS (bottom middle, right of the expansion block)
     # =====================================================================
     # Eight, in the README's bring-up priority order, on the nets a scope or
     # meter has to see that no jumper or connector pin already exposes well:
     # a ground for the scope's clip next to the AFE, the ADC input, stage 1's
     # output, the bias, the AFE supply, the pad (10x probe only), and the
-    # ammeter pair either side of JP5. Same through-hole pad as E1-E10.
-    s.text("TP1-TP8 TEST PADS — bring-up order (README)", (222, 150), size=2.0, bold=True)
+    # ammeter pair either side of JP5.
+    #
+    # This block sits where E1-E10 used to: two columns at x 176 and x 210,
+    # which ends at x ~220 and leaves the whole right-hand third of the band
+    # to the button and mounting block. The two used to be drawn on top of
+    # each other - TP2/TP3 landed inside SW2, and the second TP column ran
+    # straight through H1-H4 - because both were laid out from x 222 and
+    # x 238 on the same row.
+    s.text("TP1-TP8 TEST PADS — bring-up order (README)", (150, 150), size=2.0, bold=True)
     tps = [("TP1", "GND", "GND, scope clip, beside U2"), ("TP2", "ADC0", "ADC input"),
            ("TP3", "OUT1", "stage 1 output"), ("TP4", "VREF", "1.65 V bias"),
            ("TP5", "PAD", "receive node: 10x probe only"),
            ("TP6", "VSYS", "ammeter +, after JP5"), ("TP7", "D1_K", "ammeter -, before JP5"),
            ("TP8", "AFE_3V3", "AFE supply behind JP4 - C5 is SMD now, so its lead is no longer a probe point")]
     for i, (ref, net, what) in enumerate(tps):
-        x = 248 + 34 * (i // 4)
+        x = 176 + 34 * (i // 4)
         y = 162 + 8 * (i % 4)
         s.place(TP, ref, net, (x, y), fp=FP_BRK, desc=f"Test pad, {what}",
                 ref_at=(-2, -2, "right"), val_at=(2, -2, "left"))
         pin = s.gpin(ref, "1")
-        s.wire(pin, (pin[0] - 6, pin[1]))
+        up = net in ("VSYS", "VREF")          # rot 270: label lands above the anchor
+        end = (pin[0] - (10 if up else 6), pin[1])
+        s.wire(pin, end)
         if net in ("GND", "VSYS", "VREF"):
-            s.power(net, (pin[0] - 6, pin[1]), rot=90 if net == "GND" else 270)
+            s.power(net, end, rot=90 if net == "GND" else 270)
         else:
-            s.label(net, (pin[0] - 6, pin[1]), 0, "right bottom")
-    s.text("TP5 loads a 10 MOhm node through R1: a 10x probe or better, never a meter. TP6/TP7 straddle JP5: the ammeter position.", (222, 205), size=1.0)
-    s.text("TP8 is new: C4 and C5 are 0805 MLCC now, so the through-hole + lead that used to be the AFE_3V3 probe point is gone.", (222, 207), size=1.0)
-    s.text("The spare ADC (GP27) is deliberate: a second analogue path is the likeliest hack this board will need.", (150, 207), size=1.0)
+            s.label(net, end, 0, "right bottom")
+    s.text("Through-hole, 1.5 mm pad / 0.7 mm drill: a wire solders in.", (150, 198), size=1.0)
+    s.text("TP5 loads a 10 MOhm node through R1: a 10x probe or better, never a meter. TP6/TP7 straddle JP5: the ammeter position.", (150, 201), size=1.0)
+    s.text("TP8 is new: C4 and C5 are 0805 MLCC now, so the through-hole + lead that used to be the AFE_3V3 probe point is gone.", (150, 204), size=1.0)
 
     # =====================================================================
     # 8. BUTTON, ROLE STRAP, MOUNTING  (bottom right)
     # =====================================================================
-    s.text("BUTTON (GP15), ROLE strap (GP14), MOUNTING", (238, 150), size=2.0, bold=True)
-    BX, BY = 250, 164
+    s.text("BUTTON (GP15), ROLE strap (GP14), MOUNTING", (240, 150), size=2.0, bold=True)
+    BX, BY = 252, 162
     r15 = s.place(R, "R15", "10k", (BX, BY), rot=0, fp=FP_R06, desc="BTN pull-up", ref_at=(2, -1), val_at=(2, 1))
     r15a, r15b = s.gpin("R15", "1"), s.gpin("R15", "2")
     s.wire(r15a, (r15a[0], r15a[1] - 2)); s.power("+3V3", (r15a[0], r15a[1] - 2))
@@ -961,19 +941,22 @@ def build() -> Schematic:
     b1, b2 = s.gpin("SW2", "1"), s.gpin("SW2", "2")
     s.wire(nb, b1)
     s.wire(b2, (b2[0] + 2, b2[1]), (b2[0] + 2, b2[1] + 4)); s.power("GND", (b2[0] + 2, b2[1] + 4))
-    s.text("no debounce cap: debounce in firmware", (BX - 16, BY + 14), size=1.0)
+    s.text("no debounce cap: debounce in firmware", (BX - 16, BY + 12), size=1.0)
     # JP8: strap GP14 to GND to pick the board's role for M6 (firmware enables the internal pull-up)
-    jy = BY + 18
+    jy = BY + 16
     jp8 = s.place(JP, "JP8", "ROLE", (BX + 8, jy), rot=0, fp=FP_JP,
                   desc="Open as shipped: bridge to strap GP14 low = board role for M6 (internal pull-up in firmware)",
                   ref_at=(-3, 3), val_at=(1, 3))
     a8, b8 = s.gpin("JP8", "1"), s.gpin("JP8", "2")
     s.wire((BX - 8, jy), a8); s.label("ROLE", (BX - 8, jy), 0, "right bottom")
     s.wire(b8, (b8[0] + 2, jy), (b8[0] + 2, jy + 4)); s.power("GND", (b8[0] + 2, jy + 4))
+    # H1-H4 on their own row under the button, not alongside it: at x 282 and
+    # up they used to sit in the test pads' second column and push their own
+    # caption out past the sheet border.
     for i in range(4):
-        s.place(HOLE, f"H{i + 1}", "M3", (282 + 10 * i, BY + 2), fp=FP_HOLE, desc="Mounting hole, M3 clearance, unplated",
+        s.place(HOLE, f"H{i + 1}", "M3", (248 + 12 * i, BY + 28), fp=FP_HOLE, desc="Mounting hole, M3 clearance, unplated",
                 in_bom=False, ref_at=(0, -3, "center"), val_at=(0, 3, "center"))
-    s.text("H1-H4: 3.4 mm unplated, 8 mm boss keep-out, one per corner, not tied to GND", (274, BY + 8), size=1.0)
+    s.text("H1-H4: 3.4 mm unplated, 6 mm boss keep-out, one per corner, not tied to GND", (240, BY + 35), size=1.0)
 
     # =====================================================================
     # 9. HAPTIC  (bottom, below the LED block)  - new
@@ -1018,8 +1001,8 @@ def build() -> Schematic:
     top = (sw[0], sw[1] - 6)
     # rot 270 puts the cathode uppermost, so the diode reads the way it sits:
     # anode on the switched node, cathode on VSYS, reverse-biased until Q1 opens.
-    d3 = s.place(DSCH, "D3", "1N5819W", (sw[0] + 10, sw[1] - 3), rot=270, fp=FP_SOD123,
-                 desc="Motor flyback, Schottky 40 V 1 A, SOD-123", ref_at=(-2, -2, "right"), val_at=(-2, 0, "right"))
+    d3 = s.place(DSCH, "D3", "SS220F", (sw[0] + 10, sw[1] - 3), rot=270, fp=FP_SMB,
+                 desc="Motor flyback, Schottky 200 V 2 A, SMB", ref_at=(-2, -2, "right"), val_at=(-2, 0, "right"))
     d3k, d3a = s.gpin("D3", "1"), s.gpin("D3", "2")
     s.wire(sw, (d3a[0], sw[1]), d3a)
     s.wire(d3k, (d3k[0], top[1]), top)
@@ -1041,8 +1024,9 @@ def build() -> Schematic:
     m1p, m1n = s.gpin("M1", "1"), s.gpin("M1", "2")
     s.wire(m1p, (m1p[0], m1p[1] - 2)); s.power("VSYS", (m1p[0], m1p[1] - 2), rot=0)
     s.wire(m1n, (m1n[0] - 6, m1n[1])); s.label("MOT_SW", (m1n[0] - 6, m1n[1]), 0, "right bottom")
-    s.text("(M1 drawn for reference: it is the motor whose leads go into J6, not a board component.)  D3 is the flyback path: without it the", (150, 210), size=1.0)
-    s.text("motor's collapse drives Q1's drain well above VSYS at every turn-off.  Firmware: GP28 high runs the motor - never during an RX window.", (150, 213), size=1.0)
+    s.text("(M1 drawn for reference: the motor whose leads go into J6, not a board component.)", (150, 209), size=1.0)
+    s.text("D3 is the flyback path: without it the motor's collapse drives Q1's drain well above VSYS", (150, 212), size=1.0)
+    s.text("at every turn-off.  Firmware: GP28 high runs the motor - never during an RX window.", (150, 215), size=1.0)
 
     # Copper-only items are not purchasable parts, so they are not in the BOM.
     # Their footprints already carry exclude_from_bom; saying the same thing on
@@ -1064,13 +1048,13 @@ EXPECTED_NETS = {
     "BAT+": {("J1", "2"), ("J5", "2"), ("SW1", "2")},
     "GND": {("J1", "1"), ("J5", "1"), ("U1", "3"), ("U1", "8"), ("U1", "13"), ("U1", "18"), ("U1", "23"),
             ("U1", "28"), ("U1", "33"), ("U1", "38"), ("U2", "4"), ("C3", "2"), ("C5", "2"), ("R11", "2"), ("C4", "2"),
-            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("E10", "1"), ("SW2", "2"), ("JP8", "2"), ("TP1", "1"),
+            ("J2", "2"), ("C2", "2"), ("J3", "2"), ("SW2", "2"), ("JP8", "2"), ("TP1", "1"),
             ("Q1", "2"), ("R17", "2")},
     "SW_OUT": {("SW1", "1"), ("D1", "2")},
     "D1_K": {("D1", "1"), ("JP5", "1"), ("TP7", "1")},
     # M1, like BT1 and D2, is off-board (on_board=False) and so is not in the netlist
     "VSYS": {("JP5", "2"), ("U1", "39"), ("TP6", "1"), ("D3", "1"), ("J6", "2")},
-    "+3V3": {("U1", "36"), ("JP4", "1"), ("E1", "1"), ("R15", "1")},
+    "+3V3": {("U1", "36"), ("JP4", "1"), ("R15", "1")},
     "AFE_3V3": {("JP4", "2"), ("U2", "8"), ("C3", "1"), ("C5", "1"), ("R10", "1"), ("TP8", "1")},
     "VREF_DIV": {("R10", "2"), ("R11", "1"), ("C4", "1"), ("JP6", "1")},
     "VREF": {("JP6", "2"), ("R3", "2"), ("R5", "2"), ("R6", "2"), ("R8", "2"), ("TP4", "1")},
@@ -1099,14 +1083,6 @@ EXPECTED_NETS = {
     "J3_R": {("R12", "2"), ("J3", "1")},
     "J3_G": {("R13", "2"), ("J3", "3")},
     "J3_B": {("R14", "2"), ("J3", "4")},
-    "RUN": {("U1", "30"), ("E2", "1")},
-    "GP3": {("U1", "5"), ("E3", "1")},
-    "GP22": {("U1", "29"), ("E4", "1")},
-    "GP4": {("U1", "6"), ("E5", "1")},
-    "GP5": {("U1", "7"), ("E6", "1")},
-    "GP20": {("U1", "26"), ("E7", "1")},
-    "GP21": {("U1", "27"), ("E8", "1")},
-    "GP27_ADC1": {("U1", "32"), ("E9", "1")},
 }
 
 

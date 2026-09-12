@@ -63,8 +63,17 @@ from gen_schematic import NET_CLASSES, apply_board_settings, parse, find, find_a
 BW, BH, CORNER = 40.0, 62.0, 3.0
 EDGE_CLEAR = 0.3                      # copper to board edge (the fab minimum)
 EDGE_MARGIN = 0.5                     # what the layout actually keeps to the edge
-HOLES = [("H1", 4.5, 4.5), ("H2", 35.5, 4.5), ("H3", 4.5, 57.5), ("H4", 35.5, 57.5)]
-BOSS_R = 4.0                          # the 8 mm enclosure boss, as gen_mount_footprint draws it
+BOSS_R = 3.0                          # the 6 mm enclosure boss, as gen_mount_footprint draws it
+# Each hole sits so its boss stops BOSS_EDGE from the board edge. That is the
+# rule, not the 4.5 that used to be written out four times: the 8 mm boss could
+# not come closer than 4.5 mm without hanging over the edge, and that is the
+# only reason the screws sat as far in as they did. At 6 mm the same 0.5 mm of
+# wall puts them a millimetre nearer their own corners, which is what the
+# little-finger wall and the elbow both needed back.
+BOSS_EDGE = 0.5
+_HI = BOSS_R + BOSS_EDGE              # 3.5 mm: hole centre to each board edge
+HOLES = [("H1", _HI, _HI), ("H2", BW - _HI, _HI),
+         ("H3", _HI, BH - _HI), ("H4", BW - _HI, BH - _HI)]
 
 # The cell/pad pocket, from the floor plan: 20 x 30 centred. Nothing on the
 # bottom face here (the stack sits ~0.5 mm below the board) and no bottom pour
@@ -88,14 +97,8 @@ NECK = 0.4       # a Power track threading a Pico pin-row gap (0.94 mm) narrows
 PICO_AT = (28.9, 60.6)                # where pad 1 lands
 PICO_ROT = 180
 ROW_LF, ROW_TH = 28.9, 11.12          # pins 1-20 / pins 21-40
-# Breakout columns sit OUTBOARD of their pin rows, between the row and the wall.
-# They were inboard, one hop into the channel, and that is what over-subscribed
-# it: two columns of pads plus two columns of 1206s plus an MSOP-8 in 10 mm.
-# Outboard they cost the channel nothing, and each pad is still a single hop
-# from its own pin. 8.5 on the thumb side leaves 0.97 mm between the pads and
-# the pin row, which is the lane VSYS runs down; 31.44 on the little-finger
-# side keeps that column out of H4's 8 mm boss keep-out.
-BRK_LF, BRK_TH = 31.44, 8.5
+# X_VSYS below is what is left of the thumb-side breakout column: the lane
+# between the pin row and the wall. The pads themselves (E1-E10) are gone.
 
 
 def pico_pin(n):
@@ -109,16 +112,6 @@ def gap(n, m):
     """y of the centre of the gap between adjacent pins n and m."""
     return (pico_pin(n)[1] + pico_pin(m)[1]) / 2
 
-
-# E1-E10: one breakout pad outboard of its own pin (README, Expansion)
-# Pins 1, 2 and 3 are not here. A pad at x 31.44 reaches x 32.19, which is
-# 3.31 mm from H4's centre and so inside the 8 mm boss the M3 screw stands in -
-# DRC does not see it because the boss keep-out bars tracks, not pads. The
-# little-finger wall is clear only between J5's housing (ends y 40.24) and that
-# boss (starts y 53.5), which is pins 5-8. GP0 and GP1 give way to GP3 and a
-# ground pad; GP1's breakout moves to GP22 on the thumb row.
-BREAKOUT = {"E1": 36, "E2": 30, "E3": 5, "E4": 29, "E5": 6,
-            "E6": 7, "E7": 26, "E8": 27, "E9": 32, "E10": 8}
 
 # --------------------------------------------------------------------------
 # A route point that means "the centre of this pad", resolved against the real
@@ -302,8 +295,18 @@ PLACE = {
     # and TP6/TP7 either side of JP5 on the thumb wall - TP6 is also where
     # VSYS changes face. AFE_3V3 has no pad: C5's + lead is through-hole.
     "TP1": ("@", 23.0, 23.8, 0, TOP),
-    "TP2": ("@", 19.6, 58.0, 0, BOT),
-    "TP3": ("@", 23.5, 58.0, 0, BOT),
+    # TP2 and TP3 sit ON their own nets' lanes, each replacing a via that was
+    # there anyway: TP3 at OUT1's drop to the bottom face on the way to JP3,
+    # TP2 at ADC0's drop on the way to JP1. A through-hole test pad already
+    # joins both faces, so neither costs a track, a bend or a gap through the
+    # Pico's pin row - which is what the last attempt spent, routing them out
+    # to the little-finger wall through two pin gaps and four vias, and
+    # shorting them onto the breakout pads that used to live there.
+    #
+    # This is the rule the rest of this block follows: a test pad is placed
+    # into space the layout has already settled, never the other way round.
+    "TP2": ("@", 18.8, 54.0, 0, BOT),    # on JP1's ADC0 pad row, 2 mm west
+    "TP3": ("@", 21.0, 48.6, 0, BOT),    # OUT1's own change of face below JP3
     "TP4": ("@", 6.5, 10.3, 0, BOT),
     "TP5": ("@", 38.05, 36.0, 0, BOT),
     "TP6": ("@", 6.6, (25.04 + 27.58) / 2, 0, BOT),
@@ -326,9 +329,22 @@ PLACE = {
     # and the gate and source face the wall. At 0 the drain track would have to
     # cross both of them.
     "Q1":  ("@", 15.0, 60.0, 180, BOT),
-    # D3 is on the TOP face: the bottom strip holds J6 and Q1 and nothing else
-    # fits. One via closes the flyback loop, which is the only via in it.
-    "D3":  ("@", 16.9, 58.6, 270, TOP),
+    # D3 is SMB now (SS220F, same part as D1), which is 7.3 x 4.5 mm of
+    # courtyard where the SOD-123 was 2.7 x 1.7. It goes lengthways in the
+    # strip east of Q1 and south of JP1, on the SAME face as Q1 and J6 so the
+    # flyback loop has no via in it at all.
+    #
+    # Rot 180 on the bottom face puts pad 1 (cathode) WEST and pad 2 (anode)
+    # EAST - bottom-face footprints are mirrored in x, so 180 here means what
+    # 0 would mean on top. Cathode west is what unpicks the crossing:
+    #
+    # VSYS and MOT_SW both have to get from J6's two stacked holes to D3, and
+    # J6 puts MOT_SW (y 53.7) NORTH of VSYS (y 56.24) while Q1 sits SOUTH of
+    # both. Whichever of the two runs the full width of this pocket, the other
+    # has to cross it. With the cathode west, VSYS stops at x 19.35 and MOT_SW
+    # goes round the east end of it - so neither crosses, and the flyback loop
+    # is still four segments on one face with no via in it.
+    "D3":  ("@", 21.5, 58.8, 180, BOT),
     # The gate chain runs on the top face, where the lane past the pin row is
     # not contested: on the bottom, VSYS already owns it. R16 sits beside
     # pin 34 (GP28) so the drive leaves the module through its series resistor
@@ -340,9 +356,6 @@ PLACE = {
     "R16": ("@", 13.5875, 47.9, 270, TOP),
     "R17": ("@", 14.5, 51.3, 0, TOP),
 }
-for _ref, _pin in BREAKOUT.items():
-    _x, _y = pico_pin(_pin)
-    PLACE[_ref] = ("@", BRK_LF if _x == ROW_LF else BRK_TH, _y, 0, TOP)
 for _ref, _x, _y in HOLES:
     PLACE[_ref] = ("@", _x, _y, 0, TOP)
 
@@ -372,21 +385,6 @@ X_VSYS = 9.79              # the lane between the thumb breakout pads and the ro
 X_VREF_N = 12.45           # VREF's lane north past the antenna keep-out (x 12.91)
 
 ROUTES = [
-    # ---- expansion breakout pads: one hop OUTBOARD to their own pin --------
-    # The thumb five run on the bottom face so the top lane between the pads
-    # and the row stays clear for VSYS. E10 is GND and is in both pours.
-    ("/GP20", BL, [pico_pin(26), (BRK_TH, pico_pin(26)[1])]),
-    ("/GP21", BL, [pico_pin(27), (BRK_TH, pico_pin(27)[1])]),
-    ("/RUN", BL, [pico_pin(30), (BRK_TH, pico_pin(30)[1])]),
-    ("/GP27_ADC1", BL, [pico_pin(32), (BRK_TH, pico_pin(32)[1])]),
-    ("/GP22", BL, [pico_pin(29), (BRK_TH, pico_pin(29)[1])]),
-    ("+3V3", BL, [pico_pin(36), (BRK_TH, pico_pin(36)[1])]),
-    # The little-finger five stop at x 31.2, not on the pad centre: H4's 8 mm
-    # boss keep-out reaches x 31.5 and bars tracks, though not pads.
-    ("/GP3", BL, [pico_pin(5), (31.2, pico_pin(5)[1])]),
-    ("/GP4", BL, [pico_pin(6), (31.2, pico_pin(6)[1])]),
-    ("/GP5", BL, [pico_pin(7), (31.2, pico_pin(7)[1])]),
-
     # ---- the LED, straight across the thumb strip on the bottom face ------
     ("/LED_R", BL, [pico_pin(22), P("R12", "1")]),
     ("/LED_G", BL, [pico_pin(24), P("R13", "1")]),
@@ -491,9 +489,8 @@ ROUTES = [
     ("/OUT1", TL, [(17.2, 43.362), (15.6, 43.362)]),
     # the branch to JP3: up out of the corridor at x 21.8, straight down the
     # top face (clear to the elbow) and through one via into JP3's pad
-    ("/OUT1", TL, [(21.8, 43.362), (21.8, 48.6)]),
-    ("/OUT1", BL, [(21.8, 48.6), (22.2, 49.0), (22.2, 50.44)]),
-    ("/OUT1", TL, [(21.8, 48.6), (21.8, 56.3), (23.5, 58.0)]),
+    ("/OUT1", TL, [(21.8, 43.362), (21.0, 44.162), P("TP3", "1")]),
+    ("/OUT1", BL, [P("TP3", "1"), (22.2, 49.8), (22.2, 50.44)]),
 
     # ---- stage 2 -----------------------------------------------------------
     # The lower row fans out planar: pin 5 west, then 6, 7 and 8 east in that
@@ -532,9 +529,16 @@ ROUTES = [
 
     # ---- ADC0: C2 to pin 31 up the inner lane, and down to JP1 -------------
     ("/ADC0", TL, [(15.6, 45.538), (13.2, 45.538), (13.2, 37.74), pico_pin(31)]),
-    ("/ADC0", TL, [(15.6, 45.538), (20.85, 45.538), (20.85, 52.5)]),
-    ("/ADC0", BL, [(20.85, 52.5), (20.85, 54.0)]),
-    ("/ADC0", BL, [(20.85, 54.0), (20.85, 56.75), (19.6, 58.0)]),
+    # The lane runs at x 19.8, not 20.85 on JP1's pad axis. Three things share
+    # this 2.9 mm of elbow - this lane, OUT1's, and TP3's pad between them -
+    # and at 20.85 the lane was 0.08 mm off that pad. It rejoins JP1's axis
+    # with one 45 at the bottom, past AFE_3V3's crossing at y 51.7.
+    ("/ADC0", TL, [(15.6, 45.538), (19.8, 45.538), (19.8, 52.5)]),
+    ("/ADC0", BL, [(19.8, 52.5), (19.8, 52.95), P("JP1", "2")]),
+    # TP2 hangs off JP1's own ADC0 pad, 2 mm west, in the band between
+    # AFE_3V3's crossing at y 51.7 and MOT_SW's at y 55.5: the only 1.5 mm
+    # pad's worth of room on this net outside the cell pocket.
+    ("/ADC0", BL, [P("JP1", "2"), P("TP2", "1")]),
 
     # ---- AFE supply: C3 and pin 8, the lane down to JP4, and north to C5 ---
     ("/AFE_3V3", TL, [(20.975, 34.112), (24.4, 34.163)]),
@@ -585,33 +589,37 @@ ROUTES = [
     # angle at.
     ("Net-(Q1-G)", TL, [P("R16", "2"), P("R17", "1"), (13.5875, 57.8), (12.8, 58.5875)]),
     ("Net-(Q1-G)", BL, [(12.8, 58.5875), (12.8, 60.5), (13.25, 60.95), P("Q1", "1")]),
-    # VSYS: two millimetres from pin 39 into J6's supply hole, then on to D3's
-    # cathode. The motor's current never leaves this corner of the board.
+    # VSYS: two millimetres from pin 39 into J6's supply hole, then east along
+    # J6's own pad row and one 45 down onto D3's cathode. It stops there -
+    # 4.5 mm short of the east wall of this pocket - which is the whole point.
     ("VSYS", BL, [pico_pin(39), (12.6, 56.58), (12.6, 56.24), P("J6", "2")]),
-    ("VSYS", TL, [P("J6", "2"), (16.19, 56.24), P("D3", "1")]),
-    # MOT_SW: J6's switched hole east and down into Q1's drain, and D3's anode
-    # onto the same pad through the one via in the flyback loop.
-    ("/MOT_SW", BL, [P("J6", "1"), (16.0, 53.7), (16.5, 54.2), (16.5, 60.0), P("Q1", "3")]),
-    ("/MOT_SW", TL, [P("D3", "2"), (16.9, 61.15)]),
-    ("/MOT_SW", BL, [(16.9, 61.15), (16.5, 60.75), (16.5, 60.0)]),
+    ("VSYS", BL, [P("J6", "2"), P("D3", "1", -2.56, -2.56), P("D3", "1")]),
+    # MOT_SW takes the long way round the OUTSIDE of VSYS, in two legs that
+    # meet at D3's anode, rather than cutting across it:
+    #   north of it at y 55.5, between JP1's pads and D3's body, to the anode
+    #   south of it at y 61.2, just clear of D3's courtyard, into Q1's drain
+    # J6's switched hole and Q1's drain are both on this net, so the run from
+    # J6 reaches Q1 through D3's anode pad and needs no separate leg.
+    ("/MOT_SW", BL, [P("J6", "1"), (16.7, 55.5), P("D3", "2", 0, -3.3), P("D3", "2")]),
+    ("/MOT_SW", BL, [P("D3", "2"), (21.25, 61.2), (17.14, 61.2), P("Q1", "3")]),
 ]
 
 VIAS = [
     ("Net-(JP7-B)", 31.65, 20.9),
     # OUT1's corridor: down at the east lane, up at C1, and up again at x 22.2
     # for the branch to JP3
-    ("/OUT1", 27.2, 43.362), ("/OUT1", 17.2, 43.362), ("/OUT1", 21.8, 43.362), ("/OUT1", 21.8, 48.6),
+    # (21.8, 48.6) is TP3's through-hole pad now, which changes face for free
+    ("/OUT1", 27.2, 43.362), ("/OUT1", 17.2, 43.362), ("/OUT1", 21.8, 43.362),
     ("Net-(JP3-C)", 23.5, 48.4),
     ("Net-(JP3-B)", 25.7, 48.3),
     ("Net-(JP1-A)", 23.4, 54.0),
-    ("/ADC0", 20.85, 52.5),
+    ("/ADC0", 19.8, 52.5),
     ("VREF", X_VREF_N, 11.05),
     # AFE_3V3: the lane start doubles as the drop to the bottom face for the
     # run north; the other is the end of the lane, under the elbow block to JP4
     ("/AFE_3V3", 26.5, 34.163), ("/AFE_3V3", 26.5, 48.8),
     ("GND", 9.0, 42.82),
     ("Net-(Q1-G)", 12.8, 58.5875),
-    ("/MOT_SW", 16.9, 61.15),
     # D1 became SMD (SMB) when it swapped from a THT diode; its three approach
     # tracks used to end on the THT pad itself and now go via-to-F.Cu at what
     # used to be their last 45-degree bend, so the angle there is unchanged.
@@ -628,11 +636,13 @@ TEXTS = [
     ("F.SilkS", 34.3, 10.6, "HANDOFF", 0),
     ("B.SilkS", 38.8, 21.0, "HANDOFF  rev A  2026-09", 90),
     # test pad names: the point of a test pad
-    ("F.SilkS", 23.0, 21.2, "GND", 0), ("B.SilkS", 19.6, 59.7, "ADC0", 0),
-    ("B.SilkS", 23.5, 59.7, "OUT1", 0), ("B.SilkS", 6.5, 12.1, "VREF", 0),
+    ("F.SilkS", 23.0, 21.2, "GND", 0), ("B.SilkS", 17.3, 55.8, "ADC0", 0),
+    ("B.SilkS", 21.0, 46.6, "OUT1", 0), ("B.SilkS", 6.5, 12.1, "VREF", 0),
     ("B.SilkS", 38.05, 37.7, "PAD", 0),
     ("B.SilkS", 5.5, 24.8, "VSYS", 0), ("B.SilkS", 1.9, 30.1, "D1K", 0),
-    ("B.SilkS", 22.5, 60.8, "JP1-8 = OPEN", 0),
+    # turned 90: the only clear strip left down here is the 2.9 mm between
+    # D3's body and the Pico's little-finger pin row
+    ("B.SilkS", 26.8, 56.5, "JP1-8 = OPEN", 90),
     # J6 takes the motor leads and has no silk of its own (NO_SILK_REF)
     ("B.SilkS", 13.3, 51.4, "MOT", 0),
     # J3's pin order, the LED's lead order, beside the housing
@@ -650,7 +660,7 @@ FAB_NOTE = ("Cmts.User", 20.0, 31.0,
             "HASL lead-free, green mask, white silk. Min track/space 0.25/0.2 "
             "(design), 0.15 (fab floor). Min solder-mask dam 0.1. Drills 0.3 / "
             "0.7 / 0.95 / 1.0 / 1.1 / 1.15 PTH and 3.4 NPTH - see build/drills.md. "
-            "H1-H4 3.4 mm unplated, each inside an 8 mm enclosure boss.", 0)
+            f"H1-H4 3.4 mm unplated, each inside a {BOSS_R * 2:g} mm enclosure boss.", 0)
 
 # --------------------------------------------------------------------------
 # Netlist
@@ -682,9 +692,7 @@ def load_netlist():
 # with the board in hand, and it names jumpers and connectors. The AFE's
 # passives do not get silk - there is no room for it between 1206 pads on a
 # 5.3 mm pitch - and their references stay on F.Fab where CAD still shows
-# them. E1-E10 are NOT here: they sit under the socketed Pico at 2.54 mm pitch
-# and are identified by the Pico pin each one sits outboard of. The mounting
-# holes are not here either: a 3.4 mm hole in a corner needs no label, and
+# them. The mounting holes are not here: a 3.4 mm hole in a corner needs no label, and
 # the label had nowhere to go but off the board.
 SILK_REFS = ("JP", "J", "SW", "U", "D")
 SILK_H = 0.8        # PCBWay's minimum legible silk height
@@ -699,8 +707,11 @@ SILK_H = 0.8        # PCBWay's minimum legible silk height
 # D1's SMB body outline (with its cathode bar) sits close enough to TP7 that
 # the bar clips TP7's solder mask; the part's own moulded band still marks
 # polarity for assembly, so the on-board outline is not load-bearing.
+# TP2 and TP3 join them: at the elbow their silk rings run into JP1's and
+# JP3's outlines and into their own printed names. A test pad's ring says
+# nothing the net name beside it does not.
 SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4",
-               "J6", "D1"}
+               "J6", "D1", "TP2", "TP3"}
 
 # References that would otherwise earn silk by their prefix but have nowhere to
 # put it: J6, Q1 and D3 are packed into 6 x 9 mm at the elbow, between JP4's
@@ -718,7 +729,7 @@ REF_AT = {
     "J3": (0.0, -3.5),
     "JP5": (-2.5, 0.0, 90), "JP6": (0.0, -2.3), "JP7": (0.0, 1.8), "JP2": (0.0, 1.8),
     "JP8": (0.0, -1.8), "JP4": (1.5, 1.9), "JP3": (0.0, 1.9), "JP1": (0.0, 1.8),
-    "E3": (0.0, -1.3), "H1": (0.0, 5.0), "H2": (0.0, 5.0), "H3": (0.0, -5.0), "H4": (0.0, -5.0),
+    "H1": (0.0, 5.0), "H2": (0.0, 5.0), "H3": (0.0, -5.0), "H4": (0.0, -5.0),
     "TP5": (-3.0, 0.0), "TP7": (3.0, 0.0),
     "Q1": (0.0, -2.5), "D3": (-2.6, 0.0), "J6": (-2.4, 1.3),
 }
@@ -1042,8 +1053,11 @@ def report(board, placed, nets):
     # mounting hole that takes a brass insert: anything under it cannot be
     # soldered and cannot be reached. The footprint's keep-out says "pads
     # allowed" because the hole's own NPTH pad sits in the middle of it and
-    # would report itself, so the test is here instead. This is what put E3, E4
-    # and E10 (Pico pins 1, 2 and 3) 3.3 mm from H4's centre for three sessions.
+    # would report itself, so the test is here instead. This is what caught the
+    # three breakout pads that sat 3.3 mm from H4's centre for three sessions,
+    # and it is why the boss radius lives in one constant: shrink the boss in
+    # gen_mount_footprint.py without changing BOSS_R here and the check goes
+    # quietly slack instead of failing.
     for hx, hy in ((x, y) for _r, x, y in HOLES):
         for ref, fp in placed.items():
             if ref.startswith("H"):
@@ -1184,11 +1198,11 @@ def write_drc_rules():
     """handoff.kicad_dru - where DRC has to be told about the third dimension,
     which it does not model, plus the two conventions it does not enforce
     unless asked: no right-angle corners, no stub segments."""
-    bare = sorted(BREAKOUT) + [f"TP{i}" for i in range(1, 20)]
+    bare = [f"TP{i}" for i in range(1, 20)]
     # Either side may be a bare pad - a test pad genuinely can sit inside a
     # switch's courtyard - but NEITHER may be a mounting hole. Written without
     # that second half the rule also excused a breakout pad overlapping H4's
-    # 8 mm boss, which is how E3, E4 and E10 sat on it undetected.
+    # boss, which is how E3, E4 and E10 sat on it undetected before they went.
     holes = [r for r, _x, _y in HOLES]
     es = "({}) && ({})".format(
         " || ".join(f"A.Reference == '{r}' || B.Reference == '{r}'" for r in bare),
@@ -1205,11 +1219,10 @@ def write_drc_rules():
 	(constraint courtyard_clearance (min -20mm))
 	(condition "A.Reference == 'U1' || B.Reference == 'U1'"))
 
-# E1-E10 and the test pads are bare through-hole pads with nothing mounted on
-# them. They inherit a TestPoint footprint's 2.59 mm courtyard, which is larger
-# than the 2.54 mm pin pitch the breakout pads are placed on, so adjacent ones
-# "overlap" bodies that do not exist. Copper clearance is unaffected and still
-# checked.
+# The test pads are bare through-hole pads with nothing mounted on them. They
+# inherit a TestPoint footprint's 2.59 mm courtyard, so one placed against a
+# switch or a connector "overlaps" a body that does not exist. Copper clearance
+# is unaffected and still checked.
 (rule "Bare pads have no body"
 	(constraint courtyard_clearance (min -5mm))
 	(condition "{es}"))

@@ -17,8 +17,8 @@ the schematic implements its §6/§7 netlist with the changes listed under
 | `review.md` | the pre-layout review: every check, its number, its verdict |
 | `schematic-prompt.md` | the brief for the next session: the schematic changes the floor plan forces, then layout |
 | `tools/gen_sw_footprint.py` | writes `handoff.pretty/SW_Slide_SS-12F23G5`, geometry measured on the physical part |
-| `tools/gen_mount_footprint.py` | writes `handoff.pretty/MountingHole_3.4mm_M3_Boss8mm`: 3.4 mm unplated drill plus the 8 mm boss keep-out |
-| `tools/gen_floorplan.py` / `floorplan.svg` | the floor plan: which block sits where in the enclosure, and why. Placement only, no tracks — the input to the layout |
+| `tools/gen_mount_footprint.py` | writes `handoff.pretty/MountingHole_3.4mm_M3_Boss6mm`: 3.4 mm unplated drill plus the 6 mm boss keep-out. The name follows the boss diameter, so the board cannot point at a footprint that is no longer the one described |
+| `tools/gen_floorplan.py` / `floorplan.svg` | the floor plan: which block sits where in the enclosure, and why. Placement only, no tracks — the **pre-layout** input. **Superseded by the board**: it still draws E1–E10 inboard of their pins, `JP1-JP7`, `TP12`/`TP13` and the 4.5 mm hole positions, none of which exist. Read `gen_pcb.py`'s `PLACE` table for where things actually are |
 | `tools/gen_pcb.py` / `handoff.kicad_pcb` | **the source of the board.** Builds it from the schematic's netlist and the floor plan, then proves it with `kicad-cli`: DRC, schematic parity pin for pin, an independent short check, a ground-pour island check, and every pad against every mounting boss. Writes the fab pack last. Edit this, not the `.kicad_pcb` |
 | `build/plot/` | the fab pack: Gerbers for every layer, both Excellon drill files with their maps, and the job file. Regenerated on every `gen_pcb.py` run, so it cannot go stale against the board. Not committed (`build/` is ignored) |
 | `build/drills.md` | the drill table: every distinct hole, how many, plated or not, and what asks for it |
@@ -67,7 +67,7 @@ without changing the footprint.
 | D2 | RGB LED, common cathode, 5 mm, clear (5-pack) | off-board: solders into J3 or plugs in via a 4-pin XH pigtail | R183455 | 1 |
 | SW2 | Tactile push button 6 × 6 × 5 mm, 4 legs | through-hole, `Button_Switch_THT:SW_PUSH_6mm` | 618182 | 1 |
 | Q1 | AO3400A N-channel MOSFET, 30 V 5.2 A, 27 mΩ @ 4.5 V | SOT-23 | MakerBazar R209179 | 1 |
-| D3 | 1N5819W Schottky 40 V 1 A, motor flyback | SOD-123 | **not yet ordered** — see *Deviations* | 1 |
+| D3 | SS220F Schottky 200 V 2 A, motor flyback | **SMB** (DO-214AA) | Slkor R193098 | 1 |
 | M1 | Coin vibration motor, 1034, 10 mm disc, ~3 V | off-board: leads solder into J6 | MakerBazar 522260 | 1 |
 | J6 | Motor pads, 2 × 2.54 mm through-hole | takes the motor leads direct, or a 2-pin header | — | 1 |
 | J1 | JST-XH 2.54 straight 2-pin male (battery) | through-hole | — | 1 |
@@ -76,9 +76,9 @@ without changing the footprint.
 | J3 | JST-XH 2.54 straight 4-pin male (LED), or the LED soldered straight in | through-hole | — | 1 |
 | BT1 | KP384455 Li-ion 3.7 V 1500 mAh | off-board, on a JST-XH pigtail | — | 1 |
 
-Copper only, nothing to buy: 8 solder jumpers JP1–JP8, 10
-expansion breakout pads E1–E10, and 4 mounting holes H1–H4 (M3 clearance, 3.4 mm,
-unplated, each with an 8 mm boss keep-out).
+Copper only, nothing to buy: 8 solder jumpers JP1–JP8, 8 test pads TP1–TP8, and
+4 mounting holes H1–H4 (M3 clearance, 3.4 mm, unplated, each with a 6 mm boss
+keep-out).
 
 The 10 MΩ (Robu 574992) bought for R3 is no longer fitted — see *Deviations*. Keep
 it: it is the A/B part for the M7 recovery-versus-loss comparison.
@@ -134,7 +134,7 @@ puts the antenna keep-out at the hand end, and it puts **pins 1–20 on the
 little-finger row and pins 21–40 on the thumb row.** The floor plan had these
 mirrored until the layout session checked the footprint's own pad coordinates
 against its USB and antenna zones. Everything that names a Pico pin and a board
-position — J3, the breakout pads, the TX escape, BTN and ROLE — depends on
+position — J3, the TX escape, BTN and ROLE — depends on
 getting this right; it is the cheapest thing on the board to verify and the most
 expensive to get wrong.
 
@@ -237,30 +237,37 @@ Pico's SMPS. JP4 lets the real experiment happen: run the AFE from a bench
 supply and compare noise floors.
 
 **H1–H4, M3 mounting holes, 3.4 mm unplated**, one per corner at (4.5, 4.5),
-(35.5, 4.5), (4.5, 57.5) and (35.5, 57.5), not tied to GND so a metal screw or
+(36.5, 3.5), (3.5, 58.5) and (36.5, 58.5), not tied to GND so a metal screw or
 standoff cannot become a second, uncontrolled ground-plane connection (design
 §8.4: exactly one). 3.4 mm is the ISO 273 *medium* clearance for M3, up from the
 3.2 mm *close* fit: the board is screwed into a printed boss carrying a 5 mm
 brass insert, so the screw is never a locating feature and the extra 0.2 mm
 swallows the boss's position tolerance instead of fighting it. Each hole carries
-an **8 mm keep-out** for that boss — in the footprint, not drawn on the board, so
+a **6 mm keep-out** for that boss — in the footprint, not drawn on the board, so
 DRC enforces it wherever the hole goes and it cannot be forgotten on the fourth
 corner.
 
-**Expansion E1–E10: ten breakout pads, not a connector.** 3V3 (Pico pin 36),
-RUN (30), GP3 (5), GP22 (29), GP4 (6), GP5 (7), GP20 (26), GP21 (27), GP27/ADC1
-(32), GND (8). Through-hole, 2.0 mm pad on a 1.0 mm drill: a wire solders in.
-The spare ADC input is there on purpose — a second analogue path is the most
-likely "hack" this board will ever need. RUN to GND is a reset.
+**The boss was 8 mm and the holes were 4.5 mm in.** 6 mm is enough to hold a
+5 mm insert with a wall round it, and 8 mm was what kept each screw a
+millimetre further from its own corner than it needed to be — it reached 4 mm
+in from two edges at once and was the widest thing on the board's perimeter.
+Hole position is derived now rather than written out four times: each centre
+sits `BOSS_R + 0.5` from both its edges, so the boss keeps the same half a
+millimetre of wall it always had and the screws move to (3.5, 3.5) and its
+three mirrors. `BOSS_R` in `gen_pcb.py` and `BOSS_D` in
+`gen_mount_footprint.py` have to agree — the footprint draws the keep-out, and
+`report()`'s every-pad-against-every-boss check uses the number.
 
-*Was J4, a 1×10 female header.* The floor plan puts each pad directly inboard of
-the Pico pin it breaks out, which is ten scattered positions on both sides of the
-board — a single 1×10 footprint cannot describe that. Ten `TestPoint` symbols
-also keep the netlist oracle honest: each pad is its own reference with one pin,
-so `EXPECTED_NETS` names `("E7", "1")` rather than `("J4", "7")` and a
-mis-numbered header pin cannot hide inside a net that still has the right size.
-The nets themselves are unchanged. The 1×10 comes off the parts list; the 1×40
-strip is now only the Pico's two 1×20s.
+**Expansion E1–E10 is gone.** Ten breakout pads used to bring 3V3, RUN, GP3,
+GP22, GP4, GP5, GP20, GP21, GP27/ADC1 and GND out to pads beside their own Pico
+pins. Nothing on this board or in the firmware used them; they were there in
+case. What they cost was real: a column of pads down each wall, the three that
+kept landing inside H4's boss, and the two pin-row gaps the test pads were
+driven through when the pads had taken the space beside J6. Removing them frees
+both walls, and the eight Pico pins they broke out are no-connect on the
+schematic again. **The Pico is socketed** — anything those pads offered is
+available on the header itself, which is the argument that should have applied
+from the start.
 
 **SW1 footprint (`handoff.pretty/SW_Slide_SS-12F23G5`, written by
 `tools/gen_sw_footprint.py`)** — **measured on the physical part, 11 Sep 2026.**
@@ -357,7 +364,7 @@ cannot quietly drag a part off its target.
 | Vias | 0.6 mm / 0.3 mm drill |
 | Fab minimums enforced | 0.15 mm track and clearance, 0.3 mm drill, 0.3 mm copper-to-edge — inside every PCBWay 2-layer process |
 | Pours | GND on both faces, inset 0.5 mm from the edge (PCBWay's routed-edge tolerance is ±0.2 mm). The **top** pour is the ground-plane electrode |
-| Rule areas | the 20 × 30 cell/pad pocket bars bottom-face pour and bottom-face parts (tracks are allowed); each mounting hole carries its own 8 mm boss keep-out |
+| Rule areas | the 20 × 30 cell/pad pocket bars bottom-face pour and bottom-face parts (tracks are allowed); each mounting hole carries its own 6 mm boss keep-out |
 | Corners | every track corner is 45° or straight; `handoff.kicad_dru` fails the run on any right angle or stub segment |
 
 **The `Power` net class was inert.** `gen_pcb.py` widened its nets to 0.5 mm,
@@ -412,12 +419,14 @@ right angle or a stub fails the run instead of passing quietly.
 courtyard test has no notion of height**, and both suppress *only* courtyard
 overlap — every clearance and short test still runs against these parts:
 
-- *The Pico is socketed.* Its own PCB sits ~8.5 mm above this one, so the AFE,
-  the breakout pads and the bottom-face jumpers are deliberately underneath it.
-- *Bare pads have no body.* E1–E10 and the test pads (below) inherit a
-  `TestPoint` footprint's 2.59 mm courtyard, which is wider than the 2.54 mm
-  pitch they sit on. Copper clearance between them is unaffected and still
-  checked: 0.54 mm.
+- *The Pico is socketed.* Its own PCB sits ~8.5 mm above this one, so the AFE
+  and the bottom-face jumpers are deliberately underneath it.
+- *Bare pads have no body.* The test pads (below) inherit a `TestPoint`
+  footprint's 2.59 mm courtyard, so one placed hard against a jumper or a
+  connector reports an overlap with a body that does not exist. Copper
+  clearance is unaffected and still checked. Neither side of this rule may be
+  a mounting hole — written without that half it also excused a pad sitting on
+  a boss.
 
 **DRC severities are tightened past KiCad's defaults.** `silk_over_copper`,
 `silk_overlap`, `silk_edge_clearance`, `text_height`/`thickness`,
@@ -429,16 +438,17 @@ warning left at warning severity, and stays visible rather than silenced, so
 a real mismatch could not hide among the ten deliberate ones.
 
 **Silkscreen.** Values are hidden everywhere. References are on silk for the
-things the bring-up procedure names in your hand — test pads, jumpers,
-connectors, switches, U1/U2, D1 — and on the fab layer for the AFE's
-passives and for E1–E10, where 0.8 mm text does not fit between 1206 pads on
-a 5.3 mm pitch. **E1–E10 are identified by the Pico pin each one sits
-outboard of**, which is unambiguous and listed under *Expansion* above. The
-silkscreen *outlines* of U1, the four JST connectors, SW1 and the mounting
-holes are moved to the fab layer too: U1's is a 21 × 51 box drawn over
-everything that deliberately lives under it. That is what the ten
-`lib_footprint_mismatch` warnings are — the only warnings the board reports,
-and all deliberate. A board-edge legend (project name, revision, date) is on
+things the bring-up procedure names in your hand — jumpers, connectors,
+switches, U1/U2, D1 — and on the fab layer for the AFE's passives, where
+0.8 mm text does not fit between 1206 pads on a 5.3 mm pitch. The test pads
+are named by their **net** in printed legends (`ADC0`, `OUT1`, `VREF`, `PAD`,
+`VSYS`, `D1K`, `GND`) rather than by reference, which is what someone holding
+a probe is looking for. The silkscreen *outlines* of U1, the four JST
+connectors, SW1, D1, TP2/TP3 and the mounting holes are moved to the fab layer
+too: U1's is a 21 × 51 box drawn over everything that deliberately lives under
+it, and TP2's and TP3's rings ran into JP1's and JP3's outlines at the elbow.
+That is what the fourteen `lib_footprint_mismatch` warnings are — the only
+warnings the board reports, and all deliberate. A board-edge legend (project name, revision, date) is on
 F.SilkS at the hand end and repeated on B.SilkS along the little-finger wall;
 a fab note (2-layer, 1.6 mm FR-4, 1 oz Cu, HASL, green mask, white silk, 0.3 mm
 min drill) is on `Cmts.User`. J1/J2/J5's pin-1 ends are marked **+ / −** or
@@ -446,6 +456,12 @@ min drill) is on `Cmts.User`. J1/J2/J5's pin-1 ends are marked **+ / −** or
 board can be assembled from the silk without the schematic in hand.
 
 ### The breakout pads moved out, and the channel routes
+
+> The expansion pads were removed outright a session later — see *Expansion
+> E1–E10 is gone* above. This section is kept because the channel geometry it
+> settled (AFE columns at x 15.6 and 24.4, R2's position, the ammeter cluster
+> at the board edge) is still the board's, and because it records why the pads
+> were worth moving before anyone concluded they were worth keeping.
 
 The ten expansion pads used to sit **inboard** of their own pins, one hop into
 the channel under the Pico. That is what over-subscribed it: two columns of
@@ -597,7 +613,7 @@ from a GPIO. The whole block is four parts and one connector:
 | Q1 | AO3400A, SOT-23 | low-side switch. 30 V / 5.2 A and 27 mΩ at 4.5 V is enormous overkill for 100 mA, which is the point: it is fully on at 3 V of gate drive |
 | R16 | 100 Ω 0603 | gate series. Limits the GPIO's peak gate-charge current |
 | R17 | 100 kΩ 0603 | gate pull-down. **Not optional** — GP28 is an input from power-up until firmware writes it, and through every BOOTSEL reset. Without R17 the gate floats and the motor may run |
-| D3 | 1N5819W, SOD-123 | flyback. Cathode to VSYS, anode on the drain |
+| D3 | SS220F, SMB (DO-214AA) | flyback. Cathode to VSYS, anode on the drain. Same SKU as D1 — one diode to order, one to stock |
 | J6 | 2 × 2.54 mm through-hole | the motor's leads solder in, or a 2-pin header takes a plug — the same choice the LED has at J3 |
 
 **VSYS, not +3V3.** The Pico's own regulator carries the RP2350, the CYW43439
@@ -608,16 +624,16 @@ against a reversed cell.
 
 **GP28 (Pico pin 34) drives it.** Of the three free GPIOs on the thumb row —
 GP16 (pin 21), GP22 (pin 29) and GP28 (pin 34) — GP28 is the one nearest the
-elbow, which is where VSYS arrives at pin 39. GP22 went to a breakout pad
-instead (see below). GP28 is ADC2 and nothing else wanted it.
+elbow, which is where VSYS arrives at pin 39. GP28 is ADC2 and nothing else
+wanted it.
 
 **Where it sits.** Bottom face, x 12–18 between the Pico's thumb pin row and
 JP1, below JP4 — the last free ground on the board, and the right place
 electrically: pin 39 is two millimetres away, so the motor's current never
 travels the length of the board, and the block is 10 mm of board and a ground
-pour away from the AFE channel. D3 is on the *top* face because the bottom strip
-holds J6 and Q1 and nothing else fits; one via closes the flyback loop and it is
-the only via in it. The gate chain (R16, R17) runs on the top face, where the
+pour away from the AFE channel. D3 is on the **same face as J6 and Q1**, east
+of them, so the flyback loop is four segments of bottom-face copper with no via
+in it at all. The gate chain (R16, R17) runs on the top face, where the
 lane past the pin row is uncontested — on the bottom, VSYS and BAT+ already own
 it.
 
@@ -633,24 +649,13 @@ pin-1 mark are printed, because a hand-assembled diode needs its band. The
 > **Firmware:** GP28 high runs the motor. Do not run it during an RX window —
 > 100 mA of commutating motor on VSYS is not what a ×121 front end wants to see.
 
-**D3 is not yet ordered.** Everything else in the parts table is an SKU on
-order; the flyback diode is the one part this session added that has no SKU
-against it yet. Any 40 V 1 A Schottky in SOD-123 does (1N5819W, B5819W, SS14 in
-SOD-123). Fitting nothing is *not* the fallback — the drain rings above VSYS at
-every turn-off without it.
-
-**D3 was tried as SS220F (SMB) and does not fit here.** D1 and D3 were both
-candidates for the SS220F Schottky (Slkor, 200 V 2 A, SMB/DO-214AA, R193098) —
-a single SKU covering both diodes. D1 took the swap cleanly (see *This
-session* below). D3 did not: SMB's courtyard is 4.5 × 7.3 mm against SOD-123's
-2.3 × 4.7 mm, and the motor block is a 6 × 9 mm pocket with J6, Q1, R16 and R17
-already in it. Placed, SMB's body swallowed J6's own pad, hung 0.27 mm off the
-board edge, and clipped the solder mask of both J6 and TP2 — four independent
-collisions, not a clearance nit. D3 is back to 1N5819W/SOD-123 pending a
-decision: either order a second, smaller-package Schottky for D3 alone, or
-move D3 off the motor block to somewhere with 7.3 mm to spare and accept the
-longer VSYS/MOT_SW run (loop inductance is not a real concern for a GPIO-PWM'd
-10 mm vibration motor, unlike a fast switching supply).
+**D3 is an SS220F (SMB), the same SKU as D1** — Slkor R193098, 200 V 2 A. One
+Schottky to order and one to stock instead of two. It did not fit when it was
+first tried: SMB's courtyard is 7.3 × 4.5 mm against SOD-123's 4.7 × 2.3, and
+at the time the motor block was a 6 × 9 mm pocket with J6, Q1 and the two test
+pads in it, so the body swallowed J6's pad and clipped two solder masks. The
+pocket is bigger than that — the test pads had no business in it, and they are
+elsewhere now (see *The test pads had taken the motor's pocket* below).
 
 ### The passives: 0603 where the order changed, 1206 where it did not
 
@@ -712,6 +717,10 @@ PWM question, not a resistor one.
 
 ### The breakout pads were sitting on a mounting boss
 
+> The pads are gone now, but **both checks this section added are still live**
+> and still worth having: they are what a future part placed near a corner will
+> run into. The boss they were sitting on is 6 mm across now, not 8.
+
 E3, E4 and E10 broke out Pico pins 1, 2 and 3 (GP0, GP1, GND) at x 31.44 on the
 little-finger wall. A pad there reaches x 32.19, which is 3.31 mm from H4's
 centre — **inside the 8 mm boss the M3 screw stands in**. Nothing could be
@@ -722,7 +731,8 @@ DRC did not see it for two reasons, both now fixed:
 * the mounting-hole footprint's keep-out says `(pads allowed)`, because the
   hole's own NPTH pad sits in the middle of it and would report itself. The
   boss test is now an explicit geometric check in `gen_pcb.py`'s `report()`:
-  every pad on the board against every hole's 8 mm circle.
+  every pad on the board against every hole's boss circle, at whatever radius
+  `BOSS_R` currently says.
 * the `Bare pads have no body` DRC rule excused a courtyard overlap if *either*
   side was a breakout or test pad. A test pad genuinely can sit inside a
   switch's courtyard, so that half stays — but neither side may now be a
@@ -750,11 +760,11 @@ every run, so the pack cannot go stale against the board.
 
 | Drill (mm) | Holes | Plating | Used by |
 |---|---|---|---|
-| 0.30 | 19 | PTH | via |
-| 0.70 | 18 | PTH | E1, E10, E2, E3, E4, E5, +12 more |
+| 0.30 | 20 | PTH | via |
+| 0.70 | 8 | PTH | TP1, TP2, TP3, TP4, TP5, TP6, +2 more |
 | 0.95 | 4 | PTH | J3 |
 | 1.00 | 51 | PTH | J1, J2, J5, J6, SW1, U1 |
-| 1.10 | 6 | PTH | D1, SW2 |
+| 1.10 | 4 | PTH | SW2 |
 | 1.15 | 2 | PTH | SW1 |
 | 3.40 | 4 | NPTH | H1, H2, H3, H4 |
 
@@ -800,6 +810,113 @@ F.Cu only.
   layer, like SW1's and the connectors'. The part's own moulded band still
   marks polarity for assembly; only the on-board copy of it is gone.
 
+## This session: E1–E10 removed, a 6 mm boss, and the elbow untangled
+
+The previous session left the board with **51 DRC errors**. It had been asked
+to move D3 to the SS220F (SMB) like D1, and there was no room for it: the SMB
+went where TP2 and TP3 were, TP2 and TP3 were pushed out through two gaps in
+the Pico's pin row to the little-finger wall, and on that wall they landed on
+top of the breakout pads. Four vias, two necked pin-row crossings and two
+shorted pads, to make room for one diode. This session took the space back
+instead of routing round the lack of it.
+
+### E1–E10 are gone
+
+Ten through-hole pads on nets nothing used, occupying a column down each wall.
+Three of them (GP0, GP1, GND) had spent three sessions sitting inside H4's
+boss. They are removed from the schematic, the board, the DRU rule and the
+parts list; the eight Pico pins they broke out (GP3, GP4, GP5, GP20, GP21,
+GP22, GP27, RUN) are no-connect again, which is what the sheet should say about
+a pin that goes nowhere. **The Pico is socketed** — its own header is the
+breakout, and always was.
+
+The netlist's **named** nets go 41 → 33. The total stays 56, because every pin
+that lost its breakout pad becomes an explicit no-connect and KiCad emits an
+`unconnected-` net for it — which is the right trade: eight nets that existed
+only to reach a pad become eight pins the sheet says nothing is attached to.
+The 0.7 mm drill count goes 18 → 8, and the board is 93 holes in 7 sizes.
+
+### The boss is 6 mm, and the screws moved to the corners
+
+8 mm was never a requirement — 6 mm holds the 5 mm brass insert with a wall
+round it. The old boss reached 4 mm in from two edges at once, which is why
+each hole sat 4.5 mm in and why the little-finger wall was only usable between
+y 40.24 and y 53.5.
+
+Hole position is **derived** now rather than written out four times: each
+centre sits `BOSS_R + BOSS_EDGE` (3.0 + 0.5) from both its own edges, so the
+boss keeps exactly the half-millimetre of wall it had before and the screws
+move from (4.5, 4.5) to (3.5, 3.5) and its three mirrors. The footprint's name
+carries the diameter (`MountingHole_3.4mm_M3_Boss6mm`), so a board built
+against a stale footprint cannot quietly claim a keep-out it does not have.
+
+> **Enclosure:** the four mounting bosses move 1 mm diagonally outward and
+> shrink by 2 mm. The printed part has to follow — this is the one change here
+> that reaches outside the PCB.
+
+### The test pads had taken the motor's pocket
+
+TP2 and TP3 were at (19.6, 58.0) and (23.5, 58.0) — in the middle of the only
+6 × 9 mm of board where the motor block fits. **Test pads are placed last
+now**: into space the layout has already settled, never the other way round.
+Both sit *on* their own net's existing lane, each replacing a via that was
+there anyway, so neither costs a track, a corner or a pin-row crossing:
+
+| Pad | Was | Is | On |
+|---|---|---|---|
+| TP2 | (19.6, 58.0), then (31.0, 49.17) via two vias and a pin-row gap | (18.8, 54.0) | JP1's own ADC0 pad row, 2 mm west, in the band between AFE_3V3's crossing at y 51.7 and MOT_SW's at y 55.5 |
+| TP3 | (23.5, 58.0), then (31.0, 44.09) via two vias and a pin-row gap | (21.0, 48.6) | OUT1's own change of face on the way into JP3 |
+
+Two lanes shifted by well under a millimetre to give TP3 its pad: ADC0's runs
+at x 19.8 instead of 20.85 (at 20.85 it passed 0.08 mm from the pad) and OUT1's
+steps 0.8 mm west below its corridor via. TP3 also has to clear **JP3's pin-1
+arrow**, whose silk reaches y 48.94 at x 22.0 — which is what fixes TP3's x at
+21.0 and not 21.8. TP2 and TP3 join `SILK_STRIP`: their own silk rings ran into
+JP1's and JP3's outlines, and a ring says nothing the printed net name beside
+it does not.
+
+### The flyback loop has no via in it
+
+D3 (SS220F, SMB) sits at (21.5, 58.8) on the **bottom face with Q1 and J6**,
+lengthways, east of both. On the bottom face rot 180 puts pad 1 (cathode) west
+and pad 2 (anode) east — footprints are mirrored in x down there, so 180 means
+what 0 means on top — and cathode-west is the whole trick:
+
+J6 stacks its two holes with MOT_SW (y 53.7) **north** of VSYS (y 56.24), while
+Q1 is **south** of both. Whichever of those two nets runs the full width of the
+pocket, the other has to cross it. With the cathode west, VSYS stops at x 19.35
+— 4.5 mm short of the east wall — and MOT_SW goes round the outside of it in
+two legs that meet at D3's anode: north at y 55.5 between JP1's pads and D3's
+body, south at y 61.2 just clear of D3's courtyard into Q1's drain. J6's
+switched hole reaches Q1 *through* the anode pad, so there is no separate leg
+and no via anywhere in the loop.
+
+The first attempt at this had the cathode east and put a right angle and a
+short between VSYS and MOT_SW. The orientation is the fix, not a detour.
+
+### Everything else
+
+* **The schematic's bottom band was three blocks deep in one column.** The
+  test-pad block was laid out from x 222 and the button/role/mounting block
+  from x 238, on the same row, so TP2 and TP3 were drawn inside SW2 and the
+  second test-pad column ran through H1–H4. The test pads now occupy the
+  column E1–E10 vacated (x 150) and the button block has the right-hand third
+  to itself.
+* **Nothing overlaps the sheet border or the title block.** The title block
+  owns x ≥ 236, y ≥ 199 in sheet grid units; the mounting-hole caption was
+  sitting on its top rule, and the haptic notes ran into its left edge. Both
+  moved, and the hole row moved with them.
+* **TP4 and TP6's power symbols were drawn on top of their own references.** A
+  `power` symbol at rot 270 labels *above* its anchor, which is where a test
+  pad's reference text sits; the two upward ones get four more grid units of
+  lead than the GND ones.
+
+**Result:** ERC 0, netlist 0 missing / 0 unexpected, BOM 0 differences against
+the parts table; DRC **0 errors**, parity 0, unrouted 0, independent short
+check 0 pairs, no `NET`, `OUTSIDE` or `IN BOSS` lines. The 14 remaining
+warnings are all `lib_footprint_mismatch`, one per footprint this board
+deliberately strips silk from or re-places reference text on.
+
 ## Still open
 
 `layout-prompt.md`, the brief the previous session's open items referred to, is
@@ -812,6 +929,12 @@ as the previous README recorded it, and where it stands:
   `gen_pcb.py`'s `PLACE` table and in the sections above, which is where it is
   most likely to be read — but nobody has walked the whole board and asked "why
   here" of every part in one sitting.
+* **`floorplan.svg` has drifted out of date.** It is the pre-layout plan and
+  several sessions of layout have moved past it: it draws the expansion pads
+  (removed), `JP1-JP7` and `TP12`/`TP13` (neither exists), and the old 4.5 mm
+  mounting-hole positions. It is left as the record of the plan rather than
+  half-corrected into something that is neither the plan nor the board — but
+  either regenerate it from `PLACE` or retire it.
 * **Full routing review (§2).** Partly done, and by machine rather than by eye:
   every track end is now a named pad rather than a coordinate, the pour is
   checked for islands, shorts are checked independently of DRC, and every pad is

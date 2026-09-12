@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate handoff.pretty/MountingHole_3.4mm_M3_Boss8mm.kicad_mod.
+Generate handoff.pretty/MountingHole_3.4mm_M3_Boss<BOSS_D>mm.kicad_mod.
 
 Why a project footprint instead of a stock one: KiCad 10 ships MountingHole
 3.2, 3.5 and 3.7 mm and nothing at 3.4, and none of them carry a keep-out.
@@ -10,7 +10,7 @@ The board is screwed into a printed boss that takes a 5 mm brass insert, so the
 screw is never a locating feature - the 0.2 mm extra swallows the boss's
 position tolerance instead of fighting it.
 
-The 8 mm keep-out is the boss's own footprint. It rides in the footprint rather
+The keep-out is the boss's own footprint, 6 mm across. It rides in the footprint rather
 than being drawn on the board so DRC enforces it wherever the hole is placed,
 and so it cannot be forgotten on the fourth corner. It bars tracks, vias and
 copper pour but allows pads, because otherwise it flags this footprint's own
@@ -24,10 +24,17 @@ import math
 import uuid
 
 HW = Path(__file__).resolve().parent.parent
-OUT = HW / "handoff.pretty" / "MountingHole_3.4mm_M3_Boss8mm.kicad_mod"
-
 DRILL = 3.4        # M3 clearance, ISO 273 medium
-BOSS_D = 8.0       # printed boss / brass insert outer diameter
+# 6 mm, not 8: the boss only has to be wide enough to hold a 5 mm brass insert
+# and leave a wall round it. At 8 mm it reached 4 mm in from each corner and
+# was the widest thing on the board's edges - it is what pushed H4 away from
+# its corner and what the little-finger breakout pads kept landing inside.
+# 6 mm leaves ~0.5 mm of wall round the insert and lets each hole sit closer
+# to its own corner. The NAME follows this number, so a change here cannot
+# leave the board pointing at a footprint that is no longer the one described.
+BOSS_D = 6.0       # printed boss / brass insert outer diameter
+NAME = f"MountingHole_3.4mm_M3_Boss{BOSS_D:g}mm"
+OUT = HW / "handoff.pretty" / f"{NAME}.kicad_mod"
 SILK_D = 4.0       # silk ring just outside the hole
 CRTYD = BOSS_D + 0.5
 SEGS = 48          # polygon approximation of the keep-out circle
@@ -63,10 +70,10 @@ def keepout_polygon():
 
 
 descr = (f"M3 mounting hole, {DRILL} mm drill (ISO 273 medium clearance), unplated, no copper. "
-         f"Carries a {BOSS_D} mm keep-out for the enclosure boss that takes a 5 mm brass insert. "
+         f"Carries a {BOSS_D:g} mm keep-out for the enclosure boss that takes a 5 mm brass insert. "
          "Deliberately not tied to GND: exactly one ground-plane connection (design 8.4).")
 
-text = f"""(footprint "MountingHole_3.4mm_M3_Boss8mm"
+text = f"""(footprint "{NAME}"
 	(version 20260206)
 	(generator "gen_mount_footprint.py")
 	(generator_version "10.0")
@@ -84,7 +91,7 @@ text = f"""(footprint "MountingHole_3.4mm_M3_Boss8mm"
 			)
 		)
 	)
-	(property "Value" "MountingHole_3.4mm_M3_Boss8mm"
+	(property "Value" "{NAME}"
 		(at 0 {BOSS_D / 2 + 1:g} 0)
 		(layer "F.Fab")
 		(uuid "{uid()}")
