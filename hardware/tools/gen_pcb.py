@@ -407,6 +407,8 @@ Y_VSYS_E = (25.04 + 27.58) / 2   # 26.31: VSYS threads between E7 and E8
 X_VSYS = 9.79              # the lane between the thumb breakout pads and the row
 X_VREF_N = 12.45           # VREF's lane north past the antenna keep-out (x 12.91)
 JP3C_VIA = (23.5, 48.4875) # R9.1 (24.4, 47.5875) + (-0.9, +0.9): on JP3's axis
+ADC0_VIA = (19.8, 52.95)   # JP1.2 (20.85, 54.0) + (-1.05, -1.05): the 45 into the pad starts here
+AGND_VIA = (ROW_TH - 2.54, pico_pin(33)[1] + 2.54)   # one 45 west out of pin 33
 
 ROUTES = [
     # ---- the LED, straight across the thumb strip on the bottom face ------
@@ -458,7 +460,7 @@ ROUTES = [
     # line, 0.25 mm, 0.68 mm from the edge), west along pin 20's row into the
     # pin, then on the top face round the antenna keep-out's corner to SW2.
     ("/BTN", BL, [P("R15", "2"), (39.2, 44.8425), (39.2, 13.34), (38.2, 12.34), pico_pin(20)]),
-    ("/BTN", TL, [pico_pin(20), (28.9, 11.3), (27.3, 9.7), (25.6, 8.0), (25.6, 5.9),
+    ("/BTN", TL, [pico_pin(20), (28.9, 11.3), (25.6, 8.0), (25.6, 5.9),
                   (23.25, 3.55), (23.25, 2.75)]),
     ("/BTN", BL, [(16.75, 2.75), (23.25, 2.75)]),    # SW2's two pad-1s
 
@@ -491,12 +493,17 @@ ROUTES = [
     ("Net-(U2A-+)", TL, [P("R3", "1"), P("R2", "2", -1.0, 1.0), P("R2", "2")]),
 
     # ---- stage 1 -----------------------------------------------------------
-    # Pin 2 leaves its pad twice: north into the 2.65 mm slot R2 vacated, and
-    # south under U2's body, where the island's vertical does not reach.
-    ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 27.2),
-                         P("R4", "1", -2.5, 0.8125), P("R4", "1", -1.6875), P("R4", "1")]),
-    ("Net-(U2A--)", TL, [(20.325, 29.887), (20.325, 31.3), (17.0, 31.3),
-                         P("R5", "1", 1.4), P("R5", "1")]),
+    # Pin 2 leaves its pad twice: north into the slot above the pad row, and
+    # south under U2's body, where the island's vertical does not reach. Each
+    # is one straight leg and one 45 onto the resistor's pad row.
+    ("Net-(U2A--)", TL, [P("U2", "2"), P("R4", "1", -4.075, 0.8125), P("R4", "1", -3.2625), P("R4", "1")]),
+    # South: R5.1 is on pin 2's own row but pins 3 and 4 are in the way, so
+    # the run goes under them at y 31.3 and comes back up with one 45 onto the
+    # row at x 16.9 - not straight into the pad, and not from pin 7's column:
+    # a 45 into the pad passes 0.1 mm from R5.2's corner and closes the pour
+    # channel beside R5.2, and a vertical reaching pin 7 walls the C3 pocket
+    # off from that channel. Both are the U2-body pour's only way out.
+    ("Net-(U2A--)", TL, [P("U2", "2"), (20.325, 31.3), P("R5", "1", 2.95, 1.65), P("R5", "1", 1.3), P("R5", "1")]),
     # OUT1: pin 1 -> R4.2 -> down the OUTERMOST of the three east lanes -> and
     # then across to C1 on the bottom face, not the top.
     #
@@ -512,7 +519,7 @@ ROUTES = [
     # leaves the lane by diving: the bottom face at y 43.36, C1's own pad row,
     # is empty across the whole channel. Two vias, and nothing on the top
     # face crosses the channel between the AFE and the elbow.
-    ("/OUT1", TL, [(20.975, 29.887), P("R4", "2", -3.425), P("R4", "2"),
+    ("/OUT1", TL, [P("U2", "1"), P("R4", "2", -3.425, 0.7875), P("R4", "2", -2.6375), P("R4", "2"),
                    P("R4", "2", 2.8), (27.2, Y_OUT1)]),
     ("/OUT1", BL, [(27.2, Y_OUT1), (21.8, Y_OUT1), (17.2, Y_OUT1)]),
     ("/OUT1", TL, [(17.2, Y_OUT1), P("C1", "1", 0.9, 0.9), P("C1", "1")]),
@@ -526,8 +533,9 @@ ROUTES = [
     # order, each one lane further out than the pin to its right.
     ("Net-(U2B-+)", TL, [(19.025, 34.112), P("R6", "1", 3.425), P("R6", "1")]),
     ("Net-(U2B-+)", TL, [P("R6", "1"), P("R6", "1", 1.3, 1.3), P("C1", "2", 1.3, -1.3), P("C1", "2")]),
-    ("Net-(U2B--)", TL, [(19.675, 34.112), (19.675, 37.6), (22.6, 37.6),
-                         P("R7", "1", -1.8), P("R7", "1")]),
+    # Pin 6 goes south past pin 7's east leg (y 36.9875) and takes one 45 onto
+    # R7.1's row.
+    ("Net-(U2B--)", TL, [P("U2", "6"), P("R7", "1", -4.725, -1.2125), P("R7", "1", -3.5125), P("R7", "1")]),
     ("Net-(U2B--)", TL, [P("R7", "1"), P("R8", "1")]),
     ("Net-(JP3-B)", TL, [(20.325, 34.112), P("R7", "2", -4.075), P("R7", "2")]),
     # OUT2 on to JP3: the innermost east lane, then one via down to the
@@ -541,7 +549,7 @@ ROUTES = [
     # continues up the lane between the thumb row and the antenna keep-out
     # (x 12.45: 0.46 mm from the pads, 0.34 from the keep-out) to one via at
     # the hand end, where JP6 is.
-    ("VREF", TL, [P("R8", "2"), P("R8", "2", -1.6), (22.8, Y_VREF_X), (13.9, Y_VREF_X),
+    ("VREF", TL, [P("R8", "2"), P("R8", "2", -2.5125, -2.5125), (13.9, Y_VREF_X),
                   P("R6", "2", -1.7, 1.7), P("R6", "2")]),
     ("VREF", TL, [P("R6", "2"), P("R6", "2", -1.7, -1.7), P("R5", "2", -1.7, 1.7), P("R5", "2")]),
     # Into R3's VREF pad FLAT from the lane, not at 45 from the south-west.
@@ -562,16 +570,16 @@ ROUTES = [
     # C4's + lead is through-hole, so the divider net is four short hops on the
     # bottom face and R10's supply pad is fed straight off the run to C5.
     ("Net-(JP6-A)", BL, [P("R10", "2"), P("C4", "1"), (10.75, 7.65), P("R11", "1")]),
-    ("Net-(JP6-A)", BL, [(11.5, 8.4), (11.5, 8.65), (10.4, 9.75), (9.2, 9.75)]),
+    ("Net-(JP6-A)", BL, [P("R11", "1"), P("JP6", "1", 0.95), P("JP6", "1")]),
 
     # ---- ADC0: C2 to pin 31 up the inner lane, and down to JP1 -------------
-    ("/ADC0", TL, [P("C2", "1"), (13.2, 45.538), (13.2, 37.74), pico_pin(31)]),
+    ("/ADC0", TL, [P("C2", "1"), (13.2, 45.538), (13.2, pico_pin(31)[1] + (13.2 - ROW_TH)), pico_pin(31)]),
     # The lane runs at x 19.8, not 20.85 on JP1's pad axis. Three things share
     # this 2.9 mm of elbow - this lane, OUT1's, and TP3's pad between them -
     # and at 20.85 the lane was 0.08 mm off that pad. It rejoins JP1's axis
     # with one 45 at the bottom, past AFE_3V3's crossing at y 51.7.
-    ("/ADC0", TL, [P("C2", "1"), (19.8, 45.538), (19.8, 52.5)]),
-    ("/ADC0", BL, [(19.8, 52.5), (19.8, 52.95), P("JP1", "2")]),
+    ("/ADC0", TL, [P("C2", "1"), (19.8, 45.538), ADC0_VIA]),
+    ("/ADC0", BL, [ADC0_VIA, P("JP1", "2")]),
     # TP2 hangs off JP1's own ADC0 pad, 2 mm west, in the band between
     # AFE_3V3's crossing at y 51.7 and MOT_SW's at y 55.5: the only 1.5 mm
     # pad's worth of room on this net outside the cell pocket.
@@ -590,7 +598,7 @@ ROUTES = [
     # the top face RX_IN crosses it; so this runs on the bottom face, which is
     # free the whole way (the pocket has no pour) into C5's through-hole +
     # lead, and on between SW2's pad rows to R10.
-    ("/AFE_3V3", BL, [(26.5, 34.163), (27.5, 33.163), P("TP8", "1"), (27.5, 5.45), P("C5", "1")]),
+    ("/AFE_3V3", BL, [(26.5, 34.163), (27.5, 33.163), P("TP8", "1"), P("C5", "1", 0.75, 0.75), P("C5", "1")]),
     ("/AFE_3V3", BL, [P("C5", "1"), (26.25, 5.0), (15.3, 5.0), (15.3, 2.7),
                       P("R10", "1", 1.925), P("R10", "1")]),
 
@@ -616,14 +624,14 @@ ROUTES = [
     # the one lane between the thumb pin row and J6's holes that the bottom
     # face cannot offer: on the bottom that lane is 1.23 mm wide and VSYS, at
     # 0.5 mm, already has it. Two 0.25 mm tracks would not fit beside it.
-    ("/MOT_DRV", TL, [pico_pin(34), (12.35, 45.36), (13.5875, 46.5975), P("R16", "1")]),
+    ("/MOT_DRV", TL, [pico_pin(34), P("R16", "1", -0.84), P("R16", "1")]),
     # U1 pin 33 is AGND and used to reach the electrode through the 0.96 mm pour
     # sliver between the Pico's thumb pads and the ADC0 lane. MOT_DRV leaving
     # pin 34 crosses that sliver - 0.25 mm of track plus two 0.2 mm clearances
     # is 0.65 of it - so AGND gets an explicit tie instead: west on the bottom
     # face, out of the cell pocket, into the bottom pour. That is a better
     # ground than the sliver was.
-    ("GND", BL, [pico_pin(33), (9.0, 42.82)]),
+    ("GND", BL, [pico_pin(33), AGND_VIA]),
     # One straight line from R16 through R17's pad and on to the via: the
     # pull-down is in the middle of the run, so there is no branch to make an
     # angle at.
@@ -632,7 +640,7 @@ ROUTES = [
     # VSYS: two millimetres from pin 39 into J6's supply hole, then east along
     # J6's own pad row and one 45 down onto D3's cathode. It stops there -
     # 4.5 mm short of the east wall of this pocket - which is the whole point.
-    ("VSYS", BL, [pico_pin(39), (12.6, 56.58), (12.6, 56.24), P("J6", "2")]),
+    ("VSYS", BL, [pico_pin(39), (ROW_TH + (58.06 - 56.24), 56.24), P("J6", "2")]),
     ("VSYS", BL, [P("J6", "2"), P("D3", "1", -2.56, -2.56), P("D3", "1")]),
     # MOT_SW takes the long way round the OUTSIDE of VSYS, in two legs that
     # meet at D3's anode, rather than cutting across it:
@@ -653,12 +661,12 @@ VIAS = [
     ("Net-(JP3-C)", *JP3C_VIA),
     ("Net-(JP3-B)", 25.7, 48.3),
     ("Net-(JP1-A)", 23.4, 54.0),
-    ("/ADC0", 19.8, 52.5),
+    ("/ADC0", *ADC0_VIA),
     ("VREF", X_VREF_N, 11.05),
     # AFE_3V3: the lane start doubles as the drop to the bottom face for the
     # run north; the other is the end of the lane, under the elbow block to JP4
     ("/AFE_3V3", 26.5, 34.163), ("/AFE_3V3", 26.5, 48.8),
-    ("GND", 9.0, 42.82),
+    ("GND", *AGND_VIA),
     ("Net-(Q1-G)", 12.8, 58.5875),
     # D1 became SMD (SMB) when it swapped from a THT diode; its three approach
     # tracks used to end on the THT pad itself and now go via-to-F.Cu at what

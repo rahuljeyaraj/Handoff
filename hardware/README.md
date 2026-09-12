@@ -1059,6 +1059,30 @@ AFE_3V3 lane did not move. C4/C5 were already anchored on pad 1; pad 2 is GND.
   for a bench/research board; it is written down here so that if this board
   ever becomes something a stranger wears, the question is asked again.
 
+### Routes tidied: one leg and one 45, not a flight of steps
+
+Eleven routes had a jog, a stub or an off-45 leg that the package changes had
+left behind or that had never been cleaned up; 18 segments fewer, no net or
+lane moved:
+
+* **Pin 2's two escapes.** North was up, east, a 0.8 mm 45, east; now up and
+  one 45 onto R4.1's row. South (FB1) was a U-turn — down, west, back *up* a
+  vertical, west into R5.1 — because R5.1 is on pin 2's own row with pins 3
+  and 4 between them. It is down, west past pin 4, one 45 up onto the row, in.
+  The 45 lands at x 16.9, deliberately not on the pad: straight into R5.1 it
+  passes 0.1 mm from R5.2's corner and closes the pour channel beside R5.2,
+  and a vertical that reaches pin 7's column walls the C3 pocket off from that
+  channel — both were tried, both cost the pocket its exit.
+* **Pin 6 to R7.1** was down, east, down 1.2 mm, east; now down and one 45.
+* **Pin 1's OUT1** leaves the pad with a 45 onto R4.2's row instead of a
+  mitred right angle; **VREF out of R8.2** is one 45 up to the bus instead of
+  west-then-north; **ADC0 into pin 31** and **AGND out of pin 33** are true
+  45s (AGND was 50°); **GP28 into R16** is one 45 off the pin.
+* Stubs gone: 0.25 mm at R11.1 (now one 45 into JP6's pad), 0.34 mm at J6
+  (VSYS's 45 runs all the way to J6's row), 0.45 mm at ADC0's drop (the via
+  moved to where the 45 into JP1's pad starts, `ADC0_VIA`). AFE_3V3's leg
+  into C5.1 was 52°, not 45; BTN had a redundant collinear point.
+
 ### BOM
 
 `hardware/bom.csv` was committed with a **Package** column derived by hand from
