@@ -296,13 +296,12 @@ PLACE = {
     # elbow end of the thumb row (pin 36): the rail crosses the channel once,
     # at the elbow, and the long run up the wall to pin 20 is the static BTN
     # line at 0.25 mm, not the Pico's switching rail beside the receive node.
-    # It lies under the Pico, on the +3V3 branch's own row (y 47.2, the band
-    # between the pocket and the jumper pads), so the rail runs straight into
-    # pad 1 and stops there; BTN leaves pad 2 and is what crosses the pin
-    # row. Pad 2 is on x 26.8, the point the rail used to bend at, so the 45
-    # onto pin 6/7's gap is the one that was already there. Below it the
-    # OUT2 and AFE_3V3 vias (y 48.3 / 48.8) are 0.33 mm off the pads.
-    "R15": ("@", 25.8875, 47.2, 180, BOT),  # pad 1 +3V3 west, pad 2 BTN east
+    # It lies under the Pico, in the band between the pocket and the jumper
+    # pads (y 47.2), with pad 1 straight above JP4's +3V3 pad on x 15.85: the
+    # rail leaves JP4's pad north, one straight leg, and stops in R15. BTN
+    # leaves pad 2, steps up onto y 46.63 with one 45 and runs that row east
+    # to the pin row, where it crosses through pin 6/7's gap.
+    "R15": ("@", 16.7625, 47.2, 180, BOT),  # pad 1 +3V3 west, over JP4.1; pad 2 BTN east
 
     # LED series resistors, between J3 and the thumb row, on the bottom face.
     # Each sits on the mean of its Pico pin's y and its J3 pin's y (the rows
@@ -627,10 +626,10 @@ ROUTES = [
 
     # ---- +3V3: pin 36 straight into JP4, and one branch to R15 -------------
     # Pin 36 is on y 50.44 and so is JP4's pad: 4.7 mm of straight track. The
-    # branch to R15 leaves the pad north and runs the band between the pocket
-    # and the jumper pads straight into R15's pad, which sits on that row.
+    # branch to R15 leaves the pad north, straight up x 15.85 into R15's pad 1,
+    # which sits directly above it.
     ("+3V3", BL, [pico_pin(36), (15.85, 50.44)]),
-    ("+3V3", BL, [(15.85, 50.44), (15.85, 47.6), (16.25, 47.2), P("R15", "1")]),
+    ("+3V3", BL, [(15.85, 50.44), P("R15", "1")]),
 
     # ---- the elbow jumpers ------------------------------------------------
     # R9.1 to JP3's centre pad: one 45 off the pad onto JP3's axis, and the

@@ -1127,15 +1127,13 @@ parts are untouched.
   nearest corner is 3 mm from either line.
 * **R15 is under the Pico.** It sat at the little-finger wall, at (36.5,
   46.63), with +3V3 crossing the pin row between pins 6 and 7 to reach it.
-  It now lies on the +3V3 branch's own row, y 47.2, in the band between the
-  pocket and the jumper pads, pad 2 on x 26.8 — the point the rail used to
-  bend at. The rail runs straight into pad 1 and stops there; BTN is what
-  crosses the pin row now, with the 45 that was already there, and it does
-  so at 0.25 mm rather than the rail's 0.4 mm neck. Nothing about the
-  reasoning for R15's end of the board changed: the rail still crosses the
-  channel once, at the elbow. Below the pads the OUT2 and AFE_3V3 vias
-  (y 48.3 / 48.8) are 0.33 mm away, and the courtyard stops 0.35 mm short of
-  the pocket.
+  It now lies in the band between the pocket and the jumper pads, y 47.2,
+  with its +3V3 pad directly above JP4's +3V3 pad on x 15.85: the branch is
+  one straight leg north out of JP4's pad, 3.2 mm, and stops in R15. BTN
+  leaves pad 2, steps onto y 46.63 with one 45 and runs that row east to
+  the pin row, so BTN is what crosses the row now, at 0.25 mm rather than
+  the rail's 0.4 mm neck. Nothing about the reasoning for R15's end of the
+  board changed: the rail still crosses the channel once, at the elbow.
 * **J1, J2 and J5 against U1 — checked, clear.** The XH body's inboard face
   is at x 30.93 (from the footprint's own F.Fab outline); the Pico's edge is
   at 30.51 and its socket strips end at 30.17, so there is 0.4 mm of daylight

@@ -85,3 +85,6 @@ hardware/build/
 fp-info-cache
 _autosave-*
 *.kicad_prl
+
+# Editor local-history extension (has its own .git)
+.history/
