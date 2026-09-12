@@ -55,12 +55,19 @@ PCB = HW / "handoff.kicad_pcb"
 PRO = HW / "handoff.kicad_pro"
 
 sys.path.insert(0, str(HERE))
-from gen_schematic import NET_CLASSES, apply_board_settings, parse, find, find_all  # noqa: E402
+from gen_schematic import NET_CLASSES, SHEET, apply_board_settings, parse, find, find_all  # noqa: E402
 
 # --------------------------------------------------------------------------
 # Board
 # --------------------------------------------------------------------------
 BW, BH, CORNER = 40.0, 62.0, 3.0
+# Where the board's origin sits on the A4 sheet. Every coordinate in this file
+# is in the floor plan's frame; vec() adds this on the way into pcbnew and at()
+# takes it off on the way out, so the outline lands inside the sheet border
+# with room for the fab notes beside it, instead of on the page corner. The
+# aux origin is set here too, so the fab pack's coordinates still read as the
+# floor plan's.
+PAGE = (40.0, 35.0)
 EDGE_CLEAR = 0.3                      # copper to board edge (the fab minimum)
 EDGE_MARGIN = 0.5                     # what the layout actually keeps to the edge
 BOSS_R = 3.0                          # the 6 mm enclosure boss, as gen_mount_footprint draws it
@@ -285,12 +292,17 @@ PLACE = {
     # pad on its own net - JP2.2 (pad 2, north) and JP2.1 via one 45 (pad 1,
     # south) - so the cap is, on the board as on the sheet, across the jumper.
     "C6":  ("@", 32.35, 38.5, 90, BOT),     # DNP across JP2: pad 2 north on JP2.2's x, pad 1 south
-    # R15 is the BTN pull-up. It sits at the elbow end of this strip because
-    # +3V3 is on the elbow end of the thumb row (pin 36): the rail crosses the
-    # channel once, at the elbow, and the long run up the wall to pin 20 is
-    # the static BTN line at 0.25 mm, not the Pico's switching rail beside the
-    # receive node.
-    "R15": ("@", 36.5, 46.63, 180, BOT),    # pad 1 +3V3 west, pad 2 BTN at the wall
+    # R15 is the BTN pull-up. It sits at the elbow end because +3V3 is on the
+    # elbow end of the thumb row (pin 36): the rail crosses the channel once,
+    # at the elbow, and the long run up the wall to pin 20 is the static BTN
+    # line at 0.25 mm, not the Pico's switching rail beside the receive node.
+    # It lies under the Pico, on the +3V3 branch's own row (y 47.2, the band
+    # between the pocket and the jumper pads), so the rail runs straight into
+    # pad 1 and stops there; BTN leaves pad 2 and is what crosses the pin
+    # row. Pad 2 is on x 26.8, the point the rail used to bend at, so the 45
+    # onto pin 6/7's gap is the one that was already there. Below it the
+    # OUT2 and AFE_3V3 vias (y 48.3 / 48.8) are 0.33 mm off the pads.
+    "R15": ("@", 25.8875, 47.2, 180, BOT),  # pad 1 +3V3 west, pad 2 BTN east
 
     # LED series resistors, between J3 and the thumb row, on the bottom face.
     # Each sits on the mean of its Pico pin's y and its J3 pin's y (the rows
@@ -331,7 +343,10 @@ PLACE = {
     "TP4": ("@", 6.5, 10.3, 0, BOT),
     "TP5": ("@", 38.05, 36.0, 0, BOT),
     "TP6": ("@", 6.6, (25.04 + 27.58) / 2, 0, BOT),
-    "TP7": ("@", 1.9, 31.5, 0, BOT),   # ref/value text default is fine on the fab layer here
+    # TP7 sits east of D1 on the cathode pad's own row, so the tie is one
+    # straight F.Cu leg with no via. x 7.3: its courtyard (2.59) clears D1's
+    # (to x 5.84) and its pad stays 1.5 mm off the VSYS lane at x 9.79.
+    "TP7": ("@", 7.3, 29.8, 0, BOT),
     # TP8 is the eighth of the eight the README asked for. It was dropped last
     # session because C5's + lead was through-hole and made a better probe
     # point than a pad would have; C5 is an MLCC now, so that reason is gone.
@@ -401,14 +416,14 @@ TL, BL = "F.Cu", "B.Cu"
 
 Y_BATP_LF = gap(8, 9)      # 41.55: BAT+ crosses the little-finger row here
 Y_BATP_TH = gap(34, 35)    # 46.63: and the thumb row here, into SW1's common
-Y_3V3_LF = gap(6, 7)       # 46.63: +3V3 crosses the little-finger row to R15
+Y_BTN_LF = gap(6, 7)       # 46.63: BTN crosses the little-finger row out of R15
 Y_RXIN_LF = gap(16, 17)    # 21.23: RX_IN crosses it to JP7
 Y_VSYS_E = (25.04 + 27.58) / 2   # 26.31: VSYS threads between E7 and E8
 X_VSYS = 9.79              # the lane between the thumb breakout pads and the row
 X_VREF_N = 12.45           # VREF's lane north past the antenna keep-out (x 12.91)
 JP3C_VIA = (23.5, 48.4875) # R9.1 (24.4, 47.5875) + (-0.9, +0.9): on JP3's axis
 ADC0_VIA = (19.8, 52.95)   # JP1.2 (20.85, 54.0) + (-1.05, -1.05): the 45 into the pad starts here
-AGND_VIA = (ROW_TH - 2.54, pico_pin(33)[1] + 2.54)   # one 45 west out of pin 33
+AGND_VIA = (ROW_TH - 2.54, pico_pin(33)[1])   # straight west out of pin 33, one pitch
 
 ROUTES = [
     # ---- the LED, straight across the thumb strip on the bottom face ------
@@ -439,28 +454,36 @@ ROUTES = [
     # via-to-pad leg is collinear with the B.Cu leg above it, not a corner).
     ("/SW_OUT", BL, [(6.3, 43.0), (4.5, 41.2), (4.5, 37.42)]),
     ("/SW_OUT", TL, [(4.5, 37.42), P("D1", "2")]),
-    # D1's cathode to JP5, and JP5 to VSYS. VSYS goes through TP7 to the top
+    # D1's cathode to JP5, and JP5 to VSYS. VSYS goes through TP6 to the top
     # face, threads between E7 and E8, and runs the lane between the breakout
     # pads and the pin row (0.97 mm: 0.28 mm each side of a 0.5 mm track)
     # straight down into pin 39 from the north-west. D1's cathode (pad 1) is
-    # also F.Cu only: each branch's old 45-degree bend point becomes a via,
+    # also F.Cu only: JP5's branch's old 45-degree bend point becomes a via,
     # with a short F.Cu stub on into the pad at the same 45, so the angle at
     # the via is unchanged (135 degrees, same as it always was at the pad).
     ("/D1_K", BL, [(3.35, 26.9), (3.35, 28.65)]),
     ("/D1_K", TL, [(3.35, 28.65), P("D1", "1")]),
-    ("/D1_K", BL, [(1.9, 31.5), (2.8, 31.5)]),
-    ("/D1_K", TL, [(2.8, 31.5), P("D1", "1")]),
+    # TP7 is through-hole, so it is on the top face too: one straight F.Cu
+    # leg east out of the cathode pad, along its own row, and no via. (It had
+    # one, on the west side, left over from when D1 was through-hole and the
+    # leg ran on the bottom.)
+    ("/D1_K", TL, [P("D1", "1"), P("TP7", "1")]),
     ("VSYS", BL, [(4.65, 26.9), (5.24, Y_VSYS_E), (6.6, Y_VSYS_E)]),
     ("VSYS", TL, [(6.6, Y_VSYS_E), (X_VSYS - 0.49, Y_VSYS_E), (X_VSYS, Y_VSYS_E + 0.49),
                   (X_VSYS, 58.06 - 0.49), (X_VSYS + 0.49, 58.06), pico_pin(39)]),
 
     # ---- ROLE and BTN ------------------------------------------------------
     ("/ROLE", BL, [pico_pin(19), (31.65, 14.88)]),
-    # BTN: from R15 up the little-finger wall on the bottom face (a static
-    # line, 0.25 mm, 0.68 mm from the edge), west along pin 20's row into the
-    # pin, then on the top face round the antenna keep-out's corner to SW2.
-    ("/BTN", BL, [P("R15", "2"), (39.2, 44.8425), (39.2, 13.34), (38.2, 12.34), pico_pin(20)]),
-    ("/BTN", TL, [pico_pin(20), (28.9, 11.3), (25.6, 8.0), (25.6, 5.9),
+    # BTN: out of R15 with one 45 onto pin 6/7's gap, through it, up the
+    # little-finger wall on the bottom face (a static line, 0.25 mm, 0.68 mm
+    # from the edge), west along pin 20's row into the pin, then on the top
+    # face to SW2. Off pin 20 it leaves at 45 straight out of the pad: the
+    # 45 passes TP8 (27.5, 8.2) at 1.9 mm, where a stub north first put it
+    # at 1.2, one clearance off the pad. The jog to x 25.6 is for SW2's
+    # ground pad at (23.25, 7.25), which a 45 all the way would run through.
+    ("/BTN", BL, [P("R15", "2"), P("R15", "2", 0.57, -0.57), (37.4125, Y_BTN_LF),
+                  (39.2, 44.8425), (39.2, 13.34), (38.2, 12.34), pico_pin(20)]),
+    ("/BTN", TL, [pico_pin(20), (25.6, 9.04), (25.6, 5.9),
                   (23.25, 3.55), (23.25, 2.75)]),
     ("/BTN", BL, [(16.75, 2.75), (23.25, 2.75)]),    # SW2's two pad-1s
 
@@ -604,11 +627,10 @@ ROUTES = [
 
     # ---- +3V3: pin 36 straight into JP4, and one branch to R15 -------------
     # Pin 36 is on y 50.44 and so is JP4's pad: 4.7 mm of straight track. The
-    # branch to R15 leaves the pad north, runs the band between the pocket and
-    # the jumper pads, and crosses the little-finger row between pins 6 and 7.
+    # branch to R15 leaves the pad north and runs the band between the pocket
+    # and the jumper pads straight into R15's pad, which sits on that row.
     ("+3V3", BL, [pico_pin(36), (15.85, 50.44)]),
-    ("+3V3", BL, [(15.85, 50.44), (15.85, 47.6), (16.25, 47.2), (26.8, 47.2),
-                  (27.37, Y_3V3_LF), P("R15", "1")]),
+    ("+3V3", BL, [(15.85, 50.44), (15.85, 47.6), (16.25, 47.2), P("R15", "1")]),
 
     # ---- the elbow jumpers ------------------------------------------------
     # R9.1 to JP3's centre pad: one 45 off the pad onto JP3's axis, and the
@@ -628,9 +650,12 @@ ROUTES = [
     # U1 pin 33 is AGND and used to reach the electrode through the 0.96 mm pour
     # sliver between the Pico's thumb pads and the ADC0 lane. MOT_DRV leaving
     # pin 34 crosses that sliver - 0.25 mm of track plus two 0.2 mm clearances
-    # is 0.65 of it - so AGND gets an explicit tie instead: west on the bottom
-    # face, out of the cell pocket, into the bottom pour. That is a better
-    # ground than the sliver was.
+    # is 0.65 of it - so AGND gets an explicit tie instead: straight west on
+    # the bottom face, out of the cell pocket (which has no bottom pour, so the
+    # pad cannot simply sit in it), into the bottom pour. The via at its end
+    # is the stitch to the TOP pour, where the AFE's ground is, 2.5 mm from
+    # the AGND pin; without it the nearest stitch is 10 mm away. That is a
+    # better ground than the sliver was.
     ("GND", BL, [pico_pin(33), AGND_VIA]),
     # One straight line from R16 through R17's pad and on to the via: the
     # pull-down is in the middle of the run, so there is no branch to make an
@@ -672,7 +697,7 @@ VIAS = [
     # tracks used to end on the THT pad itself and now go via-to-F.Cu at what
     # used to be their last 45-degree bend, so the angle there is unchanged.
     # D1 is SOD-123FL now; the pad they aim at is the anchor, so they stayed.
-    ("/SW_OUT", 4.5, 37.42), ("/D1_K", 3.35, 28.65), ("/D1_K", 2.8, 31.5),
+    ("/SW_OUT", 4.5, 37.42), ("/D1_K", 3.35, 28.65),
     # The two pours are one net and have to be stitched, or DRC reports them
     # unconnected. Four, all outside the cell pocket and the antenna keep-out.
     ("GND", 5.0, 11.7), ("GND", 31.0, 7.0), ("GND", 2.0, 53.0), ("GND", 7.0, 33.0),
@@ -688,7 +713,7 @@ TEXTS = [
     ("F.SilkS", 23.0, 21.2, "GND", 0), ("B.SilkS", 17.3, 55.8, "ADC0", 0),
     ("B.SilkS", 21.0, 46.6, "OUT1", 0), ("B.SilkS", 6.5, 12.1, "VREF", 0),
     ("B.SilkS", 38.05, 37.7, "PAD", 0),
-    ("B.SilkS", 5.5, 24.8, "VSYS", 0), ("B.SilkS", 1.9, 30.1, "D1K", 0),
+    ("B.SilkS", 5.5, 24.8, "VSYS", 0), ("B.SilkS", 7.3, 31.7, "D1K", 0),
     # turned 90: the only clear strip left down here is the 2.9 mm between
     # D3's body and the Pico's little-finger pin row
     ("B.SilkS", 26.8, 56.5, "JP1-8 = OPEN", 90),
@@ -704,12 +729,26 @@ TEXTS = [
     ("F.SilkS", 38.4, 34.75, "-", 90), ("F.SilkS", 38.4, 37.25, "+", 90),
     ("F.SilkS", 38.4, 41.7, "CHG", 90),
 ]
-FAB_NOTE = ("Cmts.User", 20.0, 31.0,
-            "HANDOFF rev A - 2 layer, 40 x 62 mm, 1.6 mm FR-4, 1 oz Cu, "
-            "HASL lead-free, green mask, white silk. Min track/space 0.25/0.2 "
-            "(design), 0.15 (fab floor). Min solder-mask dam 0.1. Drills 0.3 / "
-            "0.7 / 0.95 / 1.0 / 1.1 / 1.15 PTH and 3.4 NPTH - see build/drills.md. "
-            f"H1-H4 3.4 mm unplated, each inside a {BOSS_R * 2:g} mm enclosure boss.", 0)
+# The fab notes: a numbered block on Cmts.User beside the board, not on it,
+# the way a fab drawing carries them. NOTES_AT is the top-left corner of the
+# block in floor-plan mm; NOTE_H its text height.
+NOTES_AT, NOTE_H = (BW + 12.0, 0.0), 1.5
+FAB_NOTES = [
+    "FABRICATION NOTES",
+    "",
+    f"1. Board: {BW:g} x {BH:g} mm, 2 layer, 1.6 mm FR-4, 1 oz Cu,",
+    "   3.0 mm corner radius. Outline on Edge.Cuts.",
+    "2. Finish: HASL lead-free. Green solder mask, white silkscreen.",
+    "3. Min track / space: 0.25 / 0.20 mm as designed;",
+    "   0.15 mm is the fab floor. Min solder-mask dam 0.10 mm.",
+    "4. Drills: 0.3, 0.7, 0.95, 1.0, 1.1, 1.15 mm PTH;",
+    "   3.4 mm NPTH. Tool list in build/drills.md.",
+    f"5. H1-H4: 3.4 mm unplated, each inside a {BOSS_R * 2:g} mm enclosure",
+    "   boss. No copper under the boss.",
+    "6. Silkscreen: 0.8 mm text, 0.12 mm stroke. Clip silk over pads.",
+    "7. Aux origin is the board's top-left corner; Gerbers and drill",
+    "   files are plotted from it.",
+]
 
 # --------------------------------------------------------------------------
 # Netlist
@@ -779,7 +818,7 @@ REF_AT = {
     "JP5": (-2.5, 0.0, 90), "JP6": (0.0, -2.3), "JP7": (0.0, 1.8), "JP2": (0.0, 1.8),
     "JP8": (0.0, -1.8), "JP4": (1.5, 1.9), "JP3": (0.0, 1.9), "JP1": (0.0, 1.8),
     "H1": (0.0, 5.0), "H2": (0.0, 5.0), "H3": (0.0, -5.0), "H4": (0.0, -5.0),
-    "TP5": (-3.0, 0.0), "TP7": (3.0, 0.0),
+    "TP5": (-3.0, 0.0), "TP7": (-2.6, 0.0),
     "Q1": (0.0, -2.5), "D3": (0.0, -2.1), "J6": (-2.4, 1.3),
 }
 
@@ -827,7 +866,13 @@ def mm(v):
 
 
 def vec(x, y):
-    return pcbnew.VECTOR2I(mm(x), mm(y))
+    """Floor-plan millimetres -> sheet position."""
+    return pcbnew.VECTOR2I(mm(x + PAGE[0]), mm(y + PAGE[1]))
+
+
+def at(v):
+    """Sheet position -> floor-plan millimetres; the inverse of vec()."""
+    return (pcbnew.ToMM(v.x) - PAGE[0], pcbnew.ToMM(v.y) - PAGE[1])
 
 
 def mitre(pts, c=MITRE):
@@ -863,6 +908,16 @@ def build():
     ds.m_ViasMinSize = mm(0.45)
     ds.m_MinThroughDrill = mm(0.3)
     ds.m_CopperEdgeClearance = mm(EDGE_CLEAR)
+    ds.SetAuxOrigin(vec(0, 0))       # the fab pack is plotted from here
+    ds.SetGridOrigin(vec(0, 0))      # so pcbnew's cursor reads floor-plan mm
+    tb = board.GetTitleBlock()       # the sheet's, so the two agree
+    tb.SetTitle(SHEET.title)
+    tb.SetRevision(SHEET.rev)
+    tb.SetCompany(SHEET.company)
+    tb.SetDate(SHEET.date)
+    tb.SetComment(0, f"{BW:g} x {BH:g} mm, 2 layer, 1.6 mm FR-4")
+    tb.SetComment(1, "Generated by tools/gen_pcb.py - do not hand-edit")
+    board.SetTitleBlock(tb)
     # Net classes and the DRC rule set live in handoff.kicad_pro; pcbnew's
     # Save() rewrites that file from the blank project this board was built
     # under, so main() re-applies them after every save.
@@ -898,7 +953,7 @@ def build():
             pad = next((p for p in fp.Pads() if p.GetNumber() == anchor), None)
             if pad is None:
                 raise SystemExit(f"{ref}: no pad {anchor!r} to anchor on")
-            off = (pcbnew.ToMM(pad.GetPosition().x), pcbnew.ToMM(pad.GetPosition().y))
+            off = at(pad.GetPosition())
         fp.SetPosition(vec(tx - off[0], ty - off[1]))
         fp.SetReference(ref)
         # Value, Description and the library nickname all come from the sheet:
@@ -966,7 +1021,7 @@ def build():
     out = ka.Outline()
     out.NewOutline()
     for px, py in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
-        out.Append(mm(px), mm(py))
+        out.Append(vec(px, py))
     board.Add(ka)
 
     # ---- the AGND sliver, removed ---------------------------------------
@@ -990,7 +1045,7 @@ def build():
     so = sl.Outline()
     so.NewOutline()
     for px, py in ((10.1, 37.9), (13.05, 37.9), (13.05, 46.0), (10.1, 46.0)):
-        so.Append(mm(px), mm(py))
+        so.Append(vec(px, py))
     board.Add(sl)
 
     # ---- ground pours ---------------------------------------------------
@@ -1010,7 +1065,7 @@ def build():
         inset = EDGE_MARGIN
         for px, py in ((inset, inset), (BW - inset, inset),
                        (BW - inset, BH - inset), (inset, BH - inset)):
-            o.Append(mm(px), mm(py))
+            o.Append(vec(px, py))
         board.Add(z)
 
     # ---- tracks and vias -------------------------------------------------
@@ -1024,8 +1079,8 @@ def build():
         pad = next((p for p in fp.Pads() if p.GetNumber() == pt.num), None)
         if pad is None:
             raise SystemExit(f"{pt.ref} has no pad {pt.num!r}")
-        pos = pad.GetPosition()
-        return (round(pcbnew.ToMM(pos.x) + pt.dx, 4), round(pcbnew.ToMM(pos.y) + pt.dy, 4))
+        px, py = at(pad.GetPosition())
+        return (round(px + pt.dx, 4), round(py + pt.dy, 4))
 
     layer_of = {"F.Cu": pcbnew.F_Cu, "B.Cu": pcbnew.B_Cu}
     for route in ROUTES:
@@ -1052,7 +1107,7 @@ def build():
         board.Add(v)
 
     # ---- text -------------------------------------------------------------
-    for layer, x, y, text, rot in TEXTS + [FAB_NOTE]:
+    for layer, x, y, text, rot in TEXTS:
         t = pcbnew.PCB_TEXT(board)
         t.SetText(text)
         t.SetLayer({"F.SilkS": pcbnew.F_SilkS, "B.SilkS": pcbnew.B_SilkS,
@@ -1064,6 +1119,15 @@ def build():
         if layer.startswith("B."):
             t.SetMirrored(True)
         board.Add(t)
+    t = pcbnew.PCB_TEXT(board)
+    t.SetText("\n".join(FAB_NOTES))
+    t.SetLayer(pcbnew.Cmts_User)
+    t.SetPosition(vec(*NOTES_AT))
+    t.SetHorizJustify(pcbnew.GR_TEXT_H_ALIGN_LEFT)
+    t.SetVertJustify(pcbnew.GR_TEXT_V_ALIGN_TOP)
+    t.SetTextSize(pcbnew.VECTOR2I(mm(NOTE_H), mm(NOTE_H)))
+    t.SetTextThickness(mm(0.2))
+    board.Add(t)
 
     return board, placed, nets, netmap
 
@@ -1081,8 +1145,8 @@ def report(board, placed, nets):
                 bad += 1
 
     def outside(bb, margin):
-        l, rr = pcbnew.ToMM(bb.GetLeft()), pcbnew.ToMM(bb.GetRight())
-        t, b = pcbnew.ToMM(bb.GetTop()), pcbnew.ToMM(bb.GetBottom())
+        l, rr = pcbnew.ToMM(bb.GetLeft()) - PAGE[0], pcbnew.ToMM(bb.GetRight()) - PAGE[0]
+        t, b = pcbnew.ToMM(bb.GetTop()) - PAGE[1], pcbnew.ToMM(bb.GetBottom()) - PAGE[1]
         if l < margin or rr > BW - margin or t < margin or b > BH - margin:
             return f"{l:.2f}..{rr:.2f} x {t:.2f}..{b:.2f}"
         return None
@@ -1112,8 +1176,7 @@ def report(board, placed, nets):
             if ref.startswith("H"):
                 continue
             for pad in fp.Pads():
-                pp = pad.GetPosition()
-                px, py = pcbnew.ToMM(pp.x), pcbnew.ToMM(pp.y)
+                px, py = at(pad.GetPosition())
                 sz = pad.GetSize()
                 r = max(pcbnew.ToMM(sz.x), pcbnew.ToMM(sz.y)) / 2
                 d = ((px - hx) ** 2 + (py - hy) ** 2) ** 0.5
@@ -1144,11 +1207,11 @@ def shorts(board):
                     items[L].append((f"{fp.GetReference()}.{p.GetNumber()}", p.GetNetname(),
                                      p.GetEffectiveShape(L)))
     for t in board.GetTracks():
-        s = t.GetStart()
+        sx, sy = at(t.GetStart())
         kind = "via" if t.Type() == pcbnew.PCB_VIA_T else "track"
         for L in items:
             if t.IsOnLayer(L):
-                items[L].append((f"{kind}({pcbnew.ToMM(s.x):.2f},{pcbnew.ToMM(s.y):.2f})",
+                items[L].append((f"{kind}({sx:.2f},{sy:.2f})",
                                  t.GetNetname(), t.GetEffectiveShape(L)))
     bad = 0
     for L, its in items.items():
@@ -1228,13 +1291,14 @@ def plots():
         f.unlink()
     layers = ("F.Cu,B.Cu,F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,"
               "Edge.Cuts,F.Fab,B.Fab,Cmts.User")
-    r = run_cli("pcb", "export", "gerbers", "--layers", layers,
+    r = run_cli("pcb", "export", "gerbers", "--layers", layers, "--use-drill-file-origin",
                 "--no-protel-ext", "--subtract-soldermask", "-o", str(out), str(PCB))
     if r.returncode:
         print("  gerber export failed:", r.stdout.strip() or r.stderr.strip())
         return 1
     r = run_cli("pcb", "export", "drill", "--format", "excellon", "--excellon-separate-th",
-                "--generate-map", "--map-format", "gerberx2", "-o", str(out) + "/", str(PCB))
+                "--drill-origin", "plot", "--generate-map", "--map-format", "gerberx2",
+                "-o", str(out) + "/", str(PCB))
     if r.returncode:
         print("  drill export failed:", r.stdout.strip() or r.stderr.strip())
         return 1
@@ -1318,6 +1382,11 @@ def drc():
 def main():
     board, placed, nets, netmap = build()
     write_drc_rules()
+    # A fresh BOARD() has no connectivity until told to build it, and the
+    # filler's island test reads that: without this the bottom pour's strip
+    # along the little-finger wall (which reaches GND only through its pads)
+    # was kept or dropped depending on where the board sat on the sheet.
+    board.BuildConnectivity()
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     fails = report(board, placed, nets)
     fails += shorts(board)

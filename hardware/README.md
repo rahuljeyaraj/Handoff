@@ -236,7 +236,7 @@ be fitted wrong.
 LED was briefly given GP14/13/12, which would have displaced both; once the
 Pico's rows were checked the LED moved to the thumb row instead and these two
 never had to move. They sit at the hand end of the **little-finger** row, next to
-R15 and JP8, at x = 28.9 — outside the antenna keep-out, which spans x 12.9–27.1.
+JP8, at x = 28.9 — outside the antenna keep-out, which spans x 12.9–27.1.
 Neither escape puts any copper under the antenna.
 
 **J5 "CHG": the charger's plug, in parallel with J1, same pin order.** The
@@ -466,8 +466,11 @@ SOD-123FL's stops 0.7 mm short, so D1's cathode bar is printed again.) That is
 what the thirteen `lib_footprint_mismatch` warnings are — the only warnings the
 board reports, and all deliberate. A board-edge legend (project name, revision, date) is on
 F.SilkS at the hand end and repeated on B.SilkS along the little-finger wall;
-a fab note (2-layer, 1.6 mm FR-4, 1 oz Cu, HASL, green mask, white silk, 0.3 mm
-min drill) is on `Cmts.User`. J1/J2/J5's pin-1 ends are marked **+ / −** or
+a numbered block of fabrication notes (stackup, finish, min track/space, the
+drill list, the boss rule, the plot origin) is on `Cmts.User` beside the board, and
+the sheet's title block carries the schematic's title, revision and date. The board
+sits at `PAGE` (40, 35) on the A4 sheet; the aux origin is its top-left corner and
+the fab pack is plotted from there, so every Gerber coordinate is a floor-plan one. J1/J2/J5's pin-1 ends are marked **+ / −** or
 **PAD / GP** on F.SilkS, and J3's four pins are marked **R K G B**, so the
 board can be assembled from the silk without the schematic in hand.
 
@@ -589,7 +592,8 @@ went with the little-finger-side routing it was part of, and **every track
 corner is 45° or straight**, enforced by two new DRC rules rather than by
 eye. +3V3 came off the little-finger wall entirely: it now reaches R15 by
 crossing the board once, at the elbow, instead of running the full 47 mm
-edge at 0.375 mm clearance.
+edge at 0.375 mm clearance. (R15 has since moved under the Pico, onto that
+branch's own row — see the last *This session*.)
 
 ### Test points: all eight, TP1–TP8
 
@@ -1096,6 +1100,54 @@ which must read `0603`.
 against the parts table; DRC **0 errors**, 13 warnings (all
 `lib_footprint_mismatch`), parity 0, unrouted 0, short check 0 pairs, no `NET`,
 `OUTSIDE` or `IN BOSS` lines; 20 vias, 93 holes in 7 sizes, fab pack 17 files.
+
+## This session: five things seen in the layout
+
+Each is a look at the board rather than a change of plan; the netlist and the
+parts are untouched.
+
+* **AGND's tie out of pin 33 is straight west.** The cell pocket (x 10–30,
+  y 16–46) has no bottom pour, so pin 33 cannot simply sit in the pour: it
+  needs a track out of the pocket. That track was one 45 south-west; it is
+  now one straight leg west, one pitch, `AGND_VIA = (8.58, 42.82)`. The via
+  at its end is kept: the pour alone would connect the track, but the via is
+  the stitch to the *top* pour — where U2 and the AFE's returns are — 2.5 mm
+  from the AGND pin; the nearest other stitch is 10 mm away at (7, 33).
+* **TP7 is east of D1, on the cathode pad's own row, with no via.** It was
+  west of D1 at (1.9, 31.5), reached by a bottom-face leg and a via that were
+  left over from D1's through-hole days. A through-hole test pad is on both
+  faces, so the tie is one straight F.Cu leg out of pad 1 to (7.3, 29.8) —
+  where its courtyard clears D1's (to x 5.84) and the pad stays 1.5 mm off
+  the VSYS lane at x 9.79. The `D1K` label moved with it. One via fewer: 19.
+* **BTN leaves pin 20 at 45, straight out of the pad.** It used to go 1 mm
+  north first and then 45: that put the diagonal 1.2 mm from TP8's centre,
+  one clearance off the pad. Straight out of the pin it passes at 1.9 mm.
+  The jog at x 25.6 stays — a 45 all the way would run through SW2's ground
+  pad at (23.25, 7.25). The antenna keep-out was never the constraint; its
+  nearest corner is 3 mm from either line.
+* **R15 is under the Pico.** It sat at the little-finger wall, at (36.5,
+  46.63), with +3V3 crossing the pin row between pins 6 and 7 to reach it.
+  It now lies on the +3V3 branch's own row, y 47.2, in the band between the
+  pocket and the jumper pads, pad 2 on x 26.8 — the point the rail used to
+  bend at. The rail runs straight into pad 1 and stops there; BTN is what
+  crosses the pin row now, with the 45 that was already there, and it does
+  so at 0.25 mm rather than the rail's 0.4 mm neck. Nothing about the
+  reasoning for R15's end of the board changed: the rail still crosses the
+  channel once, at the elbow. Below the pads the OUT2 and AFE_3V3 vias
+  (y 48.3 / 48.8) are 0.33 mm away, and the courtyard stops 0.35 mm short of
+  the pocket.
+* **J1, J2 and J5 against U1 — checked, clear.** The XH body's inboard face
+  is at x 30.93 (from the footprint's own F.Fab outline); the Pico's edge is
+  at 30.51 and its socket strips end at 30.17, so there is 0.4 mm of daylight
+  on the board even before the Pico's 8.5 mm of height over a 7 mm header.
+  Their *courtyards* do overlap U1's by 1.04 mm, because U1's courtyard is
+  drawn 1 mm outside its body — that is the overlap the "Pico is socketed"
+  rule in `handoff.kicad_dru` waives, and the only thing DRC would otherwise
+  say.
+
+**Result:** DRC **0 errors**, 13 warnings (all `lib_footprint_mismatch`),
+parity 0, unrouted 0, short check 0 pairs, no `NET`, `OUTSIDE` or `IN BOSS`
+lines; 19 vias, 92 holes in 7 sizes, fab pack 17 files.
 
 ## Still open
 

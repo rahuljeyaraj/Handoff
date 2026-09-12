@@ -514,9 +514,14 @@ FP_SW = "handoff:SW_Slide_SS-12F23G5"
 # --------------------------------------------------------------------------
 # The sheet
 # --------------------------------------------------------------------------
+# The title block, shared with gen_pcb.py so the board's sheet says what this one does.
+class SHEET:
+    title, rev, company, date = "Handoff — body-coupled handshake wristband", "A", "Handoff", "2026-09-11"
+
+
 def build() -> Schematic:
-    s = Schematic(paper="A3", title="Handoff — body-coupled handshake wristband", rev="A",
-                  company="Handoff", date="2026-09-11")
+    s = Schematic(paper="A3", title=SHEET.title, rev=SHEET.rev,
+                  company=SHEET.company, date=SHEET.date)
 
     # ---- symbols ---------------------------------------------------------
     R = s.use("Device", "R")
