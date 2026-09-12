@@ -5,25 +5,35 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.Pairing
 import com.handoff.band.contacts.Promote
 import com.handoff.band.data.HandoffDb
+import com.handoff.band.data.Handshake
+import com.handoff.band.data.Merge
 import com.handoff.band.data.Prefs
 import com.handoff.band.ui.screens.AdvancedScreen
 import com.handoff.band.ui.screens.BandScreen
 import com.handoff.band.ui.screens.CardScreen
+import com.handoff.band.ui.screens.ContactDetailScreen
+import com.handoff.band.ui.screens.ContactEditScreen
 import com.handoff.band.ui.screens.ContactsScreen
 import com.handoff.band.ui.screens.SettingsScreen
-import com.handoff.band.vcard.VCard
+import kotlinx.coroutines.launch
 
 /**
  * The screen set from design decisions §1. Contacts is home; there is no
@@ -36,6 +46,11 @@ object Routes {
     const val BAND = "band"
     const val CARD = "card"
     const val ADVANCED = "advanced"
+    const val CONTACT = "contact/{id}"
+    const val CONTACT_EDIT = "contact/{id}/edit"
+
+    fun contact(id: Long) = "contact/$id"
+    fun contactEdit(id: Long) = "contact/$id/edit"
 }
 
 @Composable
@@ -43,6 +58,9 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     val context = LocalContext.current
     val band = LocalBand.current
     val prefs = remember { Prefs.get(context) }
+
+    val db = remember { HandoffDb.get(context) }
+    val scope = rememberCoroutineScope()
 
     val state by band.state.collectAsState()
     val view = bandView(state)
@@ -60,11 +78,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
 
     NavHost(nav, startDestination = Routes.CONTACTS) {
         composable(Routes.CONTACTS) {
-            val contacts by HandoffDb.get(context).handshakes().all()
-                .collectAsState(initial = emptyList())
-            val promote = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartActivityForResult()
-            ) { /* the system editor owns the outcome */ }
+            val contacts by db.handshakes().all().collectAsState(initial = emptyList())
 
             ContactsScreen(
                 contacts = contacts,
@@ -72,10 +86,73 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 cardSet = cardSet,
                 sort = sort,
                 onSort = prefs::setSort,
-                onContact = { promote.launch(Promote.intentFor(VCard.parse(it.vcard))) },
+                onContact = { nav.navigate(Routes.contact(it.id)) },
                 onBand = { nav.navigate(Routes.BAND) },
                 onSetUpCard = { nav.navigate(Routes.CARD) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },
+            )
+        }
+
+        composable(
+            Routes.CONTACT,
+            arguments = listOf(navArgument("id") { type = NavType.LongType }),
+        ) { entry ->
+            val id = entry.arguments?.getLong("id") ?: return@composable
+            val contact by db.handshakes().observe(id).collectAsState(initial = null)
+            val c = contact ?: return@composable
+            val duplicates by db.handshakes()
+                .possibleDuplicates(c.id, c.phoneKey, c.emailKey)
+                .collectAsState(initial = emptyList())
+
+            // The system editor returns OK only when the person actually
+            // saved, so that is when the tick appears in the list.
+            val promote = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                if (result.resultCode == Activity.RESULT_OK) {
+                    scope.launch { db.handshakes().markPromoted(id) }
+                }
+            }
+
+            ContactDetailScreen(
+                contact = c,
+                duplicates = duplicates,
+                onEdit = { nav.navigate(Routes.contactEdit(id)) },
+                onSaveToPhone = { promote.launch(Promote.intentFor(c)) },
+                onMerge = { other ->
+                    scope.launch {
+                        db.handshakes().update(Merge.merge(into = c, from = other))
+                        db.handshakes().delete(other.id)
+                    }
+                },
+                onDelete = {
+                    scope.launch { db.handshakes().delete(id) }
+                    nav.popBackStack(Routes.CONTACTS, inclusive = false)
+                },
+                onBack = { nav.popBackStack() },
+            )
+        }
+
+        composable(
+            Routes.CONTACT_EDIT,
+            arguments = listOf(navArgument("id") { type = NavType.LongType }),
+        ) { entry ->
+            val id = entry.arguments?.getLong("id") ?: return@composable
+            var loaded by remember { mutableStateOf<Handshake?>(null) }
+            LaunchedEffect(id) { loaded = db.handshakes().byId(id) }
+            val c = loaded ?: return@composable
+
+            ContactEditScreen(
+                contact = c,
+                onSave = { edited ->
+                    scope.launch { db.handshakes().update(edited) }
+                    nav.popBackStack()
+                },
+                onDelete = {
+                    scope.launch { db.handshakes().delete(id) }
+                    nav.popBackStack(Routes.CONTACTS, inclusive = false)
+                },
+                onBack = { nav.popBackStack() },
             )
         }
 

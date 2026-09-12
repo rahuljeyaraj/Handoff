@@ -152,8 +152,10 @@ class BandService : LifecycleService(), BandClient.Listener {
                     vcard = vcardText,
                     displayName = card.displayName,
                     mobile = card.mobile,
+                    work = card.work,
                     email = card.email,
                     org = card.org,
+                    title = card.title,
                     fieldCount = card.fieldCount,
                 )
             )

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.provider.ContactsContract
+import com.handoff.band.data.Handshake
 import com.handoff.band.vcard.VCard
 
 /**
@@ -29,28 +30,51 @@ import com.handoff.band.vcard.VCard
  */
 object Promote {
 
-    fun intentFor(card: VCard): Intent = Intent(ContactsContract.Intents.Insert.ACTION).apply {
+    fun intentFor(card: VCard): Intent = intentFor(
+        name = card.displayName, mobile = card.mobile, work = card.work, email = card.email,
+        org = card.org, title = card.title, note = card.note,
+    )
+
+    /**
+     * From the stored row rather than the raw vCard, so the wearer's edits and
+     * their note go into the system editor. `Insert.NAME` is a single string,
+     * so a name they have corrected carries exactly as written.
+     */
+    fun intentFor(h: Handshake): Intent = intentFor(
+        name = h.displayName, mobile = h.mobile, work = h.work, email = h.email,
+        org = h.org, title = h.title, note = h.note,
+    )
+
+    fun intentFor(
+        name: String,
+        mobile: String? = null,
+        work: String? = null,
+        email: String? = null,
+        org: String? = null,
+        title: String? = null,
+        note: String? = null,
+    ): Intent = Intent(ContactsContract.Intents.Insert.ACTION).apply {
         type = ContactsContract.RawContacts.CONTENT_TYPE
 
-        putExtra(ContactsContract.Intents.Insert.NAME, card.displayName)
-        card.mobile?.let {
+        putExtra(ContactsContract.Intents.Insert.NAME, name)
+        mobile?.takeIf { it.isNotBlank() }?.let {
             putExtra(ContactsContract.Intents.Insert.PHONE, it)
             putExtra(ContactsContract.Intents.Insert.PHONE_TYPE,
                 ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
         }
-        card.work?.let {
+        work?.takeIf { it.isNotBlank() }?.let {
             putExtra(ContactsContract.Intents.Insert.SECONDARY_PHONE, it)
             putExtra(ContactsContract.Intents.Insert.SECONDARY_PHONE_TYPE,
                 ContactsContract.CommonDataKinds.Phone.TYPE_WORK)
         }
-        card.email?.let {
+        email?.takeIf { it.isNotBlank() }?.let {
             putExtra(ContactsContract.Intents.Insert.EMAIL, it)
             putExtra(ContactsContract.Intents.Insert.EMAIL_TYPE,
                 ContactsContract.CommonDataKinds.Email.TYPE_WORK)
         }
-        card.org?.let { putExtra(ContactsContract.Intents.Insert.COMPANY, it) }
-        card.title?.let { putExtra(ContactsContract.Intents.Insert.JOB_TITLE, it) }
-        card.note?.let { putExtra(ContactsContract.Intents.Insert.NOTES, it) }
+        org?.takeIf { it.isNotBlank() }?.let { putExtra(ContactsContract.Intents.Insert.COMPANY, it) }
+        title?.takeIf { it.isNotBlank() }?.let { putExtra(ContactsContract.Intents.Insert.JOB_TITLE, it) }
+        note?.takeIf { it.isNotBlank() }?.let { putExtra(ContactsContract.Intents.Insert.NOTES, it) }
     }
 }
 
