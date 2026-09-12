@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
 
         permissions.launch(requiredPermissions())
 
-        if (Pairing.storedAddress(this) != null) {
+        if (Pairing.storedAddress(this) != null && !Prefs.get(this).bandOff.value) {
             BandService.start(this)
         }
         band = BandConnection(this, lifecycleScope).also { it.bind() }

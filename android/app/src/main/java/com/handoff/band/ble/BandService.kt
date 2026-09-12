@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.handoff.band.data.HandoffDb
 import com.handoff.band.data.Handshake
 import com.handoff.band.data.Merge
+import com.handoff.band.data.Prefs
 import com.handoff.band.ui.MainActivity
 import com.handoff.band.vcard.VCard
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,13 +69,27 @@ class BandService : LifecycleService(), BandClient.Listener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
+        // A bound service does not die on stopService() while the activity
+        // holds its binding, so "stop" has to be an explicit request that
+        // closes the link itself rather than a hope that onDestroy runs.
+        if (intent?.action == ACTION_STOP) {
+            client?.close()
+            client = null
+            _state.value = State()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         createChannel()
         startForeground(NOTIFICATION_ID, notification("Not connected"))
 
         val address = intent?.getStringExtra(EXTRA_ADDRESS)
             ?: Pairing.storedAddress(this)
 
-        if (address == null) {
+        // No band, or the user switched it off: nothing to hold. NOT_STICKY,
+        // or the system would bring us straight back to do nothing again.
+        if (address == null || Prefs.get(this).bandOff.value) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -254,6 +269,36 @@ class BandService : LifecycleService(), BandClient.Listener {
             val intent = Intent(context, BandService::class.java)
             address?.let { intent.putExtra(EXTRA_ADDRESS, it) }
             context.startForegroundService(intent)
+        }
+
+        private const val ACTION_STOP = "com.handoff.band.STOP"
+
+        private fun stop(context: Context) {
+            context.startService(Intent(context, BandService::class.java).setAction(ACTION_STOP))
+        }
+
+        /** Drop the link and keep the pairing (design decisions §6). */
+        fun disconnect(context: Context) {
+            Prefs.get(context).setBandOff(true)
+            stop(context)
+        }
+
+        /** Undo [disconnect]. */
+        fun reconnect(context: Context) {
+            Prefs.get(context).setBandOff(false)
+            if (Pairing.storedAddress(context) != null) start(context)
+        }
+
+        /**
+         * Forget this band: the stored address, the CompanionDeviceManager
+         * association, and the service. The OS bond is left to Android; the
+         * next pairing with the same band reuses it without a dialog.
+         */
+        fun forget(context: Context) {
+            stop(context)
+            Pairing.storedAddress(context)?.let { Pairing.disassociate(context, it) }
+            Pairing.forget(context)
+            Prefs.get(context).setBandOff(false)
         }
     }
 }

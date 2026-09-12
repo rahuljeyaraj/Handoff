@@ -63,7 +63,9 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     val scope = rememberCoroutineScope()
 
     val state by band.state.collectAsState()
-    val view = bandView(state)
+    val bandOff by prefs.bandOff.collectAsState()
+    var address by remember { mutableStateOf(Pairing.storedAddress(context)) }
+    val view = bandView(state, address, bandOff)
     val theme by prefs.theme.collectAsState()
     val sort by prefs.sort.collectAsState()
 
@@ -184,9 +186,11 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 ActivityResultContracts.StartIntentSenderForResult()
             ) { result ->
                 if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-                Pairing.addressFrom(result.data)?.let { address ->
-                    Pairing.remember(context, address)
-                    BandService.start(context, address)
+                Pairing.addressFrom(result.data)?.let { found ->
+                    Pairing.remember(context, found)
+                    prefs.setBandOff(false)
+                    address = found
+                    BandService.start(context, found)
                     band.bind()
                 }
             }
@@ -200,6 +204,18 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                         onChooser = { chooser.launch(IntentSenderRequest.Builder(it).build()) },
                         onFailure = { /* the chooser reports its own failure */ },
                     )
+                },
+                onDisconnect = {
+                    if (bandOff) {
+                        BandService.reconnect(context)
+                        band.bind()
+                    } else {
+                        BandService.disconnect(context)
+                    }
+                },
+                onForget = {
+                    BandService.forget(context)
+                    address = null
                 },
                 onCard = { nav.navigate(Routes.CARD) },
                 onBack = { nav.popBackStack() },

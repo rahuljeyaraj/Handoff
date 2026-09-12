@@ -16,7 +16,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,9 +60,13 @@ fun BandScreen(
     cardSummary: String,
     firmware: String?,
     onPair: () -> Unit,
+    onDisconnect: () -> Unit,
+    onForget: () -> Unit,
     onCard: () -> Unit,
     onBack: () -> Unit,
 ) {
+    var confirmForget by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -83,8 +95,40 @@ fun BandScreen(
             SettingsRow("Your contact card", icon = Icons.Filled.Person,
                         subtitle = cardSummary, onClick = onCard)
 
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(24.dp))
+
+            // Two distinct actions, not one: drop the link and keep the
+            // pairing, or forget the band altogether (§6).
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (band.connection == BandView.Connection.OFF) "Connect" else "Disconnect")
+                }
+                TextButton(
+                    onClick = { confirmForget = true },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Forget this band") }
+            }
+
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (confirmForget) {
+        AlertDialog(
+            onDismissRequest = { confirmForget = false },
+            title = { Text("Forget ${band.name}?") },
+            text = { Text("You'll need to pair it again to use it.") },
+            confirmButton = {
+                TextButton(onClick = { confirmForget = false; onForget() }) { Text("Forget") }
+            },
+            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Cancel") } },
+        )
     }
 }
 

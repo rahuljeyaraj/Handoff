@@ -33,6 +33,20 @@ class Prefs private constructor(context: Context) {
         _theme.value = t
     }
 
+    /**
+     * "The user turned the band off." The service is START_STICKY and both
+     * Application.onCreate and MainActivity.onCreate restart it from the
+     * stored address, so Disconnect without a persisted flag reconnects
+     * instantly. Cleared by Connect and by Forget.
+     */
+    private val _bandOff = MutableStateFlow(sp.getBoolean(KEY_BAND_OFF, false))
+    val bandOff: StateFlow<Boolean> = _bandOff
+
+    fun setBandOff(off: Boolean) {
+        sp.edit { putBoolean(KEY_BAND_OFF, off) }
+        _bandOff.value = off
+    }
+
     private val _sort = MutableStateFlow(
         sp.getString(KEY_SORT, null)?.let { runCatching { Sort.valueOf(it) }.getOrNull() }
             ?: Sort.NEWEST
@@ -48,6 +62,7 @@ class Prefs private constructor(context: Context) {
         private const val FILE = "handoff.prefs"
         private const val KEY_THEME = "theme"
         private const val KEY_SORT = "sort"
+        private const val KEY_BAND_OFF = "band_off"
 
         @Volatile private var instance: Prefs? = null
 

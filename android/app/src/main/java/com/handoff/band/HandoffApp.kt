@@ -3,6 +3,7 @@ package com.handoff.band
 import android.app.Application
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.Pairing
+import com.handoff.band.data.Prefs
 
 /**
  * Nothing here but one decision: if a band has already been paired, start
@@ -16,7 +17,7 @@ import com.handoff.band.ble.Pairing
 class HandoffApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        if (Pairing.storedAddress(this) != null) {
+        if (Pairing.storedAddress(this) != null && !Prefs.get(this).bandOff.value) {
             BandService.start(this)
         }
     }

@@ -81,16 +81,23 @@ data class BandView(
 ) {
     enum class Connection(val label: String) {
         NOT_PAIRED("Not paired"),
+        OFF("Disconnected"),
         WAITING("Looking for the band"),
         CONNECTING("Connecting…"),
         CONNECTED("Connected"),
     }
 
     companion object {
-        fun from(state: BandService.State?): BandView {
-            val paired = state?.address != null
+        /**
+         * [address] is the stored pairing, which outlives the service: once
+         * the user disconnects, the service is gone and its state is null,
+         * but the band is still theirs.
+         */
+        fun from(state: BandService.State?, address: String?, off: Boolean): BandView {
+            val paired = address != null
             val connection = when {
                 !paired -> Connection.NOT_PAIRED
+                off -> Connection.OFF
                 state?.ready == true -> Connection.CONNECTED
                 state?.connected == true -> Connection.CONNECTING
                 else -> Connection.WAITING
@@ -107,4 +114,5 @@ data class BandView(
 }
 
 @Composable
-fun bandView(state: BandService.State?): BandView = BandView.from(state)
+fun bandView(state: BandService.State?, address: String?, off: Boolean): BandView =
+    BandView.from(state, address, off)

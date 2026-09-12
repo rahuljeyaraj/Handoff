@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: Phase 1 in progress on `app/customer-facing` — steps 1–5 done.** Keep this line current — when you finish a phase, tick
+**Status: Phase 1 in progress on `app/customer-facing` — steps 1–6 done.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -55,7 +55,7 @@ Nothing in firmware changes. Each step should build and run on its own.
   merging on either; a `work` column for the second number. Cards with neither a
   phone nor an email are discarded. **Decide and state your Room migration
   strategy** — the database is at version 1 with `exportSchema = false`.
-- [ ] **6. Disconnect and Forget band.** Note the trap: the service is
+- [x] **6. Disconnect and Forget band.** Note the trap: the service is
   `START_STICKY` and `MainActivity.onCreate` restarts it from the stored address,
   so Disconnect needs a persisted "user turned this off" flag or it reconnects
   instantly.

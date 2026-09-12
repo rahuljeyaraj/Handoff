@@ -57,6 +57,25 @@ object Pairing {
     }
 
     /**
+     * Undo [associate]. On API 33+ associations are addressed by id; below
+     * that, by MAC. Either way the OS forgets it allowed this app to hold
+     * that device, which is what "Forget this band" promises.
+     */
+    @Suppress("DEPRECATION")
+    fun disassociate(context: Context, address: String) {
+        val manager = context.getSystemService(CompanionDeviceManager::class.java) ?: return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                manager.myAssociations
+                    .filter { it.deviceMacAddress?.toString()?.equals(address, ignoreCase = true) == true }
+                    .forEach { manager.disassociate(it.id) }
+            } else {
+                manager.disassociate(address)
+            }
+        }.onFailure { Log.w("HandoffPairing", "disassociate failed", it) }
+    }
+
+    /**
      * Ask the OS to show its device chooser. [onChooser] receives the
      * IntentSender to launch; the result comes back to the activity, and
      * [addressFrom] pulls the band out of it.
