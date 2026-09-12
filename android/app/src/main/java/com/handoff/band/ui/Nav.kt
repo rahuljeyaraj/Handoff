@@ -86,7 +86,14 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 cardSet = cardSet,
                 sort = sort,
                 onSort = prefs::setSort,
+                incompleteAt = state?.lastIncompleteAt,
                 onContact = { nav.navigate(Routes.contact(it.id)) },
+                onMerge = { keep, absorb ->
+                    scope.launch {
+                        db.handshakes().update(Merge.merge(into = keep, from = absorb))
+                        db.handshakes().delete(absorb.id)
+                    }
+                },
                 onBand = { nav.navigate(Routes.BAND) },
                 onSetUpCard = { nav.navigate(Routes.CARD) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },

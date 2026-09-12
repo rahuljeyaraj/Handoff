@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: Phase 1 in progress on `app/customer-facing` — steps 1–4 done.** Keep this line current — when you finish a phase, tick
+**Status: Phase 1 in progress on `app/customer-facing` — steps 1–5 done.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -51,7 +51,7 @@ Nothing in firmware changes. Each step should build and run on its own.
 - [x] **4. Contact detail and edit screens.** New `note` column. "Save to phone"
   becomes a secondary action and keeps using `Intents.Insert` with no
   `WRITE_CONTACTS`.
-- [ ] **5. Dedup.** `phone_key` and `email_key` as two independent indexed columns,
+- [x] **5. Dedup.** `phone_key` and `email_key` as two independent indexed columns,
   merging on either; a `work` column for the second number. Cards with neither a
   phone nor an email are discarded. **Decide and state your Room migration
   strategy** — the database is at version 1 with `exportSchema = false`.

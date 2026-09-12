@@ -12,6 +12,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.handoff.band.data.HandoffDb
 import com.handoff.band.data.Handshake
+import com.handoff.band.data.Merge
 import com.handoff.band.ui.MainActivity
 import com.handoff.band.vcard.VCard
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,10 +30,12 @@ import kotlinx.coroutines.launch
  * `rx_vcard` notify under those conditions an exit criterion rather than a
  * nice-to-have.
  *
- * Every received card is written to the local database here, immediately and
- * unconditionally — the promotion into the system address book is a separate
- * user action (see `contacts/Promote.kt`), so nothing is lost if the phone is
- * locked when the card arrives.
+ * Every received card with a way to reach the person is written to the local
+ * database here, immediately — the promotion into the system address book is
+ * a separate user action (see `contacts/Promote.kt`), so nothing is lost if
+ * the phone is locked when the card arrives. A card with neither a phone nor
+ * an email is a failed handshake, not a contact (design decisions §4a): it is
+ * reported, kept for diagnostics, and never becomes a list entry.
  */
 class BandService : LifecycleService(), BandClient.Listener {
 
@@ -42,6 +45,9 @@ class BandService : LifecycleService(), BandClient.Listener {
         val ready: Boolean = false,
         val status: BandStatus? = null,
         val lastError: String? = null,
+        /** When a handshake last arrived without a phone or email, and what it said. */
+        val lastIncompleteAt: Long? = null,
+        val lastIncompleteText: String? = null,
     )
 
     inner class LocalBinder : Binder() {
@@ -144,21 +150,38 @@ class BandService : LifecycleService(), BandClient.Listener {
 
     override fun onCardReceived(vcardText: String) {
         val card = VCard.parse(vcardText)
+        val incoming = Handshake(
+            receivedAt = System.currentTimeMillis(),
+            vcard = vcardText,
+            displayName = card.displayName,
+            mobile = card.mobile,
+            work = card.work,
+            email = card.email,
+            org = card.org,
+            title = card.title,
+            fieldCount = card.fieldCount,
+        )
+
+        // No phone and no email: you cannot reach the person, cannot
+        // deduplicate it, cannot usefully save it. The band buzzed for it,
+        // so it must not fail silently -- but it is not a contact.
+        if (incoming.phoneKey == null && incoming.emailKey == null) {
+            _state.value = _state.value.copy(
+                lastIncompleteAt = incoming.receivedAt,
+                lastIncompleteText = vcardText,
+            )
+            notify("Handshake didn't complete — try again")
+            return
+        }
 
         lifecycleScope.launch {
-            HandoffDb.get(this@BandService).handshakes().insert(
-                Handshake(
-                    receivedAt = System.currentTimeMillis(),
-                    vcard = vcardText,
-                    displayName = card.displayName,
-                    mobile = card.mobile,
-                    work = card.work,
-                    email = card.email,
-                    org = card.org,
-                    title = card.title,
-                    fieldCount = card.fieldCount,
-                )
-            )
+            val dao = HandoffDb.get(this@BandService).handshakes()
+            // Match on phone or email, never on name (design decisions §3).
+            // On a match, fill blanks and bump received_at; the user's own
+            // edits are non-blank and so are never touched.
+            val existing = dao.matching(incoming.phoneKey, incoming.emailKey)
+            if (existing != null) dao.update(Merge.merge(into = existing, from = incoming))
+            else dao.insert(incoming)
         }
 
         // The wearer's phone was in a pocket. Say what arrived, so the exit

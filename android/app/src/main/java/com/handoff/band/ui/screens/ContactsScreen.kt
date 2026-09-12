@@ -1,7 +1,10 @@
 package com.handoff.band.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
@@ -24,7 +27,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -83,17 +89,30 @@ fun ContactsScreen(
     cardSet: Boolean,
     sort: Prefs.Sort,
     onSort: (Prefs.Sort) -> Unit,
+    incompleteAt: Long?,
     onContact: (Handshake) -> Unit,
+    onMerge: (keep: Handshake, absorb: Handshake) -> Unit,
     onBand: () -> Unit,
     onSetUpCard: () -> Unit,
     onSettings: () -> Unit,
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
+    var mergeFrom by remember { mutableStateOf<Handshake?>(null) }
+    val snackbar = remember { SnackbarHostState() }
 
     BackHandler(enabled = searching) { searching = false; query = "" }
 
+    // A handshake that arrived with no phone and no email is not a contact,
+    // but the band buzzed for it, so it does not vanish without a word.
+    LaunchedEffect(incompleteAt) {
+        if (incompleteAt != null && System.currentTimeMillis() - incompleteAt < 60_000) {
+            snackbar.showSnackbar("Handshake didn't complete — try again")
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             if (searching) {
                 SearchBar(query, onQuery = { query = it },
@@ -127,7 +146,8 @@ fun ContactsScreen(
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     items(hits, key = { it.id }) { h ->
                         ContactRow(h, timeLabel(h.receivedAt, sectioned = false),
-                                   highlight = query, onClick = { onContact(h) })
+                                   highlight = query, onClick = { onContact(h) },
+                                   onLongClick = { mergeFrom = h })
                     }
                 }
                 return@Column
@@ -145,10 +165,61 @@ fun ContactsScreen(
             if (contacts.isEmpty()) {
                 EmptyState(cardSet, onSetUpCard)
             } else {
-                ContactList(contacts, sort, onContact)
+                ContactList(contacts, sort, onContact, onLongClick = { mergeFrom = it })
             }
         }
     }
+
+    mergeFrom?.let { from ->
+        MergeDialog(
+            from = from,
+            candidates = contacts.filter { it.id != from.id },
+            onPick = { keep -> onMerge(keep, from); mergeFrom = null },
+            onDismiss = { mergeFrom = null },
+        )
+    }
+}
+
+/**
+ * "Merge into…" — the manual escape hatch for duplicates the keys did not
+ * catch (§3). The long-pressed row is absorbed into the one picked here.
+ */
+@Composable
+private fun MergeDialog(
+    from: Handshake,
+    candidates: List<Handshake>,
+    onPick: (Handshake) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Merge ${from.displayName} into…") },
+        text = {
+            if (candidates.isEmpty()) {
+                Text("No other contacts to merge with.",
+                     style = MaterialTheme.typography.bodyMedium)
+            } else {
+                LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(candidates.sortedBy { it.displayName.lowercase() }, key = { it.id }) { c ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onPick(c) }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Avatar(c.displayName)
+                            Column {
+                                Text(c.displayName, style = MaterialTheme.typography.bodyLarge)
+                                Text(secondaryLine(c), style = MaterialTheme.typography.bodySmall,
+                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**
@@ -207,7 +278,12 @@ fun matches(h: Handshake, query: String): Boolean {
 
 /** Newest-first under Today / Yesterday / Earlier; A–Z flat. */
 @Composable
-private fun ContactList(contacts: List<Handshake>, sort: Prefs.Sort, onContact: (Handshake) -> Unit) {
+private fun ContactList(
+    contacts: List<Handshake>,
+    sort: Prefs.Sort,
+    onContact: (Handshake) -> Unit,
+    onLongClick: (Handshake) -> Unit,
+) {
     val now = System.currentTimeMillis()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)) {
         when (sort) {
@@ -218,14 +294,15 @@ private fun ContactList(contacts: List<Handshake>, sort: Prefs.Sort, onContact: 
                 for ((title, rows) in groups) {
                     item(key = "hdr-$title") { DateHeader(title) }
                     items(rows, key = { it.id }) { h ->
-                        ContactRow(h, timeLabel(h.receivedAt, now), onClick = { onContact(h) })
+                        ContactRow(h, timeLabel(h.receivedAt, now), onClick = { onContact(h) },
+                                   onLongClick = { onLongClick(h) })
                     }
                 }
             }
             Prefs.Sort.AZ -> {
                 items(contacts.sortedBy { it.displayName.lowercase() }, key = { it.id }) { h ->
                     ContactRow(h, timeLabel(h.receivedAt, now, sectioned = false),
-                               onClick = { onContact(h) })
+                               onClick = { onContact(h) }, onLongClick = { onLongClick(h) })
                 }
             }
         }
@@ -238,6 +315,7 @@ private fun section(at: Long, now: Long): String = when (daysBetween(at, now)) {
     else -> "Earlier"
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContactRow(
     h: Handshake,
@@ -245,11 +323,12 @@ fun ContactRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     highlight: String = "",
+    onLongClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .height(72.dp)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,

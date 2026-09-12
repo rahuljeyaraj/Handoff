@@ -124,6 +124,18 @@ fun AdvancedScreen(state: BandService.State?, onBack: () -> Unit) {
             SectionHeader("Band status")
             StatusDump(state)
 
+            state?.lastIncompleteText?.let { raw ->
+                SectionHeader("Last incomplete handshake")
+                Text(
+                    "Arrived with no phone and no email, so it was not stored as a contact.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Text(raw, style = MonoStyle,
+                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+
             Spacer(Modifier.height(24.dp))
         }
     }
