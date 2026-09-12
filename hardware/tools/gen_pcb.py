@@ -41,6 +41,7 @@ import json
 import os
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pcbnew
@@ -55,7 +56,7 @@ PCB = HW / "handoff.kicad_pcb"
 PRO = HW / "handoff.kicad_pro"
 
 sys.path.insert(0, str(HERE))
-from gen_schematic import NET_CLASSES, SHEET, apply_board_settings, parse, find, find_all  # noqa: E402
+from gen_schematic import NET_CLASSES, PROJECT, SHEET, apply_board_settings, parse, find, find_all  # noqa: E402
 
 # --------------------------------------------------------------------------
 # Board
@@ -707,7 +708,7 @@ VIAS = [
 # --------------------------------------------------------------------------
 TEXTS = [
     ("F.SilkS", 34.3, 10.6, "HANDOFF", 0),
-    ("B.SilkS", 38.8, 21.0, "HANDOFF  rev A  2026-09", 90),
+    ("B.SilkS", 38.7, 21.0, "HANDOFF  rev A  2026-09", 90),
     # test pad names: the point of a test pad
     ("F.SilkS", 23.0, 21.2, "GND", 0), ("B.SilkS", 17.3, 55.8, "ADC0", 0),
     ("B.SilkS", 21.0, 46.6, "OUT1", 0), ("B.SilkS", 6.5, 12.1, "VREF", 0),
@@ -728,6 +729,11 @@ TEXTS = [
     ("F.SilkS", 38.4, 34.75, "-", 90), ("F.SilkS", 38.4, 37.25, "+", 90),
     ("F.SilkS", 38.4, 41.7, "CHG", 90),
 ]
+SILK_H = 0.8        # PCBWay's minimum legible silk height
+SILK_W = 0.15       # PCBWay's minimum legend stroke. KiCad's default is 0.12, and
+                    # every library footprint's outline arrives at that; the floor
+                    # below lifts them all, so nothing on silk is under the spec
+
 # The fab notes: a numbered block on Cmts.User beside the board, not on it,
 # the way a fab drawing carries them. NOTES_AT is the top-left corner of the
 # block in floor-plan mm; NOTE_H its text height.
@@ -744,7 +750,7 @@ FAB_NOTES = [
     "   3.4 mm NPTH. Tool list in build/drills.md.",
     f"5. H1-H4: 3.4 mm unplated, each inside a {BOSS_R * 2:g} mm enclosure",
     "   boss. No copper under the boss.",
-    "6. Silkscreen: 0.8 mm text, 0.12 mm stroke. Clip silk over pads.",
+    f"6. Silkscreen: {SILK_H:g} mm text, {SILK_W:g} mm stroke. Clip silk over pads.",
     "7. Aux origin is the board's top-left corner; Gerbers and drill",
     "   files are plotted from it.",
 ]
@@ -782,7 +788,6 @@ def load_netlist():
 # them. The mounting holes are not here: a 3.4 mm hole in a corner needs no label, and
 # the label had nowhere to go but off the board.
 SILK_REFS = ("JP", "J", "SW", "U", "D")
-SILK_H = 0.8        # PCBWay's minimum legible silk height
 
 # Footprints whose silkscreen OUTLINE is removed (their reference text stays).
 # U1's outline is drawn over the whole area the AFE, the breakout pads and the
@@ -836,7 +841,7 @@ def silkscreen(fp, ref):
     if keep:
         r.SetLayer(pcbnew.F_SilkS if fp.GetLayer() == pcbnew.F_Cu else pcbnew.B_SilkS)
         r.SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(SILK_H), pcbnew.FromMM(SILK_H)))
-        r.SetTextThickness(pcbnew.FromMM(0.12))
+        r.SetTextThickness(pcbnew.FromMM(SILK_W))
     else:
         r.SetLayer(pcbnew.F_Fab if fp.GetLayer() == pcbnew.F_Cu else pcbnew.B_Fab)
     r.SetVisible(True)
@@ -858,6 +863,17 @@ def silkscreen(fp, ref):
                 g.SetLayer(pcbnew.F_Fab)
             elif g.GetLayer() == pcbnew.B_SilkS:
                 g.SetLayer(pcbnew.B_Fab)
+    # Whatever silk is left gets the fab's minimum stroke. Library outlines
+    # are drawn at 0.12; a 0.03 mm lift is invisible to the eye and to every
+    # silk clearance on this board (DRC says so), and it is the difference
+    # between "within PCBWay's spec" and "usually prints anyway".
+    for g in fp.GraphicalItems():
+        if g.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS):
+            if g.Type() == pcbnew.PCB_TEXT_T:
+                if g.GetTextThickness() < pcbnew.FromMM(SILK_W):
+                    g.SetTextThickness(pcbnew.FromMM(SILK_W))
+            elif g.GetWidth() < pcbnew.FromMM(SILK_W):
+                g.SetWidth(pcbnew.FromMM(SILK_W))
 
 
 def mm(v):
@@ -1113,7 +1129,7 @@ def build():
                     "Cmts.User": pcbnew.Cmts_User}[layer])
         t.SetPosition(vec(x, y))
         t.SetTextSize(pcbnew.VECTOR2I(mm(SILK_H), mm(SILK_H)))
-        t.SetTextThickness(mm(0.12))
+        t.SetTextThickness(mm(SILK_W))
         t.SetTextAngleDegrees(rot)
         if layer.startswith("B."):
             t.SetMirrored(True)
@@ -1306,6 +1322,65 @@ def plots():
     return 0
 
 
+# What PCBWay's order form asks for, in the order it asks. Everything here is
+# either a number the board itself carries (size, layers, drills) or a choice
+# recorded in the README; nothing is a default left to the fab.
+ORDER = [
+    ("Board type", "Single pieces"),
+    ("Different design in panel", "1"),
+    ("Size", f"{BW:g} x {BH:g} mm"),
+    ("Quantity", "5 (or 10 - the price step is small)"),
+    ("Layers", "2"),
+    ("Material", "FR-4, TG130-140"),
+    ("Thickness", "1.6 mm"),
+    ("Min track / spacing", "0.25 mm / 0.20 mm as designed (fab floor 0.15/0.15)"),
+    ("Min hole size", "0.30 mm (vias); smallest component drill 0.70 mm"),
+    ("Solder mask", "Green, both sides"),
+    ("Silkscreen", "White, both sides"),
+    ("Edge connector", "No"),
+    ("Surface finish", "HASL lead free"),
+    ("Via process", "Tenting vias (all 19 vias are tented, both faces)"),
+    ("Finished copper", "1 oz Cu"),
+    ("Remove product No.", "Remove (or leave - there is room on B.SilkS)"),
+]
+
+# Board facts a human should check the uploaded preview against.
+CHECKS = [
+    "Outline is one closed profile on Edge.Cuts, 3.0 mm corner radii.",
+    "Four 3.4 mm NPTH mounting holes - must stay UNPLATED.",
+    "No copper under the 6 mm enclosure boss at each hole.",
+    "Aux origin = board top-left; every Gerber and drill coordinate is from it.",
+    "Two Excellon files: -PTH.drl plated, -NPTH.drl non-plated.",
+    "F_Fab / B_Fab / User_Comments are documentation, not fabrication layers.",
+]
+
+
+def order_sheet():
+    """build/order.md - the PCBWay order form's answers, and the zip to upload.
+
+    Written from the board's own numbers, so an order placed from it cannot
+    quote a size, a drill or a layer count the board does not have."""
+    rows = ["| Field | Value |", "|---|---|"] + [f"| {k} | {v} |" for k, v in ORDER]
+    body = [f"# PCBWay order - {PROJECT} rev A", "",
+            "Upload `build/handoff-pcbway.zip`. Form answers:", "", *rows, "",
+            "## Check these on PCBWay's own preview", ""]
+    body += [f"{i}. {c}" for i, c in enumerate(CHECKS, 1)]
+    body += ["", "## What is in the zip", ""]
+    files = sorted((BUILD / "plot").glob("*"))
+    body += [f"- `{f.name}`" for f in files]
+    body += ["", "Regenerate with `gen_pcb.py`; never edit the pack by hand.", ""]
+    (BUILD / "order.md").write_text("\n".join(body), encoding="utf-8")
+
+    zpath = BUILD / f"{PROJECT}-pcbway.zip"
+    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            z.write(f, f.name)
+        z.write(BUILD / "order.md", "README-order.md")
+    print(f"  upload pack: build/{zpath.name} ({len(files) + 1} files, "
+          f"{zpath.stat().st_size // 1024} kB) + build/order.md")
+    return 0
+
+
 def write_drc_rules():
     """handoff.kicad_dru - where DRC has to be told about the third dimension,
     which it does not model, plus the two conventions it does not enforce
@@ -1397,6 +1472,7 @@ def main():
         return fails
     fails += max(0, drc())
     fails += plots()
+    fails += order_sheet()
     return fails
 
 
