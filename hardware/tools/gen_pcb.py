@@ -1331,17 +1331,25 @@ ORDER = [
     ("Size", f"{BW:g} x {BH:g} mm"),
     ("Quantity", "5 (or 10 - the price step is small)"),
     ("Layers", "2"),
-    ("Material", "FR-4, TG130-140"),
+    ("Material", "FR-4 - take PCBWay's default TG (TG150-160). TG130-140 "
+                 "also carries this board; the higher TG only buys rework cycles, "
+                 "which a hand-soldered MSOP-8 may well use"),
     ("Thickness", "1.6 mm"),
-    ("Min track / spacing", "0.25 mm / 0.20 mm as designed (fab floor 0.15/0.15)"),
+    ("Min track / spacing", "6/6 mil - the design's tightest is 0.25 mm track, "
+                            "0.20 mm space and a 0.25 mm MSOP pad gap (9.8/7.9 mil). "
+                            "Do NOT buy 4/4 or 3/3: nothing here uses it and it prices the board"),
     ("Min hole size", "0.30 mm (vias); smallest component drill 0.70 mm"),
     ("Solder mask", "Green, both sides"),
     ("Silkscreen", "White, both sides"),
     ("Edge connector", "No"),
-    ("Surface finish", "HASL lead free"),
+    ("Surface finish", "HASL lead free, or HASL with lead - either works, and leaded "
+                       "hand-solders slightly easier. ENIG is the one worth paying for: "
+                       "flat pads under U2's 0.65 mm MSOP-8"),
     ("Via process", "Tenting vias (all 19 vias are tented, both faces)"),
     ("Finished copper", "1 oz Cu"),
-    ("Remove product No.", "Remove (or leave - there is room on B.SilkS)"),
+    ("Remove product No.", "No. The code prints on blank silk, touches no copper, and "
+                           "removal is a paid extra; 'Specify a location' is the free "
+                           "middle path if it has to sit somewhere particular"),
 ]
 
 # Board facts a human should check the uploaded preview against.
@@ -1351,6 +1359,8 @@ CHECKS = [
     "No copper under the 6 mm enclosure boss at each hole.",
     "Aux origin = board top-left; every Gerber and drill coordinate is from it.",
     "Two Excellon files: -PTH.drl plated, -NPTH.drl non-plated.",
+    "Say in the order remark that H1-H4 must NOT be plated - the drill file "
+    "already separates them, the remark is belt and braces.",
     "F_Fab / B_Fab / User_Comments are documentation, not fabrication layers.",
 ]
 
