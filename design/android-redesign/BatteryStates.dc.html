@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&family=Roboto+Mono:wght@400&display=swap">
+  <style>
+    :root{--surface:#FCF9F6;--sc:#F3EFEA;--on:#1C1B1A;--onv:#5B5852;--outline:#8D8A84;--ov:#DCD7D0;--primary:#40518B;--ok:#2E6B4F;--warn:#8A5A00;--error:#BA1A1A;}
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--surface);color:var(--on);-webkit-font-smoothing:antialiased;}
+    a{color:var(--primary);} a:hover{color:#172052;}
+    .cell{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:16px;border:1px solid var(--ov);border-radius:14px;}
+    .nm{font-size:15px;line-height:20px;font-weight:500;}
+    .rg{font-family:'Roboto Mono',monospace;font-size:12px;line-height:17px;color:var(--onv);}
+    .sub{font-size:12px;line-height:16px;font-weight:500;letter-spacing:.6px;text-transform:uppercase;color:var(--primary);}
+    .ico{height:34px;display:flex;align-items:center;}
+  </style>
+</helmet>
+
+<div style="width:640px;height:700px;background:#FCF9F6;padding:26px 28px;display:flex;flex-direction:column;">
+
+  <div style="flex:none;">
+    <div style="font-size:21px;line-height:27px;">Status icons</div>
+    <div style="font-size:13px;line-height:19px;color:#5B5852;margin-top:5px;">Everything the band status line has to say, without a tap.</div>
+  </div>
+
+  <div class="sub" style="margin-top:20px;">Battery — three blocks</div>
+
+  <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px;margin-top:10px;">
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="52" height="30" viewBox="0 0 28 16" fill="none" style="color:#2E6B4F;">
+          <rect x="0.9" y="2.9" width="22.2" height="10.2" rx="2.6" stroke="currentColor" stroke-width="1.4"></rect>
+          <rect x="24.6" y="5.8" width="2.6" height="4.4" rx="1.2" fill="currentColor"></rect>
+          <rect x="2.9" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+          <rect x="9.4" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+          <rect x="15.9" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+        </svg>
+      </div>
+      <div class="nm">Full</div>
+      <div class="rg">4.0 V and up</div>
+    </div>
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="52" height="30" viewBox="0 0 28 16" fill="none" style="color:#2E6B4F;">
+          <rect x="0.9" y="2.9" width="22.2" height="10.2" rx="2.6" stroke="currentColor" stroke-width="1.4"></rect>
+          <rect x="24.6" y="5.8" width="2.6" height="4.4" rx="1.2" fill="currentColor"></rect>
+          <rect x="2.9" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+          <rect x="9.4" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+        </svg>
+      </div>
+      <div class="nm">Good</div>
+      <div class="rg">3.7 – 4.0 V</div>
+    </div>
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="52" height="30" viewBox="0 0 28 16" fill="none" style="color:#8A5A00;">
+          <rect x="0.9" y="2.9" width="22.2" height="10.2" rx="2.6" stroke="currentColor" stroke-width="1.4"></rect>
+          <rect x="24.6" y="5.8" width="2.6" height="4.4" rx="1.2" fill="currentColor"></rect>
+          <rect x="2.9" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+        </svg>
+      </div>
+      <div class="nm">Low</div>
+      <div class="rg">3.5 – 3.7 V</div>
+    </div>
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="52" height="30" viewBox="0 0 28 16" fill="none" style="color:#BA1A1A;">
+          <rect x="0.9" y="2.9" width="22.2" height="10.2" rx="2.6" stroke="currentColor" stroke-width="1.7"></rect>
+          <rect x="24.6" y="5.8" width="2.6" height="4.4" rx="1.2" fill="currentColor"></rect>
+        </svg>
+      </div>
+      <div class="nm">Critical</div>
+      <div class="rg">below 3.5 V</div>
+    </div>
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="52" height="30" viewBox="0 0 28 16" fill="none" style="color:#8D8A84;">
+          <rect x="0.9" y="2.9" width="22.2" height="10.2" rx="2.6" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.6 2.2"></rect>
+          <rect x="24.6" y="5.8" width="2.6" height="4.4" rx="1.2" fill="currentColor"></rect>
+          <rect x="9.8" y="7.2" width="4.4" height="1.6" rx="0.8" fill="currentColor"></rect>
+        </svg>
+      </div>
+      <div class="nm">Unknown</div>
+      <div class="rg">no status yet</div>
+    </div>
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#40518B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 3v5M15 3v5"></path>
+          <path d="M6.5 8h11v3a5.5 5.5 0 01-11 0z"></path>
+          <path d="M12 16.5V21"></path>
+        </svg>
+      </div>
+      <div class="nm">USB power</div>
+      <div class="rg">cell not measured</div>
+    </div>
+
+  </div>
+
+  <div class="sub" style="margin-top:22px;">Your card on the band</div>
+
+  <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;margin-top:10px;">
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#2E6B4F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="5.5" width="19" height="13" rx="2.5"></rect>
+          <circle cx="8.5" cy="11" r="1.9"></circle>
+          <path d="M5.6 15.8a3.2 3.2 0 015.8 0M14 10.6h4M14 13.6h4"></path>
+        </svg>
+      </div>
+      <div class="nm">Your card is on the band</div>
+      <div class="rg">a handshake trades both ways</div>
+    </div>
+
+    <div class="cell">
+      <div class="ico">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8A5A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="5.5" width="19" height="13" rx="2.5"></rect>
+          <circle cx="8.5" cy="11" r="1.9"></circle>
+          <path d="M5.6 15.8a3.2 3.2 0 015.8 0M14 10.6h4M14 13.6h4"></path>
+          <path d="M3.6 20.4L20.4 3.6" stroke-width="1.9"></path>
+        </svg>
+      </div>
+      <div class="nm">No card on the band</div>
+      <div class="rg">you receive, you don't send</div>
+    </div>
+
+  </div>
+
+  <div style="flex-grow:1;"></div>
+
+  <div style="flex:none;padding:14px 16px;border-radius:12px;background:#F3EFEA;font-size:12px;line-height:18px;color:#1C1B1A;text-wrap:pretty;">
+    Cell voltage is the VSYS/3 reading on GP29 plus about 0.35 V for D1's drop. Thresholds are coarse on purpose: a Li-ion curve is almost flat between 3.7 and 3.9 V, so a percentage would be fiction. <strong style="font-weight:500;">Unknown</strong> is its own state and must never render as Critical.<br>
+    <strong style="font-weight:500;">USB power is not charging.</strong> The TP4056 is off-board on J5 and the app cannot see it. USB into the Pico only carries the board — VSYS then reads about 4.6 V, which is how you detect it, and the cell is unmeasurable because D1 blocks it.
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

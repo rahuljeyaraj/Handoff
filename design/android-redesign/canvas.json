@@ -1,0 +1,89 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "1 · Pick a home layout" },
+    { "id": "page-2", "name": "2 · Screens" },
+    { "id": "page-3", "name": "3 · First run" },
+    { "id": "page-4", "name": "4 · Battery & dark" }
+  ],
+  "artboards": [
+    { "file": "DirectionA.dc.html", "title": "Option A · List-first", "page": "page-1", "x": 0, "y": 0, "w": 412, "h": 915 },
+    { "file": "DirectionB.dc.html", "title": "Option B · Two tabs", "page": "page-1", "x": 492, "y": 0, "w": 412, "h": 915 },
+    { "file": "DirectionC.dc.html", "title": "Option C · Hub", "page": "page-1", "x": 984, "y": 0, "w": 412, "h": 915 },
+
+    { "file": "Main.dc.html", "title": "Contacts", "page": "page-2", "x": 0, "y": 0, "w": 412, "h": 915 },
+    { "file": "ContactsEmpty.dc.html", "title": "Contacts · empty", "page": "page-2", "x": 492, "y": 0, "w": 412, "h": 915 },
+    { "file": "ContactDetail.dc.html", "title": "Contact detail", "page": "page-2", "x": 984, "y": 0, "w": 412, "h": 915 },
+    { "file": "ContactEdit.dc.html", "title": "Contact · edit", "page": "page-2", "x": 1476, "y": 0, "w": 412, "h": 915 },
+    { "file": "Settings.dc.html", "title": "Settings", "page": "page-2", "x": 0, "y": 1035, "w": 412, "h": 915 },
+    { "file": "BandSettings.dc.html", "title": "Band", "page": "page-2", "x": 492, "y": 1035, "w": 412, "h": 915 },
+    { "file": "MyCard.dc.html", "title": "Your contact card", "page": "page-2", "x": 984, "y": 1035, "w": 412, "h": 915 },
+    { "file": "Advanced.dc.html", "title": "Advanced (dev tools)", "page": "page-2", "x": 1476, "y": 1035, "w": 412, "h": 915 },
+    { "file": "Search.dc.html", "title": "Contacts · search", "page": "page-2", "x": 0, "y": 2070, "w": 412, "h": 915 },
+
+    { "file": "Setup1.dc.html", "title": "Setup · scan the band", "page": "page-3", "x": 0, "y": 0, "w": 412, "h": 915 },
+    { "file": "Setup2.dc.html", "title": "Setup · Android confirm", "page": "page-3", "x": 492, "y": 0, "w": 412, "h": 915 },
+    { "file": "Setup3.dc.html", "title": "Setup · contact card", "page": "page-3", "x": 984, "y": 0, "w": 412, "h": 915 },
+
+    { "file": "BatteryStates.dc.html", "title": "Status icons", "page": "page-4", "x": 0, "y": 0, "w": 640, "h": 700 },
+    { "file": "Dark.dc.html", "title": "Contacts · dark", "page": "page-4", "x": 740, "y": 0, "w": 412, "h": 915 }
+  ],
+  "annotations": [
+    {
+      "id": "opt-a",
+      "page": "page-1",
+      "x": 0,
+      "y": -250,
+      "w": 412,
+      "text": "RECOMMENDED.\n\nThe list is the thing with daily value, so it gets the whole screen. Band state collapses to one tappable line; everything else is behind the gear.\n\nTradeoff: band state is quieter. If someone's band is flat, the line is all that tells them."
+    },
+    {
+      "id": "opt-b",
+      "page": "page-1",
+      "x": 492,
+      "y": -250,
+      "w": 412,
+      "text": "Band gets a screen of its own, so battery and pairing have room to breathe.\n\nTradeoff: Material's bottom nav wants 3-5 destinations and you have 2. A two-tab bar looks like a product that hasn't finished deciding what it is."
+    },
+    {
+      "id": "opt-c",
+      "page": "page-1",
+      "x": 984,
+      "y": -250,
+      "w": 412,
+      "text": "Band state is unmissable, which suits a demo where the band is the story.\n\nTradeoff: the hero card eats ~190px, so only four contacts fit and the real list becomes a second screen you have to go and find."
+    },
+    {
+      "id": "screens-note",
+      "page": "page-2",
+      "x": 0,
+      "y": -230,
+      "w": 900,
+      "text": "Built in Option A's style. What is new versus the app today:\n\n· The band is named (Handoff 7A3C). Its MAC address appears nowhere in the customer-facing UI.\n· The status line says four things without a tap: band, connection, whether your contact card is on the band, and battery.\n· Tapping a contact opens OUR screen, not the system contact editor. Editing and notes live here; \"Save to phone\" is one button among several.\n· Two phone numbers per contact — the vCard codec carries two and today's form silently drops the second.\n· Possible-duplicate banner with Merge, for the name-only cards that dedup cannot catch.\n· Search replaces the app bar in place — no new screen, no separate search page. Matches on name AND organisation, so \"who was that person from PCBWay\" is answerable.\n· A card with no phone and no email is an incomplete transfer, not a contact. It never reaches this list.\n· All four bench tools moved to Advanced."
+    },
+    {
+      "id": "setup-note",
+      "page": "page-3",
+      "x": 0,
+      "y": -230,
+      "w": 900,
+      "text": "Pairing is by QR CODE, not by searching. A conference has a hundred bands in range and no way to tell which one is yours; a code printed on the underside removes the question entirely. Band switched off, no code match, scan fails — which is the right failure.\n\nThe middle artboard is ANDROID'S dialog and its wording is Android's, not ours. CompanionDeviceManager cannot associate silently, so one confirmation is unavoidable. But because the code names the exact band, the scan filter matches a single device and this is one tap on one entry, not a list to guess from.\n\nThe label has to be generated per board from the same unique id the firmware already uses for the name — a production step. For the demo, print one from the id read over USB.\n\nStep 2 is the contact card, and it is skippable. Skipping leaves the band receive-only."
+    },
+    {
+      "id": "batt-note",
+      "page": "page-4",
+      "x": 0,
+      "y": -230,
+      "w": 640,
+      "text": "Three blocks, and two states that are not levels.\n\nNo board change needed — the Pico's VSYS/3 divider on GP29 is already there. The work is firmware plumbing: the status struct is exactly 16 bytes and full, so a battery field means version 2, shipped on both sides in one commit.\n\nUSB power is NOT charging — the charger is off-board on J5 and invisible to the app."
+    },
+    {
+      "id": "dark-note",
+      "page": "page-4",
+      "x": 740,
+      "y": -230,
+      "w": 412,
+      "text": "Dark mode, because a professional Android app has one and the phone is often out at a dim venue.\n\nSame tokens, swapped roles. Nothing in the layout moves."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+  <style>
+    :root{
+      --surface:#141413;--sc:#211F1D;--on:#E8E4DD;--onv:#ADA8A1;
+      --outline:#95918A;--ov:#3A3733;--primary:#BBC4FF;--pc:#2A3A72;--onpc:#DDE1FF;
+      --ok:#7FD6A8;--warn:#E7BE72;--error:#FFB4AB;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--surface);color:var(--on);-webkit-font-smoothing:antialiased;}
+    a{color:var(--primary);} a:hover{color:var(--onpc);}
+    .ib{width:48px;height:48px;border-radius:24px;display:flex;align-items:center;justify-content:center;color:var(--onv);flex:none;}
+    .hdr{font-size:11px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;color:var(--onv);padding:0 16px;height:32px;display:flex;align-items:center;}
+    .av{width:40px;height:40px;border-radius:20px;background:var(--pc);color:var(--onpc);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;flex:none;}
+    .nm{font-size:16px;line-height:22px;}
+    .sp{font-size:14px;line-height:19px;color:var(--onv);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .tm{font-size:12px;line-height:16px;color:var(--onv);flex:none;}
+  </style>
+</helmet>
+
+<div style="width:412px;height:915px;display:flex;flex-direction:column;background:#141413;overflow:hidden;">
+
+  <div style="height:30px;flex:none;"></div>
+
+  <div style="height:64px;flex:none;display:flex;align-items:center;padding:0 4px 0 16px;">
+    <div style="flex-grow:1;font-size:22px;line-height:28px;">Handoff</div>
+    <div class="ib">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.3-4.3"></path></svg>
+    </div>
+    <div class="ib">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h13M4 12h9M4 17h5"></path></svg>
+    </div>
+    <div class="ib">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.1"></circle>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
+      </svg>
+    </div>
+  </div>
+
+  <div style="flex:none;margin:0 16px;height:56px;border-radius:16px;background:#211F1D;display:flex;align-items:center;gap:12px;padding:0 14px;">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#BBC4FF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><rect x="6" y="8" width="12" height="8" rx="2"></rect><path d="M8 8V6.4a4 4 0 018 0V8M8 16v1.6a4 4 0 008 0V16"></path></svg>
+    <div style="flex-grow:1;display:flex;flex-direction:column;gap:1px;min-width:0;">
+      <div style="font-size:15px;line-height:20px;font-weight:500;">Handoff 7A3C</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="width:7px;height:7px;border-radius:4px;background:#7FD6A8;flex:none;"></span>
+        <span style="font-size:12px;line-height:16px;color:#ADA8A1;">Connected</span>
+      </div>
+    </div>
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#7FD6A8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none;">
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2.5"></rect>
+      <circle cx="8.5" cy="11" r="1.9"></circle>
+      <path d="M5.6 15.8a3.2 3.2 0 015.8 0M14 10.6h4M14 13.6h4"></path>
+    </svg>
+    <svg width="26" height="15" viewBox="0 0 28 16" fill="none" style="flex:none;color:#7FD6A8;">
+      <rect x="0.9" y="2.9" width="22.2" height="10.2" rx="2.6" stroke="currentColor" stroke-width="1.4"></rect>
+      <rect x="24.6" y="5.8" width="2.6" height="4.4" rx="1.2" fill="currentColor"></rect>
+      <rect x="2.9" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+      <rect x="9.4" y="5" width="5.2" height="6" rx="0.9" fill="currentColor"></rect>
+    </svg>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#95918A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M9 5l7 7-7 7"></path></svg>
+  </div>
+
+  <div class="hdr" style="margin-top:4px;">Today</div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">PR</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Priya Raghavan</div>
+      <div class="sp">Vellore Institute · +91 98410 23117</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none;">
+      <div class="tm">14:32</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7FD6A8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"></path></svg>
+    </div>
+  </div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">DO</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Daniel Okafor</div>
+      <div class="sp">Kirn Labs · d.okafor@kirnlabs.io</div>
+    </div>
+    <div class="tm">11:05</div>
+  </div>
+
+  <div class="hdr">Yesterday</div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">MS</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Meera Subramanian</div>
+      <div class="sp">PCBWay · +91 90031 44820</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none;">
+      <div class="tm">18:47</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7FD6A8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"></path></svg>
+    </div>
+  </div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">TB</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Tobias Berg</div>
+      <div class="sp">Nordic Semiconductor · +47 72 50 84 00</div>
+    </div>
+    <div class="tm">18:46</div>
+  </div>
+
+  <div class="hdr">Earlier</div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">AN</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Arjun Nair</div>
+      <div class="sp">Handoff · arjun@handoff.dev</div>
+    </div>
+    <div class="tm">10 Sep</div>
+  </div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">KM</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Kavya Menon</div>
+      <div class="sp">Ather Energy · +91 99620 77315</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none;">
+      <div class="tm">8 Sep</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7FD6A8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"></path></svg>
+    </div>
+  </div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">IG</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Ishaan Gupta</div>
+      <div class="sp">Bolt.Earth · ishaan@bolt.earth</div>
+    </div>
+    <div class="tm">6 Sep</div>
+  </div>
+
+  <div style="height:72px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;">
+    <div class="av">LW</div>
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+      <div class="nm">Lena Wyss</div>
+      <div class="sp">Sensirion · +41 44 927 11 44</div>
+    </div>
+    <div class="tm">6 Sep</div>
+  </div>
+
+  <div style="flex-grow:1;"></div>
+  <div style="height:24px;flex:none;"></div>
+</div>
+</x-dc>
+</body>
+</html>
