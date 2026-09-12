@@ -1,0 +1,110 @@
+package com.handoff.band.ui
+
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
+import com.handoff.band.ble.BandService
+import com.handoff.band.ui.components.BatteryLevel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+/**
+ * The activity's handle on [BandService]: one binding, one flow of state, for
+ * every screen. Screens reach it through [LocalBand] rather than each binding
+ * the service themselves.
+ */
+class BandConnection(private val context: Context, private val scope: CoroutineScope) :
+    ServiceConnection {
+
+    var service: BandService? = null
+        private set
+
+    private val _state = MutableStateFlow<BandService.State?>(null)
+    val state: StateFlow<BandService.State?> = _state
+
+    private var mirror: Job? = null
+    private var bound = false
+
+    fun bind() {
+        if (bound) return
+        bound = context.bindService(Intent(context, BandService::class.java), this,
+                                    Context.BIND_AUTO_CREATE)
+    }
+
+    fun unbind() {
+        if (!bound) return
+        runCatching { context.unbindService(this) }
+        bound = false
+        mirror?.cancel()
+        service = null
+    }
+
+    override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+        val s = (binder as BandService.LocalBinder).service
+        service = s
+        // Mirror the service's own flow into one the composables collect, so
+        // the UI has a single source whether the service is bound yet or not.
+        mirror?.cancel()
+        mirror = scope.launch { s.state.collect { _state.value = it } }
+    }
+
+    override fun onServiceDisconnected(name: ComponentName?) {
+        service = null
+        mirror?.cancel()
+        _state.value = null
+    }
+}
+
+val LocalBand = staticCompositionLocalOf<BandConnection> {
+    error("No BandConnection provided")
+}
+
+/**
+ * What the customer-facing screens say about the band, derived once from the
+ * service's state. Four facts, all readable without a tap (design §1): name,
+ * connection, whether your card is on the band, battery.
+ */
+data class BandView(
+    val paired: Boolean,
+    val name: String,
+    val connection: Connection,
+    /** null until the band has reported a status. */
+    val cardOnBand: Boolean?,
+    val battery: BatteryLevel,
+) {
+    enum class Connection(val label: String) {
+        NOT_PAIRED("Not paired"),
+        WAITING("Looking for the band"),
+        CONNECTING("Connecting…"),
+        CONNECTED("Connected"),
+    }
+
+    companion object {
+        fun from(state: BandService.State?): BandView {
+            val paired = state?.address != null
+            val connection = when {
+                !paired -> Connection.NOT_PAIRED
+                state?.ready == true -> Connection.CONNECTED
+                state?.connected == true -> Connection.CONNECTING
+                else -> Connection.WAITING
+            }
+            return BandView(
+                paired = paired,
+                name = "Handoff band",
+                connection = connection,
+                cardOnBand = state?.status?.provisioned,
+                battery = BatteryLevel.UNKNOWN,
+            )
+        }
+    }
+}
+
+@Composable
+fun bandView(state: BandService.State?): BandView = BandView.from(state)

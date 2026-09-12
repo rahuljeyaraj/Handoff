@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: not started.** Keep this line current — when you finish a phase, tick
+**Status: Phase 1 in progress on `app/customer-facing` — steps 1–2 done.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -41,9 +41,9 @@ to change an artboard.
 
 Nothing in firmware changes. Each step should build and run on its own.
 
-- [ ] **1. A real theme.** Colour tokens, typography, light and dark. Values are in
+- [x] **1. A real theme.** Colour tokens, typography, light and dark. Values are in
   the artboards; see §12 of the decisions doc.
-- [ ] **2. Navigation.** Contacts as home with the band status line; Settings;
+- [x] **2. Navigation.** Contacts as home with the band status line; Settings;
   Band; Your contact card; Advanced. Move all four bench tools out of
   `MainActivity` into Advanced — keep them working, they are M2 exit criteria.
 - [ ] **3. Search and sort.** Search replaces the app bar in place and matches

@@ -1,0 +1,132 @@
+package com.handoff.band.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+
+/**
+ * The list vocabulary every screen shares: a section header, a settings-style
+ * row, and the initials avatar. Sizes are the artboards' — 72 dp rows, 40 dp
+ * avatars, 16 dp side gutters.
+ */
+
+/** Small uppercase header in the primary colour, as on Settings. */
+@Composable
+fun SectionHeader(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth().height(40.dp).padding(horizontal = 16.dp),
+        contentAlignment = Alignment.BottomStart,
+    ) {
+        Text(
+            text.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+    }
+}
+
+/** The muted uppercase date header on the contact list ("Today"). */
+@Composable
+fun DateHeader(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth().height(32.dp).padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Icon, title, optional subtitle, optional trailing slot. A chevron when the
+ * row navigates and nothing was put in the slot.
+ */
+@Composable
+fun SettingsRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    subtitle: String? = null,
+    onClick: (() -> Unit)? = null,
+    chevron: Boolean = onClick != null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .defaultMinSize(minHeight = 72.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null,
+                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                 modifier = Modifier.size(24.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium,
+                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                     maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        trailing?.invoke()
+        if (chevron) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
+                 tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+/** Two initials on the primary container. */
+@Composable
+fun Avatar(name: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(40.dp)
+            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            initials(name),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
+}
+
+fun initials(name: String): String {
+    val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    return when {
+        parts.isEmpty() -> "?"
+        parts.size == 1 -> parts[0].take(1).uppercase()
+        else -> (parts.first().take(1) + parts.last().take(1)).uppercase()
+    }
+}

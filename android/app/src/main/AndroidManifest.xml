@@ -62,11 +62,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".ui.ProvisionActivity"
-            android:exported="false"
-            android:label="@string/provision_title" />
-
         <service
             android:name=".ble.BandService"
             android:exported="false"
