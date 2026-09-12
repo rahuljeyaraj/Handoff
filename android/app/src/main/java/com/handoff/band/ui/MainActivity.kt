@@ -41,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.handoff.band.ble.BandService
+import com.handoff.band.data.Prefs
+import com.handoff.band.ui.theme.HandoffTheme
 import com.handoff.band.ble.Gatt
 import com.handoff.band.ble.Pairing
 import com.handoff.band.contacts.Promote
@@ -115,7 +117,8 @@ class MainActivity : ComponentActivity() {
             Context.BIND_AUTO_CREATE)
 
         setContent {
-            MaterialTheme {
+            val theme by Prefs.get(this).theme.collectAsState()
+            HandoffTheme(theme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val state by serviceState.collectAsState()
                     val history by HandoffDb.get(this).handshakes().all()

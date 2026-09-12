@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.handoff.band.ble.BandService
+import com.handoff.band.data.Prefs
+import com.handoff.band.ui.theme.HandoffTheme
 import com.handoff.band.contacts.ContactReader
 import com.handoff.band.vcard.VCard
 
@@ -84,7 +87,8 @@ class ProvisionActivity : ComponentActivity() {
             Context.BIND_AUTO_CREATE)
 
         setContent {
-            MaterialTheme {
+            val theme by Prefs.get(this).theme.collectAsState()
+            HandoffTheme(theme) {
                 Surface(Modifier.fillMaxSize()) { Body() }
             }
         }

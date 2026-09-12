@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose draws everything; this only has to exist and not have an
-         action bar Compose would then have to work around. -->
-    <style name="Theme.Handoff" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Compose draws everything; this only has to exist, not have an action
+         bar Compose would then have to work around, and paint the window the
+         same warm neutral as the surface so nothing flashes before the first
+         frame. The dark variant is in values-night. -->
+    <style name="Theme.Handoff" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FCF9F6</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>
