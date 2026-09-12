@@ -8159,7 +8159,7 @@
 		)
 		(uuid "620ca3e1-15c5-5e98-9020-cd071cb51aba")
 	)
-	(text "TP8 is new: C4 and C5 are 0805 MLCC now, so the through-hole + lead that used to be the AFE_3V3 probe point is gone."
+	(text "TP8 is new: C4 and C5 are 0603 MLCC now, so the through-hole + lead that used to be the AFE_3V3 probe point is gone."
 		(exclude_from_sim no)
 		(at 190.5000 259.0800 0)
 		(effects
@@ -8607,7 +8607,7 @@
 				)
 			)
 		)
-		(property "Value" "SS220F"
+		(property "Value" "PMEG3020ER-TP"
 			(at 83.8200 34.2900 0)
 			(effects
 				(font
@@ -8615,7 +8615,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Diode_SMD:D_SMB"
+		(property "Footprint" "handoff:D_SOD-123FL"
 			(at 83.8200 30.4800 0)
 			(effects
 				(font
@@ -8633,7 +8633,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "VSYS OR-ing / reverse polarity, Schottky 200 V 2 A, SMB"
+		(property "Description" "VSYS OR-ing / reverse polarity, Schottky 40 V 2 A, SOD-123FL (Tech Public, not Nexperia)"
 			(at 83.8200 30.4800 0)
 			(effects
 				(font
@@ -9013,7 +9013,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF 100V"
+		(property "Value" "10uF 25V"
 			(at 169.6400 52.3000 0)
 			(effects
 				(font
@@ -9022,7 +9022,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder"
 			(at 167.6400 50.8000 0)
 			(effects
 				(font
@@ -9040,7 +9040,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "VREF hold-up, 0805 MLCC"
+		(property "Description" "VREF hold-up, X5R 0603"
 			(at 167.6400 50.8000 0)
 			(effects
 				(font
@@ -9426,7 +9426,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder"
 			(at 279.4000 45.7200 0)
 			(effects
 				(font
@@ -9486,7 +9486,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF 100V"
+		(property "Value" "10uF 25V"
 			(at 294.1000 47.2200 0)
 			(effects
 				(font
@@ -9495,7 +9495,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder"
 			(at 292.1000 45.7200 0)
 			(effects
 				(font
@@ -9513,7 +9513,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "U2 bulk decoupling against the Pico SMPS, 0805 MLCC"
+		(property "Description" "U2 bulk decoupling against the Pico SMPS, X5R 0603"
 			(at 292.1000 45.7200 0)
 			(effects
 				(font
@@ -10342,7 +10342,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder"
 			(at 170.1800 111.7600 0)
 			(effects
 				(font
@@ -10409,7 +10409,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder"
 			(at 149.8600 101.6000 0)
 			(effects
 				(font
@@ -10678,7 +10678,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder"
 			(at 215.9000 127.0000 0)
 			(effects
 				(font
@@ -10819,7 +10819,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder"
 			(at 231.1400 139.7000 0)
 			(effects
 				(font
@@ -11088,7 +11088,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder"
 			(at 274.3200 129.5400 0)
 			(effects
 				(font
@@ -11570,7 +11570,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder"
 			(at 328.9300 132.0800 0)
 			(effects
 				(font
@@ -11708,7 +11708,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder"
 			(at 354.3300 139.7000 0)
 			(effects
 				(font
@@ -14030,7 +14030,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "SS220F"
+		(property "Value" "PMEG3020ER-TP"
 			(at 88.9000 255.2700 90)
 			(effects
 				(font
@@ -14039,7 +14039,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Diode_SMD:D_SMB"
+		(property "Footprint" "handoff:D_SOD-123FL"
 			(at 91.4400 255.2700 0)
 			(effects
 				(font
@@ -14057,7 +14057,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Motor flyback, Schottky 200 V 2 A, SMB"
+		(property "Description" "Motor flyback, Schottky 40 V 2 A, SOD-123FL (Tech Public, not Nexperia)"
 			(at 91.4400 255.2700 0)
 			(effects
 				(font

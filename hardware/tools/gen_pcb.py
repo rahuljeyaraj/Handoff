@@ -147,14 +147,18 @@ def P(ref, num, dx=0.0, dy=0.0):
 TOP, BOT = "F", "B"
 
 # Courtyards, measured from the footprints, are what set the pitches below:
-#   1206 hand-solder  4.99 x 2.35      MSOP-8   3.59 x 6.45 (at 270 deg)
+#   0603 hand-solder  3.3 x 1.7 (R) / 3.4 x 1.7 (C)   MSOP-8   3.59 x 6.45 (at 270 deg)
 #   XH 2p 8.49 x 6.84   test pad 2.59   solder jumper 3.39 x 2.59
-# Column pitch is 5.3 mm because a vertical 1206 is 4.99 tall and two of them
-# end to end need 0.2 mm of copper clearance between their pads (0.425 at
-# 5.3; at 5.0 it would be 0.125, a DRC error). The AFE's two columns sit at
-# x 15.6 and 24.4: a 1.43 mm lane each side of U2 and 2.5 mm outboard of each.
+# Column pitch is 5.3 mm because it was set when every part in the columns was
+# a 1206 (4.99 tall, 0.425 mm between end-to-end pads). Every passive is 0603
+# now, so the columns could close up - see "Still open" in the README - but the
+# lanes and crossings around them were all placed against this pitch, so it
+# stays. The AFE's two columns sit at x 15.6 and 24.4: a 1.43 mm lane each side
+# of U2 and 2.5 mm outboard of each.
 COL_L, COL_R = 15.6, 24.4
 PITCH = 5.3
+Y_VREF_X = 41.6                       # VREF crosses the channel here, under C1's body
+Y_OUT1 = Y_VREF_X + 0.8625 + 0.9      # 43.3625: OUT1's bottom-face corridor, one 45 off C1.1
 
 # The little-finger connectors' pin column. At 34.5 the XH housings (6.8 mm
 # across, and deeper on the inboard side) span x 30.6-37.4: clear of the
@@ -183,7 +187,9 @@ PLACE = {
     # between the breakout pads and the pin row straight into pin 39, which
     # is on this row. On the little-finger side, where they were, the path
     # crossed the board three times and threaded the pin rows six times.
-    # D1's cathode faces the hand, toward JP5; the anode faces SW1.
+    # D1's cathode faces the hand, toward JP5; the anode faces SW1. Anchored
+    # on the cathode pad: it has been DO-41, SMB and now SOD-123FL, and the
+    # two D1_K approach vias were placed against this pad, not the body.
     "D1":  ("1", 4.5, 29.8, 270, TOP),
     "JP5": ("@", 4.0, 26.9, 180, BOT),    # pad 1 D1_K west, pad 2 VSYS east
 
@@ -193,10 +199,10 @@ PLACE = {
     #
     # C4 and C5 were 5 mm radial electrolytics on the TOP face, and every track
     # that fed them ran on the BOTTOM and reached them through their through-hole
-    # leads. As 0805 MLCC they have no leads, so they move to the bottom face -
-    # where their tracks already were - and each is anchored on pad 1, on the
-    # exact point the old part's + lead stood. That keeps both nets' routes
-    # unchanged, and hands the top face 26 mm2 of electrode back.
+    # leads. As MLCC (0805 then, 0603 now) they have no leads, so they live on
+    # the bottom face - where their tracks already were - and each is anchored
+    # on pad 1, on the exact point the old part's + lead stood. That keeps both
+    # nets' routes unchanged; pad 2 is GND and takes the pour wherever it lands.
     "SW2": ("@", 16.75, 2.75, 0, TOP),
     "C4":  ("1", 10.75, 5.2, 180, BOT),   # + on the divider run down x 10.75
     "C5":  ("1", 26.75, 4.5, 180, BOT),   # + where the radial's + lead was
@@ -217,23 +223,30 @@ PLACE = {
     # ---- AFE, SMD on the top face in the channel under the Pico ---------
     # U2 at 270 deg puts pins 1-4 at y 29.887 (hand side) and 5-8 at y 34.112,
     # so pin 3 (+IN A) faces open board. R2 sits directly in line with it and R3
-    # beside them: the island is pin 3 + two pads, 2.6 x 2.3 mm, and nothing
-    # else touches it. With 1206 hand-solder pads that is as close to "butted up
-    # to the pin" as the package allows.
+    # beside them: the island is pin 3 + two pads, and nothing else touches it.
     "U2":  ("@", 20.0, 32.0, 270, TOP),
-    # R2 sits 2 mm further toward the hand than the first pass put it. Its pad is
-    # 1.3 mm wide and lands on x 19.025-20.325, which is exactly over pins 3 and
-    # 2; at y 26.0 it left a 0.9 mm slot above U2's pad row and pins 1 and 2 had
-    # nowhere to escape to. At 24.0 the slot is 2.65 mm and takes two tracks.
-    # The cost is the 1 MOhm island: 8.4 mm of trace instead of 6.4.
-    "R2":  ("@", 19.675, 24.0, 270, TOP),   # pad 2 (HIZ) at y 25.55, in line with pin 3
-    "R3":  ("@", COL_L, 26.0, 90, TOP),     # pad 1 (HIZ) at y 27.55
+    # R2 sits in line with pin 3, as far toward U2 as the slot above U2's pad
+    # row allows: pin 2's escape north (x 20.325, mitred at y 27.7) and pin 1's
+    # both live in that slot, and R2's pad 2 has to stay 0.2 mm above them. As
+    # a 1206 that put R2 at y 24.0 (pad 2 at 25.55); as an 0603 it is at 25.0,
+    # pad 2 at 25.9125, 1.2 mm above the mitre. The island - R3.1, R2.2 and
+    # pin 3 - is 8.5 mm of trace now, 9.2 before: the shorter parts give it
+    # back, and it stays an island: nothing else routes through the space the
+    # 1206 bodies left.
+    "R2":  ("@", 19.675, 25.0, 270, TOP),   # pad 1 RX_IN north, pad 2 (HIZ) south, in line with pin 3
+    "R3":  ("@", COL_L, 26.0, 90, TOP),     # pad 1 (HIZ) south at y 26.9125, pad 2 VREF north
 
     # left column: stage-1 feedback, the interstage pair, the ADC cap
     "R5":  ("@", COL_L, 30.5625, 270, TOP),  # FB1 pad on 29.65, where the 1206 put it
     "R6":  ("@", COL_L, 36.5, 270, TOP),    # IN2 pad 2.5 mm from pin 5
-    "C1":  ("@", COL_L, 41.8, 90, TOP),
-    "C2":  ("@", COL_L, 47.1, 270, TOP),
+    # The VREF bus crosses this column at y 41.6, UNDER C1, between its two
+    # pads. A 1206 left 1.32 mm for it; an 0603 leaves 0.775, which is a 0.25
+    # track with 0.2625 to each pad - so C1's origin sits exactly on the bus
+    # and OUT1's corridor (Y_OUT1) is derived from where its pad 1 then lands.
+    # C2 is anchored on its pad 1, where ADC0's two lanes leave, so those did
+    # not move when the part shrank.
+    "C1":  ("@", COL_L, Y_VREF_X, 90, TOP), # pad 1 OUT1 south, pad 2 IN2 north, VREF between them
+    "C2":  ("1", COL_L, 45.538, 270, TOP),  # pad 1 ADC0 north, pad 2 GND
 
     # right column. The hand-end slot is deliberately empty: it is the only band
     # in which the pad-side nets can cross the Pico's pin row on the top layer.
@@ -243,8 +256,9 @@ PLACE = {
     # package. The slot above (R4) is what lets pins 1 and 2 out and the slot
     # below (R7) is what lets 6 and 7 out; turning C3 flat would block one
     # row's fan-out. 3.4 mm of 0.4 mm track on a 100 nF at a 10 MHz op-amp
-    # is the loop the package allows.
-    "C3":  ("@", COL_R, 32.6, 90, TOP),     # AFE_3V3 pad toward pin 8
+    # is the loop the package allows. Anchored on that supply pad, so the
+    # AFE_3V3 lane (x 26.5, from this pad's y) did not move when C3 went 0603.
+    "C3":  ("1", COL_R, 34.163, 90, TOP),   # pad 1 AFE_3V3 south, on pin 8's row; pad 2 GND north
     # R7 at 90, not 270: it puts OUT2 (pad 2) above FB2 (pad 1), which is the
     # order pins 7 and 6 leave U2 in. The other way round the two nets have to
     # cross, and on a two-layer board with a pour on both sides that costs vias
@@ -260,10 +274,17 @@ PLACE = {
     "JP8": ("@", 32.3, 14.88, 180, BOT),    # ROLE, in line with pin 19
     "JP7": ("@", 32.3, 22.3, 0, BOT),       # between J2's band and J1's; pad 1 PAD east
     # JP2 and R1 sit in line between J1's band and J5's: GP11 arrives from the
-    # west, PAD leaves at the wall. C6 (DNP) straddles BAT+'s run south from J5.
+    # west, PAD leaves at the wall. R1 is anchored on its PAD pad, which is the
+    # top of the x 38.05 lane to JP7 and TP5.
     "JP2": ("@", 31.7, 31.0, 180, BOT),    # x 31.7: its courtyard just clears the pocket
-    "R1":  ("@", 36.5, 31.0, 180, BOT),     # TX safety resistor, in line with JP2
-    "C6":  ("@", J_X, 40.0, 180, BOT),      # DNP across JP2, pads either side of BAT+
+    "R1":  ("2", 38.05, 31.0, 180, BOT),    # TX safety resistor, in line with JP2; pad 1 west
+    # C6 (DNP) used to straddle BAT+'s run south from J5 at x 34.5, with a 1206
+    # pad either side of the track. An 0603's pads are 1.05 mm apart and BAT+
+    # is 0.5 wide: 0.17 mm to each pad. It stands on end below JP2 instead,
+    # between the pocket and J5's pads, with each pad straight under the JP2
+    # pad on its own net - JP2.2 (pad 2, north) and JP2.1 via one 45 (pad 1,
+    # south) - so the cap is, on the board as on the sheet, across the jumper.
+    "C6":  ("@", 32.35, 38.5, 90, BOT),     # DNP across JP2: pad 2 north on JP2.2's x, pad 1 south
     # R15 is the BTN pull-up. It sits at the elbow end of this strip because
     # +3V3 is on the elbow end of the thumb row (pin 36): the rail crosses the
     # channel once, at the elbow, and the long run up the wall to pin 20 is
@@ -313,7 +334,7 @@ PLACE = {
     "TP7": ("@", 1.9, 31.5, 0, BOT),   # ref/value text default is fine on the fab layer here
     # TP8 is the eighth of the eight the README asked for. It was dropped last
     # session because C5's + lead was through-hole and made a better probe
-    # point than a pad would have; C5 is 0805 now, so that reason is gone.
+    # point than a pad would have; C5 is an MLCC now, so that reason is gone.
     "TP8": ("@", 27.5, 8.2, 0, BOT),
 
     # ---- haptic: the motor driver, bottom face at the thumb end of the elbow
@@ -329,10 +350,12 @@ PLACE = {
     # and the gate and source face the wall. At 0 the drain track would have to
     # cross both of them.
     "Q1":  ("@", 15.0, 60.0, 180, BOT),
-    # D3 is SMB now (SS220F, same part as D1), which is 7.3 x 4.5 mm of
-    # courtyard where the SOD-123 was 2.7 x 1.7. It goes lengthways in the
-    # strip east of Q1 and south of JP1, on the SAME face as Q1 and J6 so the
-    # flyback loop has no via in it at all.
+    # D3 is the PMEG3020ER-TP in SOD-123FL (handoff:D_SOD-123FL, 4.9 x 2.6 of
+    # courtyard), the same part as D1. It goes lengthways in the strip east of
+    # Q1 and south of JP1, on the SAME face as Q1 and J6 so the flyback loop
+    # has no via in it at all. The position and orientation were settled when
+    # it was an SMB (7.3 x 4.5) and still hold: the loop is written against
+    # its pads, so the smaller part just gives the pour its 20 mm2 back.
     #
     # Rot 180 on the bottom face puts pad 1 (cathode) WEST and pad 2 (anode)
     # EAST - bottom-face footprints are mirrored in x, so 180 here means what
@@ -341,9 +364,9 @@ PLACE = {
     # VSYS and MOT_SW both have to get from J6's two stacked holes to D3, and
     # J6 puts MOT_SW (y 53.7) NORTH of VSYS (y 56.24) while Q1 sits SOUTH of
     # both. Whichever of the two runs the full width of this pocket, the other
-    # has to cross it. With the cathode west, VSYS stops at x 19.35 and MOT_SW
-    # goes round the east end of it - so neither crosses, and the flyback loop
-    # is still four segments on one face with no via in it.
+    # has to cross it. With the cathode west, VSYS stops at the cathode pad
+    # (x 19.85) and MOT_SW goes round the east end of it - so neither crosses,
+    # and the flyback loop is still four segments on one face with no via in it.
     "D3":  ("@", 21.5, 58.8, 180, BOT),
     # The gate chain runs on the top face, where the lane past the pin row is
     # not contested: on the bottom, VSYS already owns it. R16 sits beside
@@ -370,7 +393,7 @@ OVERHANG = {
 # Routing. (net, layer, [(x, y), ...]) polylines, optional explicit width.
 #
 # Lanes in the AFE channel are the scarce resource on this board: it is 10 mm
-# wide and holds two columns of 1206s with an MSOP-8 between them. Every run
+# wide and holds two columns of passives with an MSOP-8 between them. Every run
 # below was placed against that - see the routing notes in hardware/README.md.
 # Corners are right angles or 45s; mitre() chamfers every right angle.
 # --------------------------------------------------------------------------
@@ -383,6 +406,7 @@ Y_RXIN_LF = gap(16, 17)    # 21.23: RX_IN crosses it to JP7
 Y_VSYS_E = (25.04 + 27.58) / 2   # 26.31: VSYS threads between E7 and E8
 X_VSYS = 9.79              # the lane between the thumb breakout pads and the row
 X_VREF_N = 12.45           # VREF's lane north past the antenna keep-out (x 12.91)
+JP3C_VIA = (23.5, 48.4875) # R9.1 (24.4, 47.5875) + (-0.9, +0.9): on JP3's axis
 
 ROUTES = [
     # ---- the LED, straight across the thumb strip on the bottom face ------
@@ -408,7 +432,7 @@ ROUTES = [
     ("/BAT+", BL, [(12.2, Y_BATP_TH), (10.0, Y_BATP_TH)], NECK),
     ("/BAT+", BL, [(10.0, Y_BATP_TH), (6.93, Y_BATP_TH), (6.3, 46.0)]),
     # SW_OUT: pin 1 north-west, past the switch's mounting ear, into D1's anode.
-    # D1 is SMD (SMB) now, F.Cu only: the old bend point becomes a via and a
+    # D1 is SMD now (SMB then, SOD-123FL now), F.Cu only: the old bend point becomes a via and a
     # short F.Cu stub continues straight on to the pad (still x = 4.5, so the
     # via-to-pad leg is collinear with the B.Cu leg above it, not a corner).
     ("/SW_OUT", BL, [(6.3, 43.0), (4.5, 41.2), (4.5, 37.42)]),
@@ -440,26 +464,31 @@ ROUTES = [
 
     # ---- TX: GP11 -> JP2 -> R1 -> PAD, all on the little-finger strip -----
     ("/GP11_TX", BL, [pico_pin(15), (30.35, 26.49), (30.35, 30.3), (31.05, 31.0)]),
-    ("/GP11_TX", BL, [(31.05, 31.0), (31.05, 38.11), (32.94, 40.0)]),
-    ("Net-(JP2-B)", BL, [(32.35, 31.0), (34.95, 31.0)]),
-    ("Net-(JP2-B)", BL, [(34.95, 31.0), (36.06, 32.11), (36.06, 40.0)]),
+    # C6 (DNP) hangs off JP2's two pads: pad 2 straight down from JP2.2, pad 1
+    # down from JP2.1 with one 45 at the bottom
+    ("/GP11_TX", BL, [P("JP2", "1"), P("C6", "1", -1.3, -1.3), P("C6", "1")]),
+    ("Net-(JP2-B)", BL, [P("JP2", "2"), P("R1", "1")]),
+    ("Net-(JP2-B)", BL, [P("JP2", "2"), P("C6", "2")]),
 
     # ---- PAD: R1's far end up the wall to JP7, and on to J2 ---------------
-    ("/PAD", BL, [(38.05, 31.0), (38.05, 23.3), (37.05, 22.3), (32.95, 22.3)]),
+    ("/PAD", BL, [P("R1", "2"), (38.05, 23.3), (37.05, 22.3), (32.95, 22.3)]),
     ("/PAD", BL, [(32.95, 22.3), (32.95, 17.6), (33.8, 16.75), (J_X, 16.75)]),
-    ("/PAD", BL, [(38.05, 31.0), (38.05, 36.0)]),
+    ("/PAD", BL, [P("R1", "2"), (38.05, 36.0)]),
 
     # ---- RX_IN threads the pin row between pins 16 and 17, at y 21.23 -----
     # One gap further toward the hand than the first pass used, leaving the
     # y 23-25 band free.
-    ("Net-(JP7-B)", TL, [(19.675, 22.45), (20.895, Y_RXIN_LF), (31.32, Y_RXIN_LF), (31.65, 20.9)]),
+    # Leaves R2's pad 1 at 45 and reaches the crossing row 2.8575 mm up (the
+    # pad's y minus Y_RXIN_LF), so the bend follows R2 if R2 moves.
+    ("Net-(JP7-B)", TL, [P("R2", "1"), P("R2", "1", 2.8575, -2.8575), (31.32, Y_RXIN_LF), (31.65, 20.9)]),
     ("Net-(JP7-B)", BL, [(31.65, 20.9), (31.65, 22.3)]),
 
-    # ---- the 1 MOhm island: R3, R2 and pin 3, a T 8.4 mm end to end -------
+    # ---- the 1 MOhm island: R3, R2 and pin 3, a T 8.5 mm end to end -------
     # Branches start only at pads or vias, never part-way along a track: a
     # T-junction is two right angles, and DRC's track_angle rule says so.
-    ("Net-(U2A-+)", TL, [(19.675, 25.55), (19.675, 29.887)]),
-    ("Net-(U2A-+)", TL, [(15.6, 27.55), (17.675, 27.55), (19.675, 25.55)]),
+    # Written entirely against pads: this is the node that must stay small.
+    ("Net-(U2A-+)", TL, [P("R2", "2"), P("U2", "3")]),
+    ("Net-(U2A-+)", TL, [P("R3", "1"), P("R2", "2", -1.0, 1.0), P("R2", "2")]),
 
     # ---- stage 1 -----------------------------------------------------------
     # Pin 2 leaves its pad twice: north into the 2.65 mm slot R2 vacated, and
@@ -484,19 +513,19 @@ ROUTES = [
     # is empty across the whole channel. Two vias, and nothing on the top
     # face crosses the channel between the AFE and the elbow.
     ("/OUT1", TL, [(20.975, 29.887), P("R4", "2", -3.425), P("R4", "2"),
-                   P("R4", "2", 2.8), (27.2, 43.362)]),
-    ("/OUT1", BL, [(27.2, 43.362), (21.8, 43.362), (17.2, 43.362)]),
-    ("/OUT1", TL, [(17.2, 43.362), (15.6, 43.362)]),
+                   P("R4", "2", 2.8), (27.2, Y_OUT1)]),
+    ("/OUT1", BL, [(27.2, Y_OUT1), (21.8, Y_OUT1), (17.2, Y_OUT1)]),
+    ("/OUT1", TL, [(17.2, Y_OUT1), P("C1", "1", 0.9, 0.9), P("C1", "1")]),
     # the branch to JP3: up out of the corridor at x 21.8, straight down the
     # top face (clear to the elbow) and through one via into JP3's pad
-    ("/OUT1", TL, [(21.8, 43.362), (21.0, 44.162), P("TP3", "1")]),
+    ("/OUT1", TL, [(21.8, Y_OUT1), (21.0, Y_OUT1 + 0.8), P("TP3", "1")]),
     ("/OUT1", BL, [P("TP3", "1"), (22.2, 49.8), (22.2, 50.44)]),
 
     # ---- stage 2 -----------------------------------------------------------
     # The lower row fans out planar: pin 5 west, then 6, 7 and 8 east in that
     # order, each one lane further out than the pin to its right.
     ("Net-(U2B-+)", TL, [(19.025, 34.112), P("R6", "1", 3.425), P("R6", "1")]),
-    ("Net-(U2B-+)", TL, [P("R6", "1"), P("R6", "1", 1.3, 1.3), (16.9, 38.937), (15.6, 40.237)]),
+    ("Net-(U2B-+)", TL, [P("R6", "1"), P("R6", "1", 1.3, 1.3), P("C1", "2", 1.3, -1.3), P("C1", "2")]),
     ("Net-(U2B--)", TL, [(19.675, 34.112), (19.675, 37.6), (22.6, 37.6),
                          P("R7", "1", -1.8), P("R7", "1")]),
     ("Net-(U2B--)", TL, [P("R7", "1"), P("R8", "1")]),
@@ -512,12 +541,20 @@ ROUTES = [
     # continues up the lane between the thumb row and the antenna keep-out
     # (x 12.45: 0.46 mm from the pads, 0.34 from the keep-out) to one via at
     # the hand end, where JP6 is.
-    ("VREF", TL, [P("R8", "2"), P("R8", "2", -1.6), (22.8, 41.6), (13.9, 41.6),
+    ("VREF", TL, [P("R8", "2"), P("R8", "2", -1.6), (22.8, Y_VREF_X), (13.9, Y_VREF_X),
                   P("R6", "2", -1.7, 1.7), P("R6", "2")]),
     ("VREF", TL, [P("R6", "2"), P("R6", "2", -1.7, -1.7), P("R5", "2", -1.7, 1.7), P("R5", "2")]),
+    # Into R3's VREF pad FLAT from the lane, not at 45 from the south-west.
+    # The AFE pocket's only way out to the electrode runs west between R3.1
+    # and R5.1, up the strip between this lane and the column, and then east
+    # BETWEEN R3's two pads into the pour north of the island. A 1206 R3 left
+    # 1.35 mm between its pads and the old 45 passed above the gap; an 0603
+    # leaves 0.775, and the same 45 ran straight through it - the pocket
+    # became a 60 mm2 island with C3.2 and U2 pin 4 on it.
     ("VREF", TL, [P("R5", "2"), P("R5", "2", -0.9), P("R5", "2", -1.7, -0.8),
-                  (13.9, 26.15), (15.6, 24.45)]),
-    ("VREF", TL, [(15.6, 24.45), (X_VREF_N, 21.3), (X_VREF_N, 11.05)]),
+                  P("R3", "2", -1.7, 0), P("R3", "2")]),
+    # north out of R3's VREF pad at 45 onto the x 12.45 lane (3.15 = COL_L - X_VREF_N)
+    ("VREF", TL, [P("R3", "2"), P("R3", "2", -3.15, -3.15), (X_VREF_N, 11.05)]),
     ("VREF", BL, [(X_VREF_N, 11.05), (9.2, 11.05)]),
     ("VREF", BL, [(9.2, 11.05), (7.25, 11.05), (6.5, 10.3)]),
 
@@ -528,12 +565,12 @@ ROUTES = [
     ("Net-(JP6-A)", BL, [(11.5, 8.4), (11.5, 8.65), (10.4, 9.75), (9.2, 9.75)]),
 
     # ---- ADC0: C2 to pin 31 up the inner lane, and down to JP1 -------------
-    ("/ADC0", TL, [(15.6, 45.538), (13.2, 45.538), (13.2, 37.74), pico_pin(31)]),
+    ("/ADC0", TL, [P("C2", "1"), (13.2, 45.538), (13.2, 37.74), pico_pin(31)]),
     # The lane runs at x 19.8, not 20.85 on JP1's pad axis. Three things share
     # this 2.9 mm of elbow - this lane, OUT1's, and TP3's pad between them -
     # and at 20.85 the lane was 0.08 mm off that pad. It rejoins JP1's axis
     # with one 45 at the bottom, past AFE_3V3's crossing at y 51.7.
-    ("/ADC0", TL, [(15.6, 45.538), (19.8, 45.538), (19.8, 52.5)]),
+    ("/ADC0", TL, [P("C2", "1"), (19.8, 45.538), (19.8, 52.5)]),
     ("/ADC0", BL, [(19.8, 52.5), (19.8, 52.95), P("JP1", "2")]),
     # TP2 hangs off JP1's own ADC0 pad, 2 mm west, in the band between
     # AFE_3V3's crossing at y 51.7 and MOT_SW's at y 55.5: the only 1.5 mm
@@ -541,11 +578,11 @@ ROUTES = [
     ("/ADC0", BL, [P("JP1", "2"), P("TP2", "1")]),
 
     # ---- AFE supply: C3 and pin 8, the lane down to JP4, and north to C5 ---
-    ("/AFE_3V3", TL, [(20.975, 34.112), (24.4, 34.163)]),
+    ("/AFE_3V3", TL, [P("U2", "8"), P("C3", "1")]),
     # South, to JP4: the middle east lane, then under the elbow block on the
     # bottom face at y 51.7 - the band between the jumper pads at 50.44 and
     # ADC0's via at 52.5 - and up into JP4's pad on its axis.
-    ("/AFE_3V3", TL, [(24.4, 34.163), (26.5, 34.163), (26.5, 48.8)]),
+    ("/AFE_3V3", TL, [P("C3", "1"), (26.5, 34.163), (26.5, 48.8)]),
     ("/AFE_3V3", BL, [(26.5, 48.8), (26.5, 51.2), (26.0, 51.7), (17.65, 51.7),
                       (17.15, 51.2), (17.15, 50.44)]),
     # North, to C5 and the divider, at the hand end. Past the antenna keep-out
@@ -566,9 +603,12 @@ ROUTES = [
                   (27.37, Y_3V3_LF), P("R15", "1")]),
 
     # ---- the elbow jumpers ------------------------------------------------
-    ("Net-(JP3-C)", TL, [(24.4, 46.95), (23.5, 47.85), (23.5, 48.4)]),
-    ("Net-(JP3-C)", BL, [(23.5, 48.4), (23.5, 50.44)]),
-    ("Net-(JP1-A)", TL, [(24.4, 50.05), (24.4, 53.0), (23.4, 54.0)]),
+    # R9.1 to JP3's centre pad: one 45 off the pad onto JP3's axis, and the
+    # via sits exactly where that 45 lands (JP3C_VIA), so the track meets the
+    # via at 135 degrees and the bottom-face leg is straight into the pad.
+    ("Net-(JP3-C)", TL, [P("R9", "1"), JP3C_VIA]),
+    ("Net-(JP3-C)", BL, [JP3C_VIA, P("JP3", "2")]),
+    ("Net-(JP1-A)", TL, [P("R9", "2"), (24.4, 53.0), (23.4, 54.0)]),
     ("Net-(JP1-A)", BL, [(23.4, 54.0), (22.15, 54.0)]),
 
     # ---- haptic ------------------------------------------------------------
@@ -601,7 +641,7 @@ ROUTES = [
     # J6's switched hole and Q1's drain are both on this net, so the run from
     # J6 reaches Q1 through D3's anode pad and needs no separate leg.
     ("/MOT_SW", BL, [P("J6", "1"), (16.7, 55.5), P("D3", "2", 0, -3.3), P("D3", "2")]),
-    ("/MOT_SW", BL, [P("D3", "2"), (21.25, 61.2), (17.14, 61.2), P("Q1", "3")]),
+    ("/MOT_SW", BL, [P("D3", "2"), P("D3", "2", -2.4, 2.4), (17.14, 61.2), P("Q1", "3")]),
 ]
 
 VIAS = [
@@ -609,8 +649,8 @@ VIAS = [
     # OUT1's corridor: down at the east lane, up at C1, and up again at x 22.2
     # for the branch to JP3
     # (21.8, 48.6) is TP3's through-hole pad now, which changes face for free
-    ("/OUT1", 27.2, 43.362), ("/OUT1", 17.2, 43.362), ("/OUT1", 21.8, 43.362),
-    ("Net-(JP3-C)", 23.5, 48.4),
+    ("/OUT1", 27.2, Y_OUT1), ("/OUT1", 17.2, Y_OUT1), ("/OUT1", 21.8, Y_OUT1),
+    ("Net-(JP3-C)", *JP3C_VIA),
     ("Net-(JP3-B)", 25.7, 48.3),
     ("Net-(JP1-A)", 23.4, 54.0),
     ("/ADC0", 19.8, 52.5),
@@ -623,6 +663,7 @@ VIAS = [
     # D1 became SMD (SMB) when it swapped from a THT diode; its three approach
     # tracks used to end on the THT pad itself and now go via-to-F.Cu at what
     # used to be their last 45-degree bend, so the angle there is unchanged.
+    # D1 is SOD-123FL now; the pad they aim at is the anchor, so they stayed.
     ("/SW_OUT", 4.5, 37.42), ("/D1_K", 3.35, 28.65), ("/D1_K", 2.8, 31.5),
     # The two pours are one net and have to be stitched, or DRC reports them
     # unconnected. Four, all outside the cell pocket and the antenna keep-out.
@@ -690,7 +731,7 @@ def load_netlist():
 
 # Refs that earn silkscreen: the bring-up procedure in the README is carried out
 # with the board in hand, and it names jumpers and connectors. The AFE's
-# passives do not get silk - there is no room for it between 1206 pads on a
+# passives do not get silk - there is no room for it between 0603 pads on a
 # 5.3 mm pitch - and their references stay on F.Fab where CAD still shows
 # them. The mounting holes are not here: a 3.4 mm hole in a corner needs no label, and
 # the label had nowhere to go but off the board.
@@ -704,14 +745,14 @@ SILK_H = 0.8        # PCBWay's minimum legible silk height
 # and no information. The four JST bodies are 6.84 mm deep on a 9 mm pitch, so
 # their boxes touch each other; the mounting rings run into the corner radius.
 # Every one of these parts is unambiguous from its pads and its reference.
-# D1's SMB body outline (with its cathode bar) sits close enough to TP7 that
-# the bar clips TP7's solder mask; the part's own moulded band still marks
-# polarity for assembly, so the on-board outline is not load-bearing.
 # TP2 and TP3 join them: at the elbow their silk rings run into JP1's and
 # JP3's outlines and into their own printed names. A test pad's ring says
 # nothing the net name beside it does not.
+# D1 was here while it was an SMB, whose outline reached TP7's mask. As a
+# SOD-123FL its outline stops 0.7 mm short of TP7, so its cathode bar is
+# printed again - a hand-assembled diode needs its band.
 SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4",
-               "J6", "D1", "TP2", "TP3"}
+               "J6", "TP2", "TP3"}
 
 # References that would otherwise earn silk by their prefix but have nowhere to
 # put it: J6, Q1 and D3 are packed into 6 x 9 mm at the elbow, between JP4's
@@ -731,7 +772,7 @@ REF_AT = {
     "JP8": (0.0, -1.8), "JP4": (1.5, 1.9), "JP3": (0.0, 1.9), "JP1": (0.0, 1.8),
     "H1": (0.0, 5.0), "H2": (0.0, 5.0), "H3": (0.0, -5.0), "H4": (0.0, -5.0),
     "TP5": (-3.0, 0.0), "TP7": (3.0, 0.0),
-    "Q1": (0.0, -2.5), "D3": (-2.6, 0.0), "J6": (-2.4, 1.3),
+    "Q1": (0.0, -2.5), "D3": (0.0, -2.1), "J6": (-2.4, 1.3),
 }
 
 # Fitted only if the GP11 leakage measurement at M3 says so (README, E9)

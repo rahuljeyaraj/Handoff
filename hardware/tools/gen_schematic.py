@@ -480,22 +480,19 @@ class Schematic:
 
 
 # --------------------------------------------------------------------------
-# Footprints (all stock KiCad 10 except SW1, see hardware/README.md)
+# Footprints (all stock KiCad 10 except SW1, H1-H4 and the two diodes, see
+# hardware/README.md)
 # --------------------------------------------------------------------------
-# Two passive sizes, deliberately. 1206 stays wherever the part is only made
-# in it here (1 M, 1k5) or where the value is a C0G/X7R the 0603 order does not
-# cover (330 pF, 100 nF); everything re-ordered as 0603 uses FP_R06. The bulk
-# 10 uF is no longer an electrolytic at all - see FP_C08.
-FP_R = "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
-FP_R06 = "Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder"
-FP_C = "Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder"
-# C4/C5 were CP_Radial_D5.0mm_P2.50mm, a 5 mm radial electrolytic. They are now
-# MLCC in 0805: non-polarised, 4 mm shorter, and they move to the bottom face
-# (the routes that fed them were already there, through the old part's leads).
-FP_C08 = "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
-FP_D41 = "Diode_THT:D_DO-41_SOD81_P7.62mm_Horizontal"
-FP_SOD123 = "Diode_SMD:D_SOD-123"
-FP_SMB = "Diode_SMD:D_SMB"
+# One passive size. Every resistor and capacitor on the board is 0603 since
+# the 12 Sep 2026 order; the 1206s (1 M, 1k5, 330 pF, 100 nF) and the 0805
+# 10 uF it replaced are gone. C4/C5 were 5 mm radial electrolytics before
+# that, which is why they live on the bottom face where their leads' tracks
+# already were.
+FP_R = "Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder"
+FP_C = "Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder"
+# PMEG3020ER-TP (Tech Public - not the Nexperia part of the same number, which
+# is SOD-123W). KiCad has no SOD-123FL; written by gen_sod123fl_footprint.py.
+FP_SOD123FL = "handoff:D_SOD-123FL"
 FP_SOT23 = "Package_TO_SOT_SMD:SOT-23"
 FP_HDR2 = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
 FP_PICO = "Module:RaspberryPi_Pico_Common_THT"
@@ -615,8 +612,8 @@ def build() -> Schematic:
     s.wire(tap_n, (tap_n[0], tap_n[1] + 6), (j5p1[0] - 2, tap_n[1] + 6), (j5p1[0] - 2, j5p1[1]), j5p1)   # BAT- under J1
     s.power("GND", (tap_n[0], tap_n[1] + 6))
     s.no_connect(swc)
-    d1 = s.place(DSCH, "D1", "SS220F", (swa[0] + 10, swa[1]), rot=180, fp=FP_SMB,
-                 desc="VSYS OR-ing / reverse polarity, Schottky 200 V 2 A, SMB",
+    d1 = s.place(DSCH, "D1", "PMEG3020ER-TP", (swa[0] + 10, swa[1]), rot=180, fp=FP_SOD123FL,
+                 desc="VSYS OR-ing / reverse polarity, Schottky 40 V 2 A, SOD-123FL (Tech Public, not Nexperia)",
                  ref_at=(0, -3, "center"), val_at=(0, 3, "center"))
     da, dk = s.gpin("D1", "2"), s.gpin("D1", "1")  # A, K
     s.wire(swa, da)
@@ -643,9 +640,9 @@ def build() -> Schematic:
     # 2. VREF bias  (mid top)
     # =====================================================================
     s.text("VREF = 3V3/2 = 1.65 V (design §6.2)", (110, 14), size=2.0, bold=True)
-    r10 = s.place(R, "R10", "100k", (120, 26), fp=FP_R06, desc="VREF divider, top")
-    r11 = s.place(R, "R11", "100k", (120, 40), fp=FP_R06, desc="VREF divider, bottom")
-    c4 = s.place(C, "C4", "10uF 100V", (132, 40), fp=FP_C08, desc="VREF hold-up, 0805 MLCC")
+    r10 = s.place(R, "R10", "100k", (120, 26), fp=FP_R, desc="VREF divider, top")
+    r11 = s.place(R, "R11", "100k", (120, 40), fp=FP_R, desc="VREF divider, bottom")
+    c4 = s.place(C, "C4", "10uF 25V", (132, 40), fp=FP_C, desc="VREF hold-up, X5R 0603")
     top = s.gpin("R10", "1"); mid1 = s.gpin("R10", "2"); mid2 = s.gpin("R11", "1"); bot = s.gpin("R11", "2")
     c4p, c4n = s.gpin("C4", "1"), s.gpin("C4", "2")
     # the divider hangs off the AFE side of JP4, so a bench supply on JP4 pad 2 powers the whole analogue side
@@ -674,7 +671,7 @@ def build() -> Schematic:
     s.text("U2 supply — AFE_3V3 behind JP4 (design §6.4 decoupling + C5 bulk)", (190, 14), size=2.0, bold=True)
     u2c = s.place(OPA, "U2", "MCP6292-E/MS", (204, 36), unit=3, fp=FP_MSOP8, ref_at=(-4, -1, "right"), val_at=(-4, 1, "right"))
     c3 = s.place(C, "C3", "100nF", (220, 36), fp=FP_C, desc="U2 decoupling, across pins 8 and 4")
-    c5 = s.place(C, "C5", "10uF 100V", (230, 36), fp=FP_C08, desc="U2 bulk decoupling against the Pico SMPS, 0805 MLCC")
+    c5 = s.place(C, "C5", "10uF 25V", (230, 36), fp=FP_C, desc="U2 bulk decoupling against the Pico SMPS, X5R 0603")
     vp, vn = s.gpin("U2", "8", 3), s.gpin("U2", "4", 3)
     c3a, c3b = s.gpin("C3", "1"), s.gpin("C3", "2")
     c5a, c5b = s.gpin("C5", "1"), s.gpin("C5", "2")
@@ -789,8 +786,8 @@ def build() -> Schematic:
     s.text("10 MOhm node: keep tiny, guard it (README)", (hiz[0] - 10, Y + 24), size=1.0)
     # feedback: R4 above the op-amp from OUT A back to -IN A; R5 from -IN A down to VREF
     fb1 = (ina_n[0] - 2, ina_n[1])
-    r5 = s.place(R, "R5", "10k", (fb1[0], fb1[1] + 6), rot=0, fp=FP_R06, desc="Stage 1 gain set: 1 + R4/R5 = 11", ref_at=(2, -1), val_at=(2, 1))
-    r4 = s.place(R, "R4", "100k", (ina_n[0] + 8, ina_n[1] - 12), rot=90, fp=FP_R06, desc="Stage 1 feedback")
+    r5 = s.place(R, "R5", "10k", (fb1[0], fb1[1] + 6), rot=0, fp=FP_R, desc="Stage 1 gain set: 1 + R4/R5 = 11", ref_at=(2, -1), val_at=(2, 1))
+    r4 = s.place(R, "R4", "100k", (ina_n[0] + 8, ina_n[1] - 12), rot=90, fp=FP_R, desc="Stage 1 feedback")
     s.wire(ina_n, fb1, s.gpin("R5", "1"))
     r3b, r5b = s.gpin("R3", "2"), s.gpin("R5", "2")
     assert r3b[1] == r5b[1]
@@ -807,15 +804,15 @@ def build() -> Schematic:
     c1b = s.gpin("C1", "2")
     in2 = (c1b[0] + 4, c1b[1])
     s.wire(c1b, in2)
-    r6 = s.place(R, "R6", "100k", (in2[0], in2[1] + 10), rot=0, fp=FP_R06, desc="Re-bias stage 2 +IN to VREF", ref_at=(-2, -1, "right"), val_at=(-2, 1, "right"))
+    r6 = s.place(R, "R6", "100k", (in2[0], in2[1] + 10), rot=0, fp=FP_R, desc="Re-bias stage 2 +IN to VREF", ref_at=(-2, -1, "right"), val_at=(-2, 1, "right"))
     s.wire(in2, s.gpin("R6", "1"))
     # -- stage 2
     u2b = s.place(OPA, "U2", "MCP6292-E/MS", (in2[0] + 14, in2[1] + 2), unit=2, fp=FP_MSOP8, ref_at=(-1, 0, "center"), hide_value=True)
     inb_p, inb_n, outb = s.gpin("U2", "5", 2), s.gpin("U2", "6", 2), s.gpin("U2", "7", 2)
     s.wire(in2, inb_p)
     fb2 = (inb_n[0] - 2, inb_n[1])
-    r8 = s.place(R, "R8", "10k", (fb2[0], fb2[1] + 6), rot=0, fp=FP_R06, desc="Stage 2 gain set: 1 + R7/R8 = 11", ref_at=(2, -1), val_at=(2, 1))
-    r7 = s.place(R, "R7", "100k", (inb_n[0] + 8, inb_n[1] - 12), rot=90, fp=FP_R06, desc="Stage 2 feedback")
+    r8 = s.place(R, "R8", "10k", (fb2[0], fb2[1] + 6), rot=0, fp=FP_R, desc="Stage 2 gain set: 1 + R7/R8 = 11", ref_at=(2, -1), val_at=(2, 1))
+    r7 = s.place(R, "R7", "100k", (inb_n[0] + 8, inb_n[1] - 12), rot=90, fp=FP_R, desc="Stage 2 feedback")
     s.wire(inb_n, fb2, s.gpin("R8", "1"))
     r6b, r8b = s.gpin("R6", "2"), s.gpin("R8", "2")
     assert r6b[1] == r8b[1]
@@ -866,7 +863,7 @@ def build() -> Schematic:
                                                    ("R13", "LED_G", "G", "3", 42, 6, 56),
                                                    ("R14", "LED_B", "B", "4", 50, 10, 58)):
         jp = s.gpin("J3", pinnum)
-        r = s.place(R, ref, "100", (x, jp[1] + drop), rot=90, fp=FP_R06, desc=f"LED {colour} series",
+        r = s.place(R, ref, "100", (x, jp[1] + drop), rot=90, fp=FP_R, desc=f"LED {colour} series",
                     **({"ref_at": (-2, -2, "center"), "val_at": (3, -2, "center")} if drop == 0 else {}))
         pa, pb = s.gpin(ref, "1"), s.gpin(ref, "2")
         s.wire((pa[0] - 4, pa[1]), pa); s.label(net, (pa[0] - 4, pa[1]), 0, "right bottom")
@@ -923,14 +920,14 @@ def build() -> Schematic:
             s.label(net, end, 0, "right bottom")
     s.text("Through-hole, 1.5 mm pad / 0.7 mm drill: a wire solders in.", (150, 198), size=1.0)
     s.text("TP5 loads a 10 MOhm node through R1: a 10x probe or better, never a meter. TP6/TP7 straddle JP5: the ammeter position.", (150, 201), size=1.0)
-    s.text("TP8 is new: C4 and C5 are 0805 MLCC now, so the through-hole + lead that used to be the AFE_3V3 probe point is gone.", (150, 204), size=1.0)
+    s.text("TP8 is new: C4 and C5 are 0603 MLCC now, so the through-hole + lead that used to be the AFE_3V3 probe point is gone.", (150, 204), size=1.0)
 
     # =====================================================================
     # 8. BUTTON, ROLE STRAP, MOUNTING  (bottom right)
     # =====================================================================
     s.text("BUTTON (GP15), ROLE strap (GP14), MOUNTING", (240, 150), size=2.0, bold=True)
     BX, BY = 252, 162
-    r15 = s.place(R, "R15", "10k", (BX, BY), rot=0, fp=FP_R06, desc="BTN pull-up", ref_at=(2, -1), val_at=(2, 1))
+    r15 = s.place(R, "R15", "10k", (BX, BY), rot=0, fp=FP_R, desc="BTN pull-up", ref_at=(2, -1), val_at=(2, 1))
     r15a, r15b = s.gpin("R15", "1"), s.gpin("R15", "2")
     s.wire(r15a, (r15a[0], r15a[1] - 2)); s.power("+3V3", (r15a[0], r15a[1] - 2))
     nb = (BX, BY + 5)
@@ -981,14 +978,14 @@ def build() -> Schematic:
     # through every BOOTSEL reset - GP28 is an input, so without a pull-down
     # the gate floats and the motor may run. 100 k against a 100 R series
     # resistor loses 3 mV of drive, which is nothing.
-    r16 = s.place(R, "R16", "100", (qg[0] - 12, qg[1]), rot=90, fp=FP_R06,
+    r16 = s.place(R, "R16", "100", (qg[0] - 12, qg[1]), rot=90, fp=FP_R,
                   desc="Q1 gate series", ref_at=(0, -2, "center"), val_at=(0, 2, "center"))
     r16a, r16b = s.gpin("R16", "1"), s.gpin("R16", "2")
     s.wire((r16a[0] - 6, r16a[1]), r16a)
     s.label("MOT_DRV", (r16a[0] - 6, r16a[1]), 0, "right bottom")
     gate_t = (qg[0] - 6, qg[1])
     s.wire(r16b, gate_t, qg)
-    r17 = s.place(R, "R17", "100k", (gate_t[0], gate_t[1] + 3), rot=0, fp=FP_R06,
+    r17 = s.place(R, "R17", "100k", (gate_t[0], gate_t[1] + 3), rot=0, fp=FP_R,
                   desc="Q1 gate pull-down: holds the motor off while GP28 is an input",
                   ref_at=(2, -1), val_at=(2, 1))
     r17a, r17b = s.gpin("R17", "1"), s.gpin("R17", "2")
@@ -1001,8 +998,8 @@ def build() -> Schematic:
     top = (sw[0], sw[1] - 6)
     # rot 270 puts the cathode uppermost, so the diode reads the way it sits:
     # anode on the switched node, cathode on VSYS, reverse-biased until Q1 opens.
-    d3 = s.place(DSCH, "D3", "SS220F", (sw[0] + 10, sw[1] - 3), rot=270, fp=FP_SMB,
-                 desc="Motor flyback, Schottky 200 V 2 A, SMB", ref_at=(-2, -2, "right"), val_at=(-2, 0, "right"))
+    d3 = s.place(DSCH, "D3", "PMEG3020ER-TP", (sw[0] + 10, sw[1] - 3), rot=270, fp=FP_SOD123FL,
+                 desc="Motor flyback, Schottky 40 V 2 A, SOD-123FL (Tech Public, not Nexperia)", ref_at=(-2, -2, "right"), val_at=(-2, 0, "right"))
     d3k, d3a = s.gpin("D3", "1"), s.gpin("D3", "2")
     s.wire(sw, (d3a[0], sw[1]), d3a)
     s.wire(d3k, (d3k[0], top[1]), top)
@@ -1305,6 +1302,9 @@ def check(sch_path: Path) -> int:
         print(f"README parts table lists {r}, which is not in the schematic BOM"); fails += 1
     print(f"BOM: {len(bom_refs)} refs, {len(copper_only)} copper-only, README table diff: "
           f"{len(bom_refs - copper_only - readme_refs) + len(readme_refs - bom_refs)} difference(s)")
+    # the committed BOM, with the Package column kicad-cli does not produce
+    from gen_bom import write_bom
+    write_bom()
     # PDF for eyeballing
     run_cli("sch", "export", "pdf", "-o", str(out / "handoff.pdf"), str(sch_path))
     return fails

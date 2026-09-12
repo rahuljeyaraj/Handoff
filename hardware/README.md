@@ -11,13 +11,15 @@ the schematic implements its §6/§7 netlist with the changes listed under
 |---|---|
 | `handoff.kicad_pro` / `handoff.kicad_sch` | the project and its single schematic sheet |
 | `handoff.kicad_sym` | project symbol library: Pico 2 W and MCP6292 (the stock library has neither) |
-| `handoff.pretty/` | project footprints: the SS-12F23G5 slide switch and the 3.4 mm M3 mounting hole with its boss keep-out |
+| `handoff.pretty/` | project footprints: the SS-12F23G5 slide switch, the 3.4 mm M3 mounting hole with its boss keep-out, and the SOD-123FL diode (KiCad has none) |
 | `tools/gen_schematic.py` | **the source of the schematic.** Generates the sheet from the §7 netlist and proves it with `kicad-cli`: ERC, the netlist against `EXPECTED_NETS` pin for pin, and the BOM against the parts table below. Edit this, not the sheet |
 | `tools/render.py` | renders `build/handoff.pdf` to `build/sheet.png` so the sheet can be looked at |
 | `review.md` | the pre-layout review: every check, its number, its verdict |
 | `schematic-prompt.md` | the brief for the next session: the schematic changes the floor plan forces, then layout |
 | `tools/gen_sw_footprint.py` | writes `handoff.pretty/SW_Slide_SS-12F23G5`, geometry measured on the physical part |
 | `tools/gen_mount_footprint.py` | writes `handoff.pretty/MountingHole_3.4mm_M3_Boss6mm`: 3.4 mm unplated drill plus the 6 mm boss keep-out. The name follows the boss diameter, so the board cannot point at a footprint that is no longer the one described |
+| `tools/gen_sod123fl_footprint.py` | writes `handoff.pretty/D_SOD-123FL` for D1/D3, from the PMEG3020ER-TP outline drawing; `--prove` puts it on `build/fp_test.kicad_pcb`, runs DRC and renders it |
+| `tools/gen_bom.py` / `bom.csv` | the committed BOM: kicad-cli's export plus the **Package** column it cannot produce, derived from each footprint in one place. Called by `gen_schematic.py` after its BOM check |
 | `tools/gen_floorplan.py` / `floorplan.svg` | the floor plan: which block sits where in the enclosure, and why. Placement only, no tracks — the **pre-layout** input. **Superseded by the board**: it still draws E1–E10 inboard of their pins, `JP1-JP7`, `TP12`/`TP13` and the 4.5 mm hole positions, none of which exist. Read `gen_pcb.py`'s `PLACE` table for where things actually are |
 | `tools/gen_pcb.py` / `handoff.kicad_pcb` | **the source of the board.** Builds it from the schematic's netlist and the floor plan, then proves it with `kicad-cli`: DRC, schematic parity pin for pin, an independent short check, a ground-pour island check, and every pad against every mounting boss. Writes the fab pack last. Edit this, not the `.kicad_pcb` |
 | `build/plot/` | the fab pack: Gerbers for every layer, both Excellon drill files with their maps, and the job file. Regenerated on every `gen_pcb.py` run, so it cannot go stale against the board. Not committed (`build/` is ignored) |
@@ -25,7 +27,8 @@ the schematic implements its §6/§7 netlist with the changes listed under
 | `handoff.kicad_dru` | the four custom DRC rules: two tell KiCad about the third dimension it does not model (the Pico is socketed 8.5 mm up; bare pads have no body, but not over a mounting boss), two enforce the layout conventions it will not check unless asked (no right-angle corners, no stub segments). Written by `gen_pcb.py` |
 
 Regenerate and verify after any change (must end `ERC: 0 violation(s), 0 error(s)`,
-`0 missing, 0 unexpected` nets and `0 difference(s)` against the parts table):
+`0 missing, 0 unexpected` nets, `0 difference(s)` against the parts table, and
+`passive packages: 0603` from the BOM writer):
 
 ```
 python hardware/tools/gen_schematic.py && python hardware/tools/render.py
@@ -53,21 +56,21 @@ without changing the footprint.
 | U1 | Raspberry Pi Pico 2 W | **socketed** in two 1×20 female strips, not soldered to the board | R190344 | 1 |
 | — | 2.54 mm 1×40 female single-row header | cut into two 1×20 for the Pico; nothing else uses it now | 555698 | 1 strip |
 | U2 | MCP6292-E/MS dual op-amp, 10 MHz | MSOP-8, soldered directly to the board (no DIP adapter on the PCB) | R193529 | 1 |
-| R1, R2, R3 | 1 MΩ | 1206 | 574983 | 3 |
+| R1, R2, R3 | 1 MΩ ±1 % 100 mW 75 V (Uniohm 0603WAF1004T5E) | **0603** | R134792 | 3 |
 | R4, R6, R7, R10, R11, R17 | 100 kΩ (104) | **0603** | MakerBazar 1481824519-20P | 6 (pack of 20) |
 | R5, R8, R15 | 10 kΩ (103) | **0603** | MakerBazar 1481824531-20P | 3 (pack of 20) |
-| R9 | 1.5 kΩ 1 % (Yageo RC1206FR-071K5L) | 1206 | R137563 | 1 |
+| R9 | 1.5 kΩ ±1 % 100 mW 75 V (Uniohm 0603WAF1501T5E) | **0603** | R134878 | 1 |
 | R12, R13, R14, R16 | 100 Ω (101) | **0603** | MakerBazar 1860310035-20P | 4 (pack of 20) |
-| C3 | 100 nF X7R 50 V (TCC1206X7R104J500DT) | 1206 | R153721 | 1 |
-| C1, C2 | 330 pF C0G/NP0 50 V (KEMET C1206C331J5GACTU) | 1206 | R111869 | 2 |
-| C4, C5 | 10 µF MLCC (106), marked 100 V | **0805**, non-polarised | MakerBazar 1491785836-10P | 2 (pack of 10) |
-| C6 | **DNP** — 330 pF C0G, the C2 part, fitted only if GP11 leakage turns out to matter (see *Deviations*) | 1206 | R111869 | 0 |
-| D1 | SS220F Schottky 200 V 2 A | **SMB** (DO-214AA) | Slkor R193098 | 1 |
+| C3 | 100 nF X7R ±10 % 50 V (Samsung CL10B104KB8NNNC) | **0603** | R172322 | 1 |
+| C1, C2 | 330 pF **C0G/NP0** ±5 % 100 V (Samsung CL10C331JC8NNNC) | **0603** | R136892 | 2 |
+| C4, C5 | 10 µF X5R ±20 % **25 V** (Murata GRM188R61E106MA73D) | **0603**, non-polarised | R144171 | 2 |
+| C6 | **DNP** — 330 pF C0G, the C2 part, fitted only if GP11 leakage turns out to matter (see *Deviations*) | **0603** | R136892 | 0 |
+| D1 | PMEG3020ER-TP (**Tech Public**), SOD-123FL, 40 V 2 A Schottky — *not* the Nexperia PMEG3020ER, which is SOD-123W | **SOD-123FL**, `handoff:D_SOD-123FL` | R241663 | 1 |
 | SW1 | SS-12F23G5 slide switch, SPDT (1P2T), right-angle, 5 mm handle | 3 terminals at 3.0 mm pitch + 2 mounting ears, `handoff:SW_Slide_SS-12F23G5` | R132611 | 1 |
 | D2 | RGB LED, common cathode, 5 mm, clear (5-pack) | off-board: solders into J3 or plugs in via a 4-pin XH pigtail | R183455 | 1 |
 | SW2 | Tactile push button 6 × 6 × 5 mm, 4 legs | through-hole, `Button_Switch_THT:SW_PUSH_6mm` | 618182 | 1 |
 | Q1 | AO3400A N-channel MOSFET, 30 V 5.2 A, 27 mΩ @ 4.5 V | SOT-23 | MakerBazar R209179 | 1 |
-| D3 | SS220F Schottky 200 V 2 A, motor flyback | **SMB** (DO-214AA) | Slkor R193098 | 1 |
+| D3 | PMEG3020ER-TP (**Tech Public**), SOD-123FL, 40 V 2 A Schottky, motor flyback — the D1 part | **SOD-123FL**, `handoff:D_SOD-123FL` | R241663 | 1 |
 | M1 | Coin vibration motor, 1034, 10 mm disc, ~3 V | off-board: leads solder into J6 | MakerBazar 522260 | 1 |
 | J6 | Motor pads, 2 × 2.54 mm through-hole | takes the motor leads direct, or a 2-pin header | — | 1 |
 | J1 | JST-XH 2.54 straight 2-pin male (battery) | through-hole | — | 1 |
@@ -82,6 +85,11 @@ keep-out).
 
 The 10 MΩ (Robu 574992) bought for R3 is no longer fitted — see *Deviations*. Keep
 it: it is the A/B part for the M7 recovery-versus-loss comparison.
+
+**Every passive on the board is 0603** since the 12 Sep 2026 order (see the last
+*This session*). The 1206 1 MΩ / 1.5 kΩ / 330 pF / 100 nF (574983, R137563,
+R111869, R153721) and the 0805 10 µF (MakerBazar 1491785836-10P) are no longer
+fitted anywhere, and nor is the SS220F (Slkor R193098) both diodes were.
 
 Not on the board, by decision: the TP4056 charger (the cell is charged off-board)
 and the MSOP-to-DIP adapter (perfboard only).
@@ -98,10 +106,14 @@ and the MSOP-to-DIP adapter (perfboard only).
 that is battery powered but still gets plugged into USB for flashing: the Pico's
 internal Schottky ORs VBUS into VSYS, and this external one stops VSYS from
 back-driving the battery. It also makes a reversed battery plug harmless (nothing
-powers up) instead of destructive. **Now SS220F (Slkor, 200 V 2 A, SMB/DO-214AA)**,
-replacing the 1N5819 DO-41 — see *This session*. Cost: ~0.85 V at 100 mA (SS220F's
-higher Vf than 1N5819's ~0.35 V, being rated for four times the voltage), leaving
-~2.5–3.75 V on VSYS against a 1.8–5.5 V input range.
+powers up) instead of destructive. **Now PMEG3020ER-TP (Tech Public, 40 V 2 A,
+SOD-123FL)**, the third part in this position after the 1N5819 (DO-41) and the
+SS220F (SMB) — see the session logs. Cost: **~0.4 V at 100 mA** (0.41 V typ at
+1 A, 0.5 V max at 2 A, from the Tech Public datasheet; its Fig. 4 puts 100 mA at
+0.35–0.4 V — there is no 100 mA line item), leaving ~2.9–3.8 V on VSYS from a
+3.3–4.2 V cell, against the Pico's 1.8–5.5 V input range. That is 0.45 V better
+than the SS220F's ~0.85 V, which was the price of a 200 V rating this board never
+needed. Reverse leakage is 2 µA at 10 V, 25 °C.
 
 **A haptic motor was added, on VSYS behind an N-FET.** Not in the design
 doc at all — it arrived with this session's parts order. M1 is off-board on
@@ -232,7 +244,7 @@ TP4056's OUT± plugs in here so charging no longer means unplugging the cell.
 **Not a power input** — it is wired straight to the cell, before SW1 and D1; the
 silkscreen will say so.
 
-**C5, 10 µF electrolytic (the C4 part) on U2's VDD** alongside C3, against the
+**C5, 10 µF (the C4 part, an X5R 0603 now) on U2's VDD** alongside C3, against the
 Pico's SMPS. JP4 lets the real experiment happen: run the AFE from a bench
 supply and compare noise floors.
 
@@ -302,9 +314,11 @@ firmware call on WL_GPIO1 (see README). Nothing on the board.
 - GP11: `gpio_set_input_enabled(2, false)` whenever it is high-Z (E9, above).
   Never idle GP11 as a driven output between shouts — a driven low pulls the
   10 MΩ node to 0.28 V and stage 1 sits on the rail.
-- The VSYS/3 monitor on GP29 (ADC3) reads *after* D1: add ~0.3 V (0.2 V at idle
-  current, 0.35 V with the radio on) to get the cell voltage, or calibrate
-  against J1 pin 2 once. On a Pico 2 W GP29 is shared with the CYW43 SPI clock, so
+- The VSYS/3 monitor on GP29 (ADC3) reads *after* D1: add ~0.35 V (0.3 V at
+  idle current, 0.4 V with the radio on — PMEG3020ER-TP Fig. 4 at 30 and
+  100 mA) to get the cell voltage, or calibrate against J1 pin 2 once. (This
+  used to say 0.3 V beside a D1 paragraph that said 0.85 V; the diode has
+  changed and the two now agree.) On a Pico 2 W GP29 is shared with the CYW43 SPI clock, so
   read it the way `pico-examples/adc/read_vsys` does.
 - GP14 (`ROLE`): enable the internal pull-up, read it once at boot.
 - GP15 (`BTN`): active low, R15 pulls up.
@@ -440,15 +454,17 @@ a real mismatch could not hide among the ten deliberate ones.
 **Silkscreen.** Values are hidden everywhere. References are on silk for the
 things the bring-up procedure names in your hand — jumpers, connectors,
 switches, U1/U2, D1 — and on the fab layer for the AFE's passives, where
-0.8 mm text does not fit between 1206 pads on a 5.3 mm pitch. The test pads
+0.8 mm text does not fit between 0603 pads on a 5.3 mm pitch. The test pads
 are named by their **net** in printed legends (`ADC0`, `OUT1`, `VREF`, `PAD`,
 `VSYS`, `D1K`, `GND`) rather than by reference, which is what someone holding
 a probe is looking for. The silkscreen *outlines* of U1, the four JST
-connectors, SW1, D1, TP2/TP3 and the mounting holes are moved to the fab layer
+connectors, SW1, TP2/TP3 and the mounting holes are moved to the fab layer
 too: U1's is a 21 × 51 box drawn over everything that deliberately lives under
 it, and TP2's and TP3's rings ran into JP1's and JP3's outlines at the elbow.
-That is what the fourteen `lib_footprint_mismatch` warnings are — the only
-warnings the board reports, and all deliberate. A board-edge legend (project name, revision, date) is on
+(D1's went with them while it was an SMB whose bar reached TP7's mask; the
+SOD-123FL's stops 0.7 mm short, so D1's cathode bar is printed again.) That is
+what the thirteen `lib_footprint_mismatch` warnings are — the only warnings the
+board reports, and all deliberate. A board-edge legend (project name, revision, date) is on
 F.SilkS at the hand end and repeated on B.SilkS along the little-finger wall;
 a fab note (2-layer, 1.6 mm FR-4, 1 oz Cu, HASL, green mask, white silk, 0.3 mm
 min drill) is on `Cmts.User`. J1/J2/J5's pin-1 ends are marked **+ / −** or
@@ -613,7 +629,7 @@ from a GPIO. The whole block is four parts and one connector:
 | Q1 | AO3400A, SOT-23 | low-side switch. 30 V / 5.2 A and 27 mΩ at 4.5 V is enormous overkill for 100 mA, which is the point: it is fully on at 3 V of gate drive |
 | R16 | 100 Ω 0603 | gate series. Limits the GPIO's peak gate-charge current |
 | R17 | 100 kΩ 0603 | gate pull-down. **Not optional** — GP28 is an input from power-up until firmware writes it, and through every BOOTSEL reset. Without R17 the gate floats and the motor may run |
-| D3 | SS220F, SMB (DO-214AA) | flyback. Cathode to VSYS, anode on the drain. Same SKU as D1 — one diode to order, one to stock |
+| D3 | PMEG3020ER-TP, SOD-123FL (was SS220F, SMB, when this was written) | flyback. Cathode to VSYS, anode on the drain. Same SKU as D1 — one diode to order, one to stock |
 | J6 | 2 × 2.54 mm through-hole | the motor's leads solder in, or a 2-pin header takes a plug — the same choice the LED has at J3 |
 
 **VSYS, not +3V3.** The Pico's own regulator carries the RP2350, the CYW43439
@@ -649,27 +665,33 @@ pin-1 mark are printed, because a hand-assembled diode needs its band. The
 > **Firmware:** GP28 high runs the motor. Do not run it during an RX window —
 > 100 mA of commutating motor on VSYS is not what a ×121 front end wants to see.
 
-**D3 is an SS220F (SMB), the same SKU as D1** — Slkor R193098, 200 V 2 A. One
-Schottky to order and one to stock instead of two. It did not fit when it was
-first tried: SMB's courtyard is 7.3 × 4.5 mm against SOD-123's 4.7 × 2.3, and
-at the time the motor block was a 6 × 9 mm pocket with J6, Q1 and the two test
-pads in it, so the body swallowed J6's pad and clipped two solder masks. The
-pocket is bigger than that — the test pads had no business in it, and they are
-elsewhere now (see *The test pads had taken the motor's pocket* below).
+**D3 is the same SKU as D1** — one Schottky to order and one to stock instead
+of two. When this was written that was the SS220F in SMB, and it did not fit
+when first tried: SMB's courtyard is 7.3 × 4.5 mm against SOD-123's 4.7 × 2.3,
+and at the time the motor block was a 6 × 9 mm pocket with J6, Q1 and the two
+test pads in it, so the body swallowed J6's pad and clipped two solder masks.
+The pocket is bigger than that — the test pads had no business in it, and they
+are elsewhere now (see *The test pads had taken the motor's pocket* below).
+*Both diodes are the PMEG3020ER-TP in SOD-123FL now (4.9 × 2.6 mm of
+courtyard), so the courtyard argument is void — see the last* This session.
 
 ### The passives: 0603 where the order changed, 1206 where it did not
+
+> Superseded: **every passive is 0603** since the 12 Sep 2026 order (the last
+> *This session*). The table below is what this session did; the 1206 and 0805
+> rows have since moved too.
 
 | Value | Refs | Package | Note |
 |---|---|---|---|
 | 100 kΩ | R4, R6, R7, R10, R11, R17 | **0603** | MakerBazar 1481824519-20P |
 | 10 kΩ | R5, R8, R15 | **0603** | MakerBazar 1481824531-20P |
 | 100 Ω | R12, R13, R14, R16 | **0603** | MakerBazar 1860310035-20P, replacing the 330 Ω LED resistors |
-| 10 µF | C4, C5 | **0805** MLCC | MakerBazar 1491785836-10P, replacing the 5 mm radial electrolytics |
-| 1 MΩ, 1.5 kΩ | R1, R2, R3, R9 | 1206 | unchanged — not re-ordered |
-| 330 pF C0G, 100 nF X7R | C1, C2, C3, C6 | 1206 | unchanged — the 0603 order does not cover these dielectrics |
+| 10 µF | C4, C5 | 0805 MLCC → **0603** | was MakerBazar 1491785836-10P, replacing the 5 mm radial electrolytics; now Murata GRM188R61E106MA73D |
+| 1 MΩ, 1.5 kΩ | R1, R2, R3, R9 | 1206 → **0603** | not re-ordered then; re-ordered 12 Sep |
+| 330 pF C0G, 100 nF X7R | C1, C2, C3, C6 | 1206 → **0603** | the first 0603 order did not cover these dielectrics; the second did |
 
-Two package sizes on one board is deliberate, not an oversight: only the values
-that were re-ordered moved.
+Two package sizes on one board was deliberate at the time, not an oversight:
+only the values that had been re-ordered moved. There is one package size now.
 
 **What a package change actually costs.** A 1206 hand-solder pad sits 1.55 mm
 from the body centre and an 0603 one 0.9125 mm, so every one of these parts
@@ -699,13 +721,15 @@ check rather than by eye:
   exact point the old part's + lead stood. Both nets' routes are unchanged, and
   the top face gets 26 mm² of electrode back.
 
-**The 10 µF is marked 100 V.** A 10 µF 100 V part does not exist in 0805 — the
-listing is almost certainly wrong about the voltage, and the part is more likely
-16 V or 25 V. It does not matter here: both sit on a 3.3 V rail. What does
-matter is that an 0805 10 µF is X5R or Y5V and loses a large fraction of its
-capacitance under DC bias, so treat C4 and C5 as perhaps 5 µF in circuit. Both
-are hold-up and bulk, neither is a filter corner, so that is acceptable — but do
-not use the nameplate value in any calculation.
+**The 10 µF is a real part now: Murata GRM188R61E106MA73D, X5R, 25 V, 0603.**
+The 0805 it replaces was "marked 100 V", which no 0805 10 µF is — the listing
+was wrong about the voltage and said nothing about the dielectric, so the only
+safe assumption was "perhaps 5 µF in circuit, worst case 3". DC-bias derating
+is a field effect: what matters is the applied voltage as a fraction of the
+rating, and 3.3 V on a 25 V part is 13 %, against 33 % on a 10 V one. Murata's
+curve for this part gives **~8 µF effective at 3.3 V**, and ~5 µF at the
+tolerance-and-temperature worst case, instead of ~5 and ~3. Both are still
+hold-up and bulk, neither is a filter corner — but the number can be used now.
 
 **100 Ω on the LEDs is a real change, not a like-for-like.** At 3.3 V into a red
 LED (Vf ≈ 2.0 V) 100 Ω asks for 13 mA where 330 Ω asked for 4 mA. The RP2350's
@@ -917,6 +941,138 @@ check 0 pairs, no `NET`, `OUTSIDE` or `IN BOSS` lines. The 14 remaining
 warnings are all `lib_footprint_mismatch`, one per footprint this board
 deliberately strips silk from or re-places reference text on.
 
+## This session: every passive 0603, and the SOD-123FL Schottky
+
+A parts order (Robu, 12 Sep 2026) moved the last 1206s and 0805s to 0603 and
+replaced the SS220F on D1 and D3 with a smaller Schottky. Nothing touches a net:
+`EXPECTED_NETS` is unchanged, 56 nets, and it was the oracle for every step.
+
+| Refs | Was | Is | Robu |
+|---|---|---|---|
+| C1, C2, C6 | 330 pF C0G 1206 (KEMET) | **CL10C331JC8NNNC** Samsung, 330 pF C0G/NP0 ±5 % 100 V, 0603 | R136892 |
+| C3 | 100 nF X7R 1206 | **CL10B104KB8NNNC** Samsung, 100 nF X7R ±10 % 50 V, 0603 | R172322 |
+| C4, C5 | 10 µF "marked 100 V" 0805 | **GRM188R61E106MA73D** Murata, 10 µF X5R ±20 % 25 V, 0603 | R144171 |
+| R1, R2, R3 | 1 MΩ 1206 | **0603WAF1004T5E** Uniohm, 1 MΩ ±1 % 100 mW 75 V | R134792 |
+| R9 | 1.5 kΩ 1206 (Yageo) | **0603WAF1501T5E** Uniohm, 1.5 kΩ ±1 % 100 mW 75 V | R134878 |
+| D1, D3 | SS220F Slkor on `D_SMB` | **PMEG3020ER-TP** Tech Public, 40 V 2 A, SOD-123FL on `handoff:D_SOD-123FL` | R241663 |
+
+C6 stays DNP and stays the C2 part. Everything else on the board is untouched.
+There is **no 1206 and no 0805 left**; every passive is 0603.
+
+### The diode is not the Nexperia part
+
+**PMEG3020ER-TP is a Tech Public part that borrows Nexperia's number.** It is
+40 V (Nexperia's is 30 V), 2 A, 50 A surge, C<sub>J</sub> 100 pF at 4 V,
+R<sub>θJA</sub> 200 °C/W; V<sub>F</sub> 0.41 V typ at 1 A and 0.5 V max at
+2 A, with no 100 mA line item (Fig. 4 reads ~0.35–0.4 V there); I<sub>R</sub>
+2 µA at 10 V, 100 µA max at 40 V. And it is **SOD-123FL**, where Nexperia's is
+SOD-123W — a re-order against the Nexperia number arrives in the wrong package,
+which is why the parts table names Tech Public and the package in the same
+cell. Nothing in this README quotes the Nexperia datasheet.
+
+**The SS220F was never an SMB.** Robu's own listing calls it SMAF (DO-221AC).
+`D_SMB`'s land pattern was oversized for it, which is why both diodes had so
+much room and nobody noticed. Moot now, recorded so the next person reading
+"SMB" in the older sessions knows what was actually on the bench.
+
+### `handoff:D_SOD-123FL`, written by `tools/gen_sod123fl_footprint.py`
+
+KiCad 10 has no SOD-123FL. `D_SOD-123`, `D_SOD-123F`, `D_SOD-128` and
+`Nexperia_CFP3_SOD-123W` are all the wrong size: across the outline drawing's
+tolerance band (body 2.5–2.9 long, 3.4–3.9 tip to tip, terminals 0.35–0.9 long
+and 0.7–1.2 wide) the terminal sits anywhere from 1.25 to 1.95 mm from the
+centre, and none of those four covers that with a fillet. The generated one has
+two 1.2 × 1.6 mm rect pads at ±1.65 (copper from 1.05 to 2.25), a 2.9 × 2.0
+body on F.Fab with the terminals drawn, a 4.9 × 2.6 courtyard and the cathode
+bar on silk past pad 1's copper. Pin 1 = cathode at −x, like every KiCad `D_*`,
+so the symbol's pin map did not change. `--prove` puts it on a 16 × 10 mm test
+board with a track into each pad and a pour round it, runs DRC (0) and renders
+`build/fp_test.png`; that was looked at before the real board was built on it.
+
+D1 and D3 needed **no route change**. Both were anchored on a pad, and every
+approach — the two D1_K vias, the SW_OUT via, VSYS's 45 into D3's cathode,
+MOT_SW's two legs round the anode — was written against `P("D1", …)` /
+`P("D3", …)`. The one literal in the flyback loop, `(21.25, 61.2)`, became
+`P("D3", "2", -2.4, 2.4)` so the 45 out of the anode stays a 45 at any pitch.
+The freed courtyard (7.3 × 4.5 → 4.9 × 2.6 at each) went back to the pours,
+which are not islands: **top 1611.0 → 1629.9 mm², bottom 1154.8 → 1178.8**.
+D1's silk outline is printed again (it was stripped because the SMB's bar
+reached TP7's mask; the SOD-123FL's stops 0.7 mm short), which takes the
+deliberate `lib_footprint_mismatch` count from 14 to 13.
+
+### What the 0.64 mm shift broke this time
+
+Eight parts pulled both pads 0.64 mm inward (0.6875 for the capacitors: KiCad's
+0603 capacitor pad is at 0.8625, the resistor's at 0.9125 — the brief for this
+session had the capacitor footprint's name wrong, and ERC caught it). The route
+ends followed, because they are pads; the geometry around them did not. Four
+things, all found by the checks, none by eye:
+
+* **C1 sat on the VREF bus.** VREF crosses the left column at y 41.6 *under
+  C1's body*, between its pads. A 1206 left 1.32 mm for it; anchoring C1's pad
+  on OUT1's corridor put its other pad on the track — a short, a mask bridge and
+  a crossing. An 0603 still clears it, 0.2625 mm each side, but only with C1's
+  origin exactly on the bus (`Y_VREF_X`); OUT1's corridor is now derived from
+  where C1's pad then lands (`Y_OUT1`, one 45 off the pad) instead of the other
+  way round.
+* **The AFE pocket lost its only exit, again — a different one.** The pour
+  round U2 pin 4 and C3's ground pad gets out west between R3.1 and R5.1, up
+  the strip between the VREF lane and the column, and then east **between R3's
+  two pads** into the pour north of the island. With a 1206 R3 that gap was
+  1.35 mm and VREF's 45 into R3.2 from the south-west passed above it; with an
+  0603 the gap is 0.775 mm and the same 45 ran straight through it. C3.2 and
+  pin 4 became a 60 mm² island (the pour reported 1569 mm² before anyone looked).
+  VREF now enters R3.2 flat from the lane, and the pocket is filled. The R5
+  channel the last session closed is still open — C3 moving did not touch it.
+* **C6 could no longer straddle BAT+.** It sat across BAT+'s run south from J5
+  with a 1206 pad either side of the 0.5 mm track; an 0603's pads are 1.05 mm
+  apart, 0.17 mm to each. It stands on end below JP2 now, each pad straight
+  under the JP2 pad on its own net — on the board as on the sheet, the cap is
+  across the jumper — with GP11_TX's last leg one 45 and BAT+ untouched.
+* **A right angle appeared where R3's pad used to be.** VREF's two 45s met at
+  R3.2's old centre; when the pad moved, the corner it had excused became a
+  bare 90° and the `track_angle` rule caught it. Both legs are written against
+  the pad now.
+
+And what was moved on purpose: **R2** went from y 24.0 to 25.0, as far toward
+U2 as pin 2's mitred escape allows (1.2 mm above it), so its HIZ pad is nearer
+pin 3 rather than further; the island — R3.1, R2.2, pin 3 — is **8.5 mm of
+trace, 9.2 before**, and is written entirely against pads. **R9**'s 45 into
+JP3's centre pad lands 0.09 mm lower, so the via moved with it (`JP3C_VIA`).
+**R1** is anchored on its PAD pad, which is the top of the x 38.05 lane. C2 and
+C3 are anchored on the pad their lanes leave, so ADC0's two lanes and the
+AFE_3V3 lane did not move. C4/C5 were already anchored on pad 1; pad 2 is GND.
+
+### Why these parts, for the next person who is tempted
+
+* **C1/C2/C6 are C0G, not X7R.** X7R is piezoelectric and **this board has a
+  vibration motor on it** — a class-2 dielectric across the receive chain is a
+  microphone. C0G also holds the 321 kHz corner (±30 ppm/°C against X7R's
+  ±15 % over temperature) and has ~4× less dielectric absorption, which matters
+  on C2, the DC block across the TX→RX transition.
+* **C4/C5 are 25 V, not 10 V.** See *The 10 µF is a real part now* above:
+  derating is a field effect, 13 % of rating against 33 %, ~8 µF in circuit
+  instead of ~5.
+* **R2/R3 to 0603 is a judgment call the owner made, knowingly.** An 0603's
+  1.6 mm body flashes over at a lower voltage than a 1206's 3.2 mm, and J2 is
+  skin contact — R2 is the resistor between the pad and the amplifier. Accepted
+  for a bench/research board; it is written down here so that if this board
+  ever becomes something a stranger wears, the question is asked again.
+
+### BOM
+
+`hardware/bom.csv` was committed with a **Package** column derived by hand from
+the footprint. `tools/gen_bom.py` derives it now — from the footprint name, or
+for BT1/D2/M1 from what they are — writes the same seven columns grouped by
+Value+Footprint, and is called by `gen_schematic.py` after its BOM check, so it
+regenerates with everything else. It prints the set of passive packages it saw,
+which must read `0603`.
+
+**Result:** ERC 0, netlist 56 nets / 0 missing / 0 unexpected, BOM 0 differences
+against the parts table; DRC **0 errors**, 13 warnings (all
+`lib_footprint_mismatch`), parity 0, unrouted 0, short check 0 pairs, no `NET`,
+`OUTSIDE` or `IN BOSS` lines; 20 vias, 93 holes in 7 sizes, fab pack 17 files.
+
 ## Still open
 
 `layout-prompt.md`, the brief the previous session's open items referred to, is
@@ -946,9 +1102,11 @@ as the previous README recorded it, and where it stands:
   check and the Gerber/drill pack are all in. What is left is a human looking at
   the plots.
 * **Not re-examined:** the AFE column pitch is still 5.3 mm, which was set by a
-  1206's length — six of the ten parts in those columns are 0603 now, so the
-  columns could be tighter and the channel less crowded. C3's loop length, the
-  elbow block's pad size and the mounting-hole insets are also unchanged.
+  1206's length — every part in those columns is 0603 now, so the columns could
+  be tighter and the channel less crowded; but every lane and crossing around
+  them was placed against this pitch, so closing it up is a re-route, not a
+  constant. C3's loop length, the elbow block's pad size and the mounting-hole
+  insets are also unchanged.
 
 Nothing in that list blocks fabrication: DRC, schematic parity, the netlist
 oracle, the BOM-against-README check, the short check, the pour-island check and
