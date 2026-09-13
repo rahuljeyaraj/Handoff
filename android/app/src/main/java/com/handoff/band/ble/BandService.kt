@@ -320,8 +320,8 @@ class BandService : LifecycleService(), BandClient.Listener {
         val status = s.status ?: return
         if (!s.ready || !status.encrypted || syncInFlight) return
 
-        val local = prefs.ownCard.value?.takeIf { it.complete }?.vcard()
-        if (local == null) {
+        val card = prefs.ownCard.value?.takeIf { it.complete }
+        if (card == null) {
             if (status.provisioned) {
                 syncInFlight = true
                 pendingErase = true
@@ -331,12 +331,12 @@ class BandService : LifecycleService(), BandClient.Listener {
             return
         }
 
-        val hash = local.hashCode().toString(16)
+        val hash = card.hash
         if (status.provisioned && hash == prefs.pushedCard.value) return
 
         syncInFlight = true
         pendingHash = hash
-        c.provision(local)
+        c.provision(card.vcard())
     }
 
     override fun onError(message: String) {

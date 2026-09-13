@@ -212,6 +212,35 @@ detail screen's overflow can show it.
 
 ## 4a. Your own card — authored in the app, not only imported
 
+> **Revised 14 Sep 2026** after the wearer's review of the built page
+> (`design/your-card/`). Three of the decisions below are reversed; the
+> original text is kept beneath for the reasoning it records.
+>
+> - **No per-field switches.** A field you would rather not share is a field
+>   you leave empty. Every non-blank field is sent; the switches, and the
+>   sentence that explained them, are gone.
+> - **No "Fill from a phone contact".** Five fields is not much typing, and on
+>   a card that already exists it would overwrite what was written.
+> - **Phone is a number plus a label**, the way the phone's Contacts app has
+>   it, with *Add another phone* for a second row — two at most. The label
+>   menu offers Mobile and Work only, because those are the two typed slots
+>   the band carries; Home and Other would need a codec change.
+> - **A saved card opens read-only**, the same page a received contact gets:
+>   pen and bin in the app bar, the header, the rows, and one chip under the
+>   name for the fact only this page knows — *On Handoff band 93D1*, *Not on
+>   the band yet* (band off, away, or still being written; the toast after
+>   Save already covers the writing), or *Band has an older copy*. Editing is
+>   a page of its own, titled *Edit your card*.
+> - **Delete is in both places**, bin on the view and the red line at the
+>   bottom of the editor, as in Contacts. Either lands on the Band page.
+> - **Organisation appears once**, in the role line under the name, on this
+>   page and on a received contact's. No Organisation row.
+> - **"Handed over when you shake hands."** is the one sentence, on setup
+>   step 2, the first-time editor, and the foot of the saved card.
+>
+> A work number counts as a way to be reached: `complete` is a name plus a
+> phone or an email.
+
 **The card editor is a real editor.** Every field is an editable text field, and
 "Fill from a phone contact" is a *prefill convenience* at the top of that
 screen — not a fork in the road. Picking a contact drops its values into the

@@ -1,0 +1,58 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "1 · Saved card: the view" },
+    { "id": "page-2", "name": "2 · Editing" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "title": "View · Rows", "page": "page-1", "x": 0, "y": 0, "w": 412, "h": 915 },
+    { "file": "CardStatus.dc.html", "title": "The chip · three states", "page": "page-1", "x": 492, "y": 0, "w": 412, "h": 460 },
+
+    { "file": "EditA.dc.html", "title": "Edit", "page": "page-2", "x": 0, "y": 0, "w": 412, "h": 915 },
+    { "file": "LabelMenu.dc.html", "title": "Label picker open", "page": "page-2", "x": 492, "y": 0, "w": 412, "h": 915 },
+    { "file": "NewCard.dc.html", "title": "First time", "page": "page-2", "x": 984, "y": 0, "w": 412, "h": 915 },
+    { "file": "SetupStep2.dc.html", "title": "Setup · step 2 of 2", "page": "page-2", "x": 1476, "y": 0, "w": 412, "h": 915 }
+  ],
+  "annotations": [
+    {
+      "id": "view-note",
+      "page": "page-1",
+      "x": 0,
+      "y": -260,
+      "w": 412,
+      "text": "Rows it is. Organisation lives in one place: the line under the name, with the title. No Organisation row below. The received-contact page has the same duplicate today and gets the same fix when this is built.\n\nDELETE in both places, as in the phone Contacts app: the bin here, and the red line at the bottom of the editor. Either way: confirm, then you land on the Band page, whose row reads Your contact card - Not set. From the editor it skips the now-empty view."
+    },
+    {
+      "id": "chip-note",
+      "page": "page-1",
+      "x": 492,
+      "y": -260,
+      "w": 412,
+      "text": "The chip under the name. Three states. No band paired cannot happen here - the card is only ever set up once a band is - and the writing state is dropped because the toast after Save already covers it."
+    },
+    {
+      "id": "edit-note",
+      "page": "page-2",
+      "x": 0,
+      "y": -300,
+      "w": 904,
+      "text": "Fields only. No switches, no fill-from-phone anywhere, no caption. A field left empty is a field not shared, and the form says so by having nothing to say about it.\n\nPhone is a number plus a label; Add another phone gives a second row, two at most. When both are filled the link goes; clearing a number drops the row.\n\nTITLE: kept as Edit your card. The page it opens from is Your contact card and the whole app says card for this thing (the Band row, the chip). Edit your contact would collide with Edit contact on a received one, and it is not a contact - it is what you hand out."
+    },
+    {
+      "id": "label-note",
+      "page": "page-2",
+      "x": 492,
+      "y": -200,
+      "w": 412,
+      "text": "Still open: the band carries two typed slots, Mobile and Work. Home and Other need either a mapping onto the Work slot or a small codec change. The simplest honest menu is Mobile and Work only."
+    },
+    {
+      "id": "new-note",
+      "page": "page-2",
+      "x": 984,
+      "y": -200,
+      "w": 904,
+      "text": "A brand-new card, from the Band page or from setup step 2. Save is grey until there is a name and a phone or email; nothing explains it.\n\nStep 2 of 2 is the app as it is today, drawn from the code, with only the one sentence changed: Handed over when you shake hands. Same sentence at the top of the first-time card."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

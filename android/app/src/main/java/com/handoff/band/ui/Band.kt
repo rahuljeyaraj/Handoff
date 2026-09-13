@@ -66,8 +66,20 @@ val LocalBand = staticCompositionLocalOf<BandConnection> {
     error("No BandConnection provided")
 }
 
-/** A one-shot message for the screen the wearer lands on, keyed by its time. */
-data class Notice(val at: Long, val text: String)
+/**
+ * A one-shot message for the screen the wearer lands on. [take] hands the
+ * text out once, and only while it is fresh: the screens underneath in the
+ * back stack see the same notice when they come back and must not repeat it.
+ */
+data class Notice(val at: Long, val text: String) {
+    private var shown = false
+
+    fun take(): String? {
+        if (shown || System.currentTimeMillis() - at > 60_000) return null
+        shown = true
+        return text
+    }
+}
 
 /**
  * What the customer-facing screens say about the band, derived once from the

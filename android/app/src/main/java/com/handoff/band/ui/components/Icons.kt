@@ -95,6 +95,26 @@ object HandoffIcons {
             "M12 9.6a2.4 2.4 0 1 0 0.001 0z")
     }
 
+    /** A handset — a phone number row on a card page. */
+    val Phone: ImageVector by lazy {
+        stroked("Phone", 1.75f,
+            "M6.5 3h3l1.5 4-2 1.5a11 11 0 0 0 6.5 6.5L17 13l4 1.5v3a2 2 0 0 1 -2.2 2A17 17 0 0 1 4 5.2 2 2 0 0 1 6 3z")
+    }
+
+    /** An envelope — the email row on a card page. */
+    val Mail: ImageVector by lazy {
+        stroked("Mail", 1.75f,
+            "M5.5 5h13a2.5 2.5 0 0 1 2.5 2.5v9a2.5 2.5 0 0 1 -2.5 2.5h-13a2.5 2.5 0 0 1 -2.5 -2.5v-9a2.5 2.5 0 0 1 2.5 -2.5z",
+            "M3.6 6.6l8.4 5.9 8.4-5.9")
+    }
+
+    /** A clock face: the card is saved here and waits for the band. */
+    val Clock: ImageVector by lazy {
+        stroked("Clock", 2.2f,
+            "M20.5 12a8.5 8.5 0 1 1 -17 0a8.5 8.5 0 0 1 17 0z",
+            "M12 7.5V12l3 2")
+    }
+
     /** A phone with a plus — the auto-save row. */
     val PhoneAdd: ImageVector by lazy {
         stroked("PhoneAdd", 1.75f,

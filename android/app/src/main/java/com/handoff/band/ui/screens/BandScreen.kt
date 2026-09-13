@@ -84,9 +84,7 @@ fun BandScreen(
 
     // Back from Save on the card editor: where the card is going.
     LaunchedEffect(cardSaved) {
-        if (cardSaved != null && System.currentTimeMillis() - cardSaved.at < 60_000) {
-            snackbar.showSnackbar(cardSaved.text)
-        }
+        cardSaved?.take()?.let { snackbar.showSnackbar(it) }
     }
 
     Scaffold(

@@ -137,9 +137,7 @@ fun ContactsScreen(
     // says whether the band has it yet (the status line's card glyph says
     // so afterwards).
     LaunchedEffect(cardSaved) {
-        if (cardSaved != null && System.currentTimeMillis() - cardSaved.at < 60_000) {
-            snackbar.showSnackbar(cardSaved.text)
-        }
+        cardSaved?.take()?.let { snackbar.showSnackbar(it) }
     }
 
     // Forget couldn't drop the OS bond by itself (review item 14) — point

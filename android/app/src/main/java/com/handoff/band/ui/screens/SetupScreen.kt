@@ -398,7 +398,7 @@ private fun StepTwo(name: String, onSetUpCard: () -> Unit, onSkip: () -> Unit, m
             Text("Your contact card", style = MaterialTheme.typography.titleLarge,
                  textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
-            Text("The band hands it over when you shake hands.",
+            Text("Handed over when you shake hands.",
                  style = MaterialTheme.typography.bodyMedium,
                  color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(Modifier.weight(1f))

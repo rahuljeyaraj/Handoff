@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -107,6 +109,65 @@ fun SettingsRow(
         if (chevron) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
                  tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+/**
+ * The top of a card page, a received contact's or your own: a large initials
+ * avatar, the name, the role line ("Hardware lead · Handoff" — the one place
+ * organisation and title appear), and [below] for the one line that differs
+ * between the two pages.
+ */
+@Composable
+fun PersonHeader(
+    name: String,
+    title: String?,
+    org: String?,
+    modifier: Modifier = Modifier,
+    below: @Composable ColumnScope.() -> Unit = {},
+) {
+    Column(
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(72.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(initials(name), style = MaterialTheme.typography.titleLarge,
+                 color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Text(name, style = MaterialTheme.typography.titleLarge,
+             textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp))
+        val role = listOfNotNull(title?.takeIf { it.isNotBlank() }, org?.takeIf { it.isNotBlank() })
+            .joinToString(" · ")
+        if (role.isNotEmpty()) {
+            Text(role, style = MaterialTheme.typography.bodyMedium,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                 modifier = Modifier.padding(top = 2.dp))
+        }
+        below()
+    }
+}
+
+/**
+ * A value over its label, the read-only counterpart of a text field, with the
+ * artboards' glyph for the kind of value on the left.
+ */
+@Composable
+fun DetailRow(icon: ImageVector, value: String, label: String) {
+    Row(
+        Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+             modifier = Modifier.size(22.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(value, style = MaterialTheme.typography.bodyLarge)
+            Text(label, style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

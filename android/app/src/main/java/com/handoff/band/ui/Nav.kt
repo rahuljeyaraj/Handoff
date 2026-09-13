@@ -29,10 +29,13 @@ import com.handoff.band.contacts.Promote
 import com.handoff.band.data.HandoffDb
 import com.handoff.band.data.Handshake
 import com.handoff.band.data.Merge
+import com.handoff.band.data.OwnCard
 import com.handoff.band.data.Prefs
 import com.handoff.band.ui.screens.AdvancedScreen
 import com.handoff.band.ui.screens.BandScreen
-import com.handoff.band.ui.screens.CardScreen
+import com.handoff.band.ui.screens.CardEditScreen
+import com.handoff.band.ui.screens.CardOnBand
+import com.handoff.band.ui.screens.CardViewScreen
 import com.handoff.band.ui.screens.ContactDetailScreen
 import com.handoff.band.ui.screens.ContactEditScreen
 import com.handoff.band.ui.screens.ContactsScreen
@@ -50,6 +53,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val BAND = "band"
     const val CARD = "card"
+    const val CARD_EDIT = "card/edit"
     const val ADVANCED = "advanced"
     const val SETUP = "setup"
     const val CONTACT = "contact/{id}"
@@ -88,6 +92,15 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     // Set by Save on the card editor: the save itself is silent and local,
     // so the screen it pops back to says where the card is going.
     var cardSaved by remember { mutableStateOf<Notice?>(null) }
+    fun saveCard(card: OwnCard) {
+        prefs.setOwnCard(card)     // the service pushes it (§7)
+        cardSaved = Notice(
+            System.currentTimeMillis(),
+            if (view.connection == BandView.Connection.CONNECTED)
+                "Saved — writing it to your band"
+            else "Saved — it'll be written to the band once it connects",
+        )
+    }
 
     // Set once Forget can't drop the OS bond itself (review item 14) — a
     // one-shot event for whichever screen the wearer lands back on.
@@ -352,23 +365,41 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
             )
         }
 
+        // Your contact card: the saved card read-only, or the editor when
+        // there is none yet. Both deletes pop to whatever is underneath
+        // (Band, or home from setup); the card is cleared after the pop so
+        // this destination never flashes the empty editor on the way out.
         composable(Routes.CARD) {
-            CardScreen(
+            val card = ownCard
+            if (card == null) {
+                CardEditScreen(
+                    initial = null,
+                    onSave = { saveCard(it); nav.popBackStack() },
+                    onDelete = {},
+                    onBack = { nav.popBackStack() },
+                )
+            } else {
+                val pushed by prefs.pushedCard.collectAsState()
+                CardViewScreen(
+                    card = card,
+                    onBand = CardOnBand.of(card, pushed, view.cardOnBand),
+                    bandName = view.name,
+                    cardSaved = cardSaved,
+                    onEdit = { nav.navigate(Routes.CARD_EDIT) },
+                    onDelete = { nav.popBackStack(); prefs.setOwnCard(null) },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+        }
+
+        composable(Routes.CARD_EDIT) {
+            CardEditScreen(
                 initial = ownCard,
-                onSave = { card ->
-                    prefs.setOwnCard(card)     // the service pushes it (§7)
-                    cardSaved = Notice(
-                        System.currentTimeMillis(),
-                        if (view.connection == BandView.Connection.CONNECTED)
-                            "Saved — writing it to your band"
-                        else "Saved — it'll be written to the band once it connects",
-                    )
-                    nav.popBackStack()
+                onSave = { saveCard(it); nav.popBackStack() },
+                onDelete = {
+                    nav.popBackStack(Routes.CARD, inclusive = true)
+                    prefs.setOwnCard(null)
                 },
-                // Stays on the editor rather than popping back (review O2):
-                // the empty form is its own confirmation, and every route
-                // here is one tap away regardless.
-                onRemove = { prefs.setOwnCard(null) },
                 onBack = { nav.popBackStack() },
             )
         }

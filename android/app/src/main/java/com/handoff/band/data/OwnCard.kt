@@ -7,10 +7,11 @@ import com.handoff.band.vcard.VCard
  * §4a). Persisted locally so it can be pushed to the band again after a
  * reconnect or an erase, and so the app can say whose card it is.
  *
- * Every field is editable text; the `send*` flags are the per-field toggles.
- * The name is always sent. A card is only worth putting on a band if it
- * gives the recipient a way to reach somebody, so [complete] demands at
- * least one of mobile or email switched on and non-blank.
+ * Every field is editable text and every non-blank field is sent: a field
+ * you would rather not share is a field you leave empty, so there are no
+ * per-field switches. A card is only worth putting on a band if it gives
+ * the recipient a way to reach somebody, so [complete] demands a phone or
+ * an email.
  */
 data class OwnCard(
     val name: String = "",
@@ -19,41 +20,38 @@ data class OwnCard(
     val email: String = "",
     val org: String = "",
     val title: String = "",
-    val sendMobile: Boolean = true,
-    val sendWork: Boolean = true,
-    val sendEmail: Boolean = true,
-    val sendOrg: Boolean = true,
-    val sendTitle: Boolean = true,
 ) {
-    val mobileShared: Boolean get() = sendMobile && mobile.isNotBlank()
-    val emailShared: Boolean get() = sendEmail && email.isNotBlank()
-
     /** Name plus at least one way to be reached. */
-    val complete: Boolean get() = name.isNotBlank() && (mobileShared || emailShared)
+    val complete: Boolean
+        get() = name.isNotBlank() && (mobile.isNotBlank() || work.isNotBlank() || email.isNotBlank())
 
     /** The exact bytes that go to `my_vcard`. */
     fun vcard(): String = VCard.build(
         fullName = name.trim(),
         structuredName = name.trim().split(' ').takeIf { it.size >= 2 }
             ?.let { "${it.last()};${it.dropLast(1).joinToString(" ")};;;" },
-        mobile = mobile.takeIf { sendMobile },
-        work = work.takeIf { sendWork },
-        email = email.takeIf { sendEmail },
-        org = org.takeIf { sendOrg },
-        title = title.takeIf { sendTitle },
+        mobile = mobile,
+        work = work,
+        email = email,
+        org = org,
+        title = title,
     )
 
-    /** A flat form for storage and for surviving rotation: six strings, five flags. */
-    fun toList(): List<Any> = listOf(name, mobile, work, email, org, title,
-                                     sendMobile, sendWork, sendEmail, sendOrg, sendTitle)
+    /**
+     * Identifies this card's bytes. The band reports whether it holds a card
+     * but never which, so the service remembers the hash of the last one it
+     * wrote, and the card page compares against the same value.
+     */
+    val hash: String get() = vcard().hashCode().toString(16)
+
+    /** A flat form for storage and for surviving rotation: six strings. */
+    fun toList(): List<String> = listOf(name, mobile, work, email, org, title)
 
     companion object {
         fun fromList(l: List<Any?>): OwnCard? = runCatching {
             OwnCard(
                 name = l[0] as String, mobile = l[1] as String, work = l[2] as String,
                 email = l[3] as String, org = l[4] as String, title = l[5] as String,
-                sendMobile = l[6] as Boolean, sendWork = l[7] as Boolean,
-                sendEmail = l[8] as Boolean, sendOrg = l[9] as Boolean, sendTitle = l[10] as Boolean,
             )
         }.getOrNull()
     }

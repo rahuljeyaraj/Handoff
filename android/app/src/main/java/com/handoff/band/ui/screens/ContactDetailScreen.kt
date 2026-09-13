@@ -2,7 +2,6 @@ package com.handoff.band.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,9 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -41,11 +38,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.handoff.band.contacts.PhoneFormat
 import com.handoff.band.data.Handshake
-import com.handoff.band.ui.components.initials
+import com.handoff.band.ui.components.DetailRow
+import com.handoff.band.ui.components.HandoffIcons
+import com.handoff.band.ui.components.PersonHeader
 import com.handoff.band.ui.theme.semantic
 import java.text.DateFormat
 import java.text.SimpleDateFormat
@@ -97,7 +95,12 @@ fun ContactDetailScreen(
     ) { padding ->
         val context = LocalContext.current
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
-            Header(contact)
+            PersonHeader(contact.displayName, contact.title, contact.org) {
+                Text(metLabel(contact.receivedAt, contact.addedByHand),
+                     style = MaterialTheme.typography.bodySmall,
+                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                     modifier = Modifier.padding(top = 8.dp))
+            }
 
             if (duplicates.isNotEmpty()) {
                 DuplicateBanner(contact, duplicates.first(), onMerge = { onMerge(duplicates.first()) })
@@ -105,10 +108,10 @@ fun ContactDetailScreen(
 
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
-            contact.mobile?.let { FieldRow(PhoneFormat.format(context, it), "Mobile") }
-            contact.work?.let { FieldRow(PhoneFormat.format(context, it), "Work") }
-            contact.email?.let { FieldRow(it, "Email") }
-            contact.org?.let { FieldRow(it, "Organisation") }
+            // Organisation is in the header's role line, so no row for it.
+            contact.mobile?.let { DetailRow(HandoffIcons.Phone, PhoneFormat.format(context, it), "Mobile") }
+            contact.work?.let { DetailRow(HandoffIcons.Phone, PhoneFormat.format(context, it), "Work") }
+            contact.email?.let { DetailRow(HandoffIcons.Mail, it, "Email") }
 
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
@@ -155,45 +158,6 @@ fun ContactDetailScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
-    }
-}
-
-@Composable
-private fun Header(h: Handshake) {
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(72.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(initials(h.displayName), style = MaterialTheme.typography.titleLarge,
-                 color = MaterialTheme.colorScheme.onPrimaryContainer)
-        }
-        Text(h.displayName, style = MaterialTheme.typography.titleLarge,
-             textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp))
-        val role = listOfNotNull(h.title, h.org).joinToString(" · ")
-        if (role.isNotEmpty()) {
-            Text(role, style = MaterialTheme.typography.bodyMedium,
-                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
-                 modifier = Modifier.padding(top = 2.dp))
-        }
-        Text(metLabel(h.receivedAt, h.addedByHand), style = MaterialTheme.typography.bodySmall,
-             color = MaterialTheme.colorScheme.onSurfaceVariant,
-             modifier = Modifier.padding(top = 8.dp))
-    }
-}
-
-@Composable
-private fun FieldRow(value: String, label: String) {
-    Column(
-        Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(value, style = MaterialTheme.typography.bodyLarge)
-        Text(label, style = MaterialTheme.typography.bodySmall,
-             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
