@@ -416,8 +416,10 @@ way the card already is:
    itself is full at 20 bytes — so the switch in the app shows the band's
    truth, not the phone's memory. The band defaults to on.
 
-2. **Received handshakes are queued on the band until the phone is back.** A
-   card that arrives while the phone is disconnected must not be lost. That
+2. **Received handshakes are queued on the band until the phone is back.**
+   *Future improvement only — not planned for this round or the next;
+   recorded so the idea and its sizing are not lost.* A card that arrives
+   while the phone is disconnected must not be lost. That
    is a second flash area — a queue of compact records, drained over
    `rx_vcard` on connect, each dropped only when the phone acknowledges it
    (a new `BLE_CTRL_ACK_RX` opcode with the record's index). Sizing: a compact
@@ -427,9 +429,8 @@ way the card already is:
    copes with replays — dedup by key makes a re-delivered card a merge, not a
    duplicate. No real receive path exists until M12, but the fake-card path
    can exercise the queue now: arm a fake card while disconnected, connect,
-   and it arrives — which is a demo in itself. This belongs in the firmware
-   plan as an M12 prerequisite, not in the app's next round; recorded here so
-   it is not lost.
+   and it arrives — which is a demo in itself. Not scheduled; a future
+   improvement to weigh when M12 is planned.
 
 **The tick.** The user asks whether a bare green tick beside a time reads as
 "saved to your phone". Honest answer: no — a tick alone says "done" or
@@ -441,3 +442,52 @@ already carries name, organisation, contact and time, and "is it in my phone"
 is a question asked on the detail screen, which keeps its "Saved to your
 phone" line and gets the one-query refresh. Recommendation: (b).
 **Decided:** (b).
+
+---
+
+## Round 2 — the agreed plan
+
+Agreed 13 Sep 2026, to be built in a fresh session. **Nothing below has been
+started; the working tree is clean at this commit.** Commit boundaries, in
+order; each builds on its own.
+
+App only:
+
+1. **Home without a Band page for the unpaired case.** The status line
+   becomes a *Pair a band* button when unpaired; the unpaired Band screen is
+   deleted; Settings loses *Your card*, *Band* and the auto-save row and
+   gains a *Vibrate* row (switch wired in commit 8). Items 10, 11, 12.
+2. **Setup is the viewfinder.** Portrait, an embedded `BarcodeView` on the
+   page itself, CAMERA asked for by us; "Switch on and scan the QR code" over
+   a diagram of the band's underside; step 2 copy per A and C. Items 1, 2,
+   4, 13.
+3. **Selection mode.** Long press → checkboxes and a count, batch delete
+   only; merge stays on the detail screen's duplicate banner; the list tick
+   is removed; the detail screen's "Saved to your phone" refreshes with one
+   query on open (store the Insert result's contact id). Items 7, 16, 17.
+4. **A–Z letter headers, manual add, "Added today".** Letter groups with
+   "#"; a FAB opening the editor on an empty row; a `source` column (schema
+   v3, a real migration as before); "Added" versus "Met"; "card as received"
+   removed from the detail overflow. Items 8, 9.
+5. **Phone-number formatting.** `PhoneNumberUtils.formatNumber` on prefill,
+   save and display in both editors. Item 5.
+6. **Card editor delete.** One *Delete my contact card* with a bin (and a
+   bin on *Delete this contact*), erases on the band through the existing
+   sync, leaves the page. Item 6.
+7. **Not found, and Forget that forgets.** 15 s timer → "Handoff band 7A3C
+   not found" on the status line, a snackbar, and the service notification;
+   Forget also drops the OS bond via `removeBond()` by reflection with a
+   fallback pointing at Bluetooth settings. Items 14, 15, with item 14's
+   bench question checked on the desk.
+
+Firmware and app together:
+
+8. **"Handoff band 7A3C" and the vibrate setting.** Advertised name to
+   "Handoff band 7A3C" (name buffer 18, scan response 19 bytes) with
+   `BandCode.name` matching; `BLE_CTRL_HAPTIC` opcode; the flag persisted in
+   the store (format bump) and reported in `status` flags bit `0x20`; the
+   Settings switch reads that bit; the fake-card path buzzes so the opcode
+   is provable. Items 3, 11, O5. After this commit the existing pairing shows
+   "Handoff band" until it is forgotten and re-paired.
+
+Not in this round: the received-handshake queue (future improvement, above).
