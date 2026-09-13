@@ -85,6 +85,10 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     // "Rohan Iyer", or "Not set". Never a field count (§1, copy discipline).
     val cardSummary = ownCard?.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Not set"
 
+    // Set by Save on the card editor: the save itself is silent and local,
+    // so the screen it pops back to says where the card is going.
+    var cardSaved by remember { mutableStateOf<Notice?>(null) }
+
     // Set once Forget can't drop the OS bond itself (review item 14) — a
     // one-shot event for whichever screen the wearer lands back on.
     var forgetFailedAt by remember { mutableStateOf<Long?>(null) }
@@ -198,18 +202,17 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
             ContactsScreen(
                 contacts = contacts,
                 band = view,
-                cardSet = cardSet,
                 sort = sort,
                 onSort = prefs::setSort,
                 incompleteAt = state?.lastIncompleteAt,
                 notFoundAt = state?.notFoundAt,
                 forgetFailedAt = forgetFailedAt,
+                cardSaved = cardSaved,
                 onContact = { nav.navigate(Routes.contact(it.id)) },
                 onDeleteMany = { ids -> scope.launch { db.handshakes().deleteMany(ids) } },
                 onAddContact = { nav.navigate(Routes.CONTACT_NEW) },
                 onBand = { nav.navigate(Routes.BAND) },
                 onPair = { nav.navigate(Routes.SETUP) },
-                onSetUpCard = { nav.navigate(Routes.CARD) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },
             )
         }
@@ -324,9 +327,11 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
             }
             BandScreen(
                 band = view,
+                cardSet = cardSet,
                 cardSummary = cardSummary,
                 firmware = view.firmware,
                 notFoundAt = state?.notFoundAt,
+                cardSaved = cardSaved,
                 onDisconnect = {
                     if (bandOff) {
                         BandService.reconnect(context)
@@ -352,6 +357,12 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 initial = ownCard,
                 onSave = { card ->
                     prefs.setOwnCard(card)     // the service pushes it (§7)
+                    cardSaved = Notice(
+                        System.currentTimeMillis(),
+                        if (view.connection == BandView.Connection.CONNECTED)
+                            "Saved — writing it to your band"
+                        else "Saved — it'll be written to the band once it connects",
+                    )
                     nav.popBackStack()
                 },
                 // Stays on the editor rather than popping back (review O2):

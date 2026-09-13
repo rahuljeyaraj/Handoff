@@ -97,7 +97,7 @@ fun ConnectionDot(connected: Boolean, modifier: Modifier = Modifier) {
 }
 
 /**
- * Green ID card when the band holds your card; amber with a slash when it
+ * Green ID card when the band holds your card; red with a slash when it
  * does not. Grey card while nothing is known yet.
  */
 @Composable
@@ -106,7 +106,7 @@ fun CardOnBandIcon(onBand: Boolean?, modifier: Modifier = Modifier) {
         true -> Icon(HandoffIcons.Card, contentDescription = "Your card is on the band",
                      tint = MaterialTheme.semantic.ok, modifier = modifier.size(21.dp))
         false -> Icon(HandoffIcons.CardOff, contentDescription = "No card on the band",
-                      tint = MaterialTheme.semantic.warn, modifier = modifier.size(21.dp))
+                      tint = MaterialTheme.colorScheme.error, modifier = modifier.size(21.dp))
         null -> Icon(HandoffIcons.Card, contentDescription = null,
                      tint = MaterialTheme.colorScheme.outline, modifier = modifier.size(21.dp))
     }

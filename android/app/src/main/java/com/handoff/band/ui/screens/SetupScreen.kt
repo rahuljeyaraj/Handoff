@@ -28,9 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -65,6 +63,7 @@ import com.google.zxing.BarcodeFormat
 import com.handoff.band.ble.BandCode
 import com.handoff.band.ui.PairStep
 import com.handoff.band.ui.components.HandoffIcons
+import com.handoff.band.ui.components.HandoffSnackbarHost
 import com.handoff.band.ui.theme.semantic
 import com.journeyapps.barcodescanner.BarcodeCallback
 import com.journeyapps.barcodescanner.BarcodeResult
@@ -123,12 +122,7 @@ fun SetupScreen(
         }
     }
 
-    // Material's 4 dp snackbar corner looked blocky next to the app's 16 dp
-    // rows and its pills; this is the row's radius. Text stays start-aligned
-    // with the action at the end, as Material lays a snackbar out.
-    Scaffold(snackbarHost = {
-        SnackbarHost(snackbar) { data -> Snackbar(data, shape = RoundedCornerShape(16.dp)) }
-    }) { padding ->
+    Scaffold(snackbarHost = { HandoffSnackbarHost(snackbar) }) { padding ->
         when (step) {
             is PairStep.Connected -> StepTwo(step.name, onSetUpCard, onSkip, Modifier.padding(padding))
             else -> StepOne(step, snackbar, onCode, Modifier.padding(padding))

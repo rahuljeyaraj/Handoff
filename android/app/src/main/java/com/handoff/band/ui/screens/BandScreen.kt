@@ -15,11 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,9 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.handoff.band.ui.BandView
+import com.handoff.band.ui.Notice
 import com.handoff.band.ui.components.BatteryIcon
 import com.handoff.band.ui.components.ConnectionDot
 import com.handoff.band.ui.components.HandoffIcons
+import com.handoff.band.ui.components.HandoffSnackbarHost
 import com.handoff.band.ui.components.SettingsRow
 
 /**
@@ -61,9 +61,11 @@ import com.handoff.band.ui.components.SettingsRow
 @Composable
 fun BandScreen(
     band: BandView,
+    cardSet: Boolean,
     cardSummary: String,
     firmware: String?,
     notFoundAt: Long?,
+    cardSaved: Notice?,
     onDisconnect: () -> Unit,
     onForget: () -> Unit,
     onCard: () -> Unit,
@@ -80,8 +82,15 @@ fun BandScreen(
         }
     }
 
+    // Back from Save on the card editor: where the card is going.
+    LaunchedEffect(cardSaved) {
+        if (cardSaved != null && System.currentTimeMillis() - cardSaved.at < 60_000) {
+            snackbar.showSnackbar(cardSaved.text)
+        }
+    }
+
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { HandoffSnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Band") },
@@ -98,11 +107,18 @@ fun BandScreen(
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
             Hero(band)
 
-            SettingsRow("Battery", subtitle = band.battery.label, chevron = false,
-                        icon = null, trailing = { BatteryIcon(band.battery) })
-            SettingsRow("Firmware", subtitle = firmware ?: "Not reported", chevron = false)
-            SettingsRow("Your contact card", icon = Icons.Filled.Person,
+            // The card first: it is the one row here you act on, and its
+            // glyph is the home page's — the slashed card, in red, until
+            // one is set.
+            SettingsRow("Your contact card",
+                        icon = if (cardSet) HandoffIcons.Card else HandoffIcons.CardOff,
+                        iconTint = if (cardSet) MaterialTheme.colorScheme.onSurfaceVariant
+                                   else MaterialTheme.colorScheme.error,
                         subtitle = cardSummary, onClick = onCard)
+            SettingsRow("Battery", subtitle = band.battery.label, chevron = false,
+                        leading = { BatteryIcon(band.battery) })
+            SettingsRow("Firmware", icon = HandoffIcons.Chip,
+                        subtitle = firmware ?: "Not reported", chevron = false)
 
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(24.dp))

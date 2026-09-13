@@ -66,6 +66,9 @@ val LocalBand = staticCompositionLocalOf<BandConnection> {
     error("No BandConnection provided")
 }
 
+/** A one-shot message for the screen the wearer lands on, keyed by its time. */
+data class Notice(val at: Long, val text: String)
+
 /**
  * What the customer-facing screens say about the band, derived once from the
  * service's state. Four facts, all readable without a tap (design §1): name,

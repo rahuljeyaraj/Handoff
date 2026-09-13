@@ -147,11 +147,17 @@ fun CardScreen(
                 Text("Fill from a phone contact")
             }
 
-            Text("Choose what you share.", style = MaterialTheme.typography.bodyMedium,
+            // The same sentence as setup's step 2, since not everyone
+            // arrives here through setup; then what the switches are for.
+            Text("The band hands this over when you shake hands. " +
+                 "Switch off anything you'd rather not share.",
+                 style = MaterialTheme.typography.bodyMedium,
                  color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-            OutlinedTextField(card.name, { card = card.copy(name = it) }, label = { Text("Name") },
-                              singleLine = true, modifier = Modifier.fillMaxWidth())
+            // The name is always sent, and the switch says so in the same
+            // language as the rows below: on, and not yours to turn off.
+            ToggledField("Name", card.name, { card = card.copy(name = it) },
+                         send = true, enabled = false) {}
             ToggledField("Mobile", card.mobile, { card = card.copy(mobile = it) },
                          send = card.sendMobile, enabled = !mobileLocked,
                          keyboard = KeyboardType.Phone) { card = card.copy(sendMobile = it) }

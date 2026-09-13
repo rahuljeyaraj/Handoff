@@ -118,6 +118,15 @@ object HandoffIcons {
             "M19.5 9v2M19.5 13v2M22 10.5v3")
     }
 
+    /** A chip with pins on four sides — the Firmware row. */
+    val Chip: ImageVector by lazy {
+        stroked("Chip", 1.6f,
+            "M8 6.5h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1 -1.5 1.5h-8a1.5 1.5 0 0 1 -1.5 -1.5v-8a1.5 1.5 0 0 1 1.5 -1.5z",
+            "M10 10h4v4h-4z",
+            "M9.5 6.5V3.5M14.5 6.5V3.5M9.5 20.5v-3M14.5 20.5v-3",
+            "M6.5 9.5h-3M6.5 14.5h-3M20.5 9.5h-3M20.5 14.5h-3")
+    }
+
     /**
      * The wordmark, traced from `design/brand/handoff-wordmark.svg` (Consolas
      * Bold outlines, not a font reference) so it renders identically with no

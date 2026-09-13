@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,16 +64,20 @@ fun DateHeader(text: String, modifier: Modifier = Modifier) {
 
 /**
  * Icon, title, optional subtitle, optional trailing slot. A chevron when the
- * row navigates and nothing was put in the slot.
+ * row navigates and nothing was put in the slot. [leading] takes the icon's
+ * place for the rows whose glyph is drawn, not a vector — the battery — and
+ * is centred in the same 24 dp cell so the titles line up.
  */
 @Composable
 fun SettingsRow(
     title: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     subtitle: String? = null,
     onClick: (() -> Unit)? = null,
     chevron: Boolean = onClick != null,
+    leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
@@ -84,9 +89,10 @@ fun SettingsRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null,
-                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        if (leading != null) {
+            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { leading() }
+        } else if (icon != null) {
+            Icon(icon, contentDescription = null, tint = iconTint,
                  modifier = Modifier.size(24.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
