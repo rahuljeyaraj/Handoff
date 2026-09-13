@@ -379,7 +379,7 @@ the events that would trigger the buzz — a real shared or received card —
 do not exist until M12's body link; for the demo, the fake-card path can
 buzz, and that is what proves the opcode.
 
-**Answer:** the band persists it in flash, like the card. And a wider point: a handshake received while the phone is out of reach must be persisted on the band until the phone is back. Both are firmware work — see §Carried forward.
+**Answer (confirmed):** the band persists it in flash, like the card. And a wider point: a handshake received while the phone is out of reach must be persisted on the band until the phone is back. Both are firmware work — see §Carried forward.
 
 **O6. The home list's "saved" tick.** Recommendation: keep it, refreshed by
 one query when the list appears — `Contacts._ID IN (…)` over the stored
@@ -388,7 +388,7 @@ Contacts only while the app is in the foreground. That is negligible load and
 also feeds the detail screen. If that still feels like too much machinery,
 drop the tick.
 
-**Answer:** keep it with the refresh — but the user doubts a bare tick is understood. See the note under §Carried forward, "the tick".
+**Answer (final):** (b) — no marker in the list. The detail screen keeps "Saved to your phone" with the one-query refresh. See §Carried forward, "the tick", for why.
 
 **O7. Step 1 heading grammar.** "Switch on and scan QR code" is missing an
 article. Recommendation: "Switch on and scan the QR code".
@@ -440,3 +440,4 @@ least says "in your phone"; (b) no marker in the list at all — the line
 already carries name, organisation, contact and time, and "is it in my phone"
 is a question asked on the detail screen, which keeps its "Saved to your
 phone" line and gets the one-query refresh. Recommendation: (b).
+**Decided:** (b).
