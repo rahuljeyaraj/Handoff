@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,14 +63,25 @@ fun BandScreen(
     band: BandView,
     cardSummary: String,
     firmware: String?,
+    notFoundAt: Long?,
     onDisconnect: () -> Unit,
     onForget: () -> Unit,
     onCard: () -> Unit,
     onBack: () -> Unit,
 ) {
     var confirmForget by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+
+    // One-shot, like the home screen's incomplete-handshake snackbar: shown
+    // once per timestamp, not on every recomposition (review item 15, O8).
+    LaunchedEffect(notFoundAt) {
+        if (notFoundAt != null && System.currentTimeMillis() - notFoundAt < 60_000) {
+            snackbar.showSnackbar(band.statusLabel)
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Band") },
@@ -153,8 +167,14 @@ private fun Hero(band: BandView) {
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             ConnectionDot(band.connection == BandView.Connection.CONNECTED)
-            Text(band.connection.label, style = MaterialTheme.typography.labelLarge,
+            Text(band.statusLabel, style = MaterialTheme.typography.labelLarge,
                  color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        if (band.connection == BandView.Connection.NOT_FOUND) {
+            Text("Switch it on and keep the phone close.",
+                 style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                 modifier = Modifier.padding(top = 10.dp))
         }
     }
 }

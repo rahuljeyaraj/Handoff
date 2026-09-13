@@ -16,6 +16,8 @@ import com.handoff.band.data.Merge
 import com.handoff.band.data.Prefs
 import com.handoff.band.ui.MainActivity
 import com.handoff.band.vcard.VCard
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -49,6 +51,13 @@ class BandService : LifecycleService(), BandClient.Listener {
         /** When a handshake last arrived without a phone or email, and what it said. */
         val lastIncompleteAt: Long? = null,
         val lastIncompleteText: String? = null,
+        /**
+         * Set 15 s after a connect attempt starts with no link yet (review
+         * item 15, O8); cleared the moment the link comes up. Doubles as the
+         * one-shot event timestamp for the snackbar on whichever screen is
+         * open — see ContactsScreen/BandScreen's LaunchedEffect on it.
+         */
+        val notFoundAt: Long? = null,
     )
 
     inner class LocalBinder : Binder() {
@@ -88,6 +97,8 @@ class BandService : LifecycleService(), BandClient.Listener {
         if (intent?.action == ACTION_STOP) {
             client?.close()
             client = null
+            notFoundJob?.cancel()
+            notFoundJob = null
             _state.value = State()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -111,6 +122,7 @@ class BandService : LifecycleService(), BandClient.Listener {
             client?.close()
             _state.value = State(address = address)
             client = BandClient(this, address, this).also { it.connect() }
+            armNotFoundWatch()
         }
 
         // STICKY, because the whole point is surviving the phone going to
@@ -171,9 +183,14 @@ class BandService : LifecycleService(), BandClient.Listener {
 
     override fun onConnectionChanged(connected: Boolean, ready: Boolean) {
         _state.value = _state.value.copy(connected = connected, ready = ready)
-        if (!connected) {
+        if (connected) {
+            clearNotFoundWatch()
+        } else {
             syncInFlight = false
             _state.value = _state.value.copy(status = null)
+            // autoConnect keeps the controller retrying on its own (BandClient's
+            // STATE_DISCONNECTED comment) — this is that retry starting over.
+            armNotFoundWatch()
         }
         updateNotification(
             when {
@@ -292,6 +309,29 @@ class BandService : LifecycleService(), BandClient.Listener {
         _state.value = _state.value.copy(lastError = message)
     }
 
+    // ---- the not-found timer (review item 15, O8) -------------------------
+
+    private var notFoundJob: Job? = null
+
+    /** (Re)start the 15 s countdown to "not found" for a fresh connect attempt. */
+    private fun armNotFoundWatch() {
+        notFoundJob?.cancel()
+        if (_state.value.notFoundAt != null) _state.value = _state.value.copy(notFoundAt = null)
+        notFoundJob = lifecycleScope.launch {
+            delay(NOT_FOUND_TIMEOUT_MS)
+            _state.value = _state.value.copy(notFoundAt = System.currentTimeMillis())
+            updateNotification(notFoundText())
+        }
+    }
+
+    private fun clearNotFoundWatch() {
+        notFoundJob?.cancel()
+        notFoundJob = null
+        if (_state.value.notFoundAt != null) _state.value = _state.value.copy(notFoundAt = null)
+    }
+
+    private fun notFoundText(): String = "${Pairing.storedName(this) ?: "Handoff band"} not found"
+
     // ---- notifications ---------------------------------------------------
 
     private fun createChannel() {
@@ -336,6 +376,7 @@ class BandService : LifecycleService(), BandClient.Listener {
     companion object {
         private const val CHANNEL = "handoff.band"
         private const val NOTIFICATION_ID = 1
+        private const val NOT_FOUND_TIMEOUT_MS = 15_000L
         const val EXTRA_ADDRESS = "address"
 
         fun start(context: Context, address: String? = null) {
@@ -364,14 +405,21 @@ class BandService : LifecycleService(), BandClient.Listener {
 
         /**
          * Forget this band: the stored address, the CompanionDeviceManager
-         * association, and the service. The OS bond is left to Android; the
-         * next pairing with the same band reuses it without a dialog.
+         * association, the OS bond, and the service (review item 14) — a
+         * band left bonded still showed up as paired in Bluetooth settings
+         * after this ran.
+         *
+         * @return false when the OS bond could not be removed, so the caller
+         * can point the wearer at Bluetooth settings by hand.
          */
-        fun forget(context: Context) {
+        fun forget(context: Context): Boolean {
+            val address = Pairing.storedAddress(context)
             stop(context)
-            Pairing.storedAddress(context)?.let { Pairing.disassociate(context, it) }
+            val bondRemoved = address?.let { Pairing.removeBond(context, it) } ?: true
+            address?.let { Pairing.disassociate(context, it) }
             Pairing.forget(context)
             Prefs.get(context).setBandOff(false)
+            return bondRemoved
         }
     }
 }

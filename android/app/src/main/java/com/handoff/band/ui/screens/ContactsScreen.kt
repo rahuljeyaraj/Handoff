@@ -1,5 +1,7 @@
 package com.handoff.band.ui.screens
 
+import android.content.Intent
+import android.provider.Settings as SystemSettings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -33,6 +35,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -91,6 +95,8 @@ fun ContactsScreen(
     sort: Prefs.Sort,
     onSort: (Prefs.Sort) -> Unit,
     incompleteAt: Long?,
+    notFoundAt: Long?,
+    forgetFailedAt: Long?,
     onContact: (Handshake) -> Unit,
     onDeleteMany: (Set<Long>) -> Unit,
     onAddContact: () -> Unit,
@@ -99,6 +105,7 @@ fun ContactsScreen(
     onSetUpCard: () -> Unit,
     onSettings: () -> Unit,
 ) {
+    val context = LocalContext.current
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var selection by remember { mutableStateOf(emptySet<Long>()) }
@@ -118,6 +125,28 @@ fun ContactsScreen(
     LaunchedEffect(incompleteAt) {
         if (incompleteAt != null && System.currentTimeMillis() - incompleteAt < 60_000) {
             snackbar.showSnackbar("Handshake didn't complete — try again")
+        }
+    }
+
+    // "Looking for the band" that never gives up, said out loud (review item
+    // 15, O8) — one-shot per timestamp, same shape as the effect above.
+    LaunchedEffect(notFoundAt) {
+        if (notFoundAt != null && System.currentTimeMillis() - notFoundAt < 60_000) {
+            snackbar.showSnackbar(band.statusLabel)
+        }
+    }
+
+    // Forget couldn't drop the OS bond by itself (review item 14) — point
+    // the wearer at Bluetooth settings rather than leave it silently stale.
+    LaunchedEffect(forgetFailedAt) {
+        if (forgetFailedAt != null && System.currentTimeMillis() - forgetFailedAt < 60_000) {
+            val result = snackbar.showSnackbar(
+                message = "Couldn't remove the Bluetooth pairing",
+                actionLabel = "Settings",
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                context.startActivity(Intent(SystemSettings.ACTION_BLUETOOTH_SETTINGS))
+            }
         }
     }
 

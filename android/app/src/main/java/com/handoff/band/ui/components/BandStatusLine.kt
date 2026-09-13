@@ -70,7 +70,7 @@ fun BandStatusLine(
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ConnectionDot(connected)
-                Text(band.connection.label, style = MaterialTheme.typography.bodySmall,
+                Text(band.statusLabel, style = MaterialTheme.typography.bodySmall,
                      color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

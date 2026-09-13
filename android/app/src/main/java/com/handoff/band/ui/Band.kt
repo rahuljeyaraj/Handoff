@@ -85,9 +85,15 @@ data class BandView(
         NOT_PAIRED("Not paired"),
         OFF("Disconnected"),
         WAITING("Looking for the band"),
+        /** Label unused — the status line interpolates the band's name (Copy G). */
+        NOT_FOUND("Not found"),
         CONNECTING("Connecting…"),
         CONNECTED("Connected"),
     }
+
+    /** The status line's second line (review item 15, Copy G). */
+    val statusLabel: String
+        get() = if (connection == Connection.NOT_FOUND) "$name not found" else connection.label
 
     companion object {
         /**
@@ -102,6 +108,7 @@ data class BandView(
                 off -> Connection.OFF
                 state?.ready == true -> Connection.CONNECTED
                 state?.connected == true -> Connection.CONNECTING
+                state?.notFoundAt != null -> Connection.NOT_FOUND
                 else -> Connection.WAITING
             }
             return BandView(

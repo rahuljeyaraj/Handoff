@@ -1,5 +1,6 @@
 package com.handoff.band.ble
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -89,6 +90,27 @@ object Pairing {
                 manager.disassociate(address)
             }
         }.onFailure { Log.w("HandoffPairing", "disassociate failed", it) }
+    }
+
+    /**
+     * Drop the OS bond itself (review item 14) — `disassociate` above only
+     * revokes this app's permission to hold the device; the pairing keys
+     * stay in the Bluetooth stack until this runs too, which is why "Forget"
+     * used to leave the band listed as paired in Bluetooth settings.
+     *
+     * `removeBond()` is a hidden API with no public equivalent, called by
+     * reflection; that is the whole reason this can fail; on failure the
+     * caller falls back to sending the wearer to Bluetooth settings by hand.
+     */
+    @SuppressLint("MissingPermission")
+    fun removeBond(context: Context, address: String): Boolean = runCatching {
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
+        val device = adapter.getRemoteDevice(address)
+        if (device.bondState == BluetoothDevice.BOND_NONE) return true
+        BluetoothDevice::class.java.getMethod("removeBond").invoke(device) as? Boolean ?: false
+    }.getOrElse {
+        Log.w("HandoffPairing", "removeBond failed", it)
+        false
     }
 
     /**

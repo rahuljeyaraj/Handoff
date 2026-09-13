@@ -79,6 +79,10 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     // "Rohan Iyer", or "Not set". Never a field count (§1, copy discipline).
     val cardSummary = ownCard?.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Not set"
 
+    // Set once Forget can't drop the OS bond itself (review item 14) — a
+    // one-shot event for whichever screen the wearer lands back on.
+    var forgetFailedAt by remember { mutableStateOf<Long?>(null) }
+
     // A CompanionDeviceManager chooser, shared by first-run setup and the
     // Band screen. The result is one band, remembered and connected to.
     val chooser = rememberLauncherForActivityResult(
@@ -130,6 +134,8 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 sort = sort,
                 onSort = prefs::setSort,
                 incompleteAt = state?.lastIncompleteAt,
+                notFoundAt = state?.notFoundAt,
+                forgetFailedAt = forgetFailedAt,
                 onContact = { nav.navigate(Routes.contact(it.id)) },
                 onDeleteMany = { ids -> scope.launch { db.handshakes().deleteMany(ids) } },
                 onAddContact = { nav.navigate(Routes.CONTACT_NEW) },
@@ -243,6 +249,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 band = view,
                 cardSummary = cardSummary,
                 firmware = view.firmware,
+                notFoundAt = state?.notFoundAt,
                 onDisconnect = {
                     if (bandOff) {
                         BandService.reconnect(context)
@@ -251,10 +258,14 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                         BandService.disconnect(context)
                     }
                 },
+                // Pops back to the list (review item 12): with the unpaired
+                // Band screen gone, there is nothing left here to show once
+                // the band is forgotten.
                 onForget = {
-                    BandService.forget(context)
+                    if (!BandService.forget(context)) forgetFailedAt = System.currentTimeMillis()
                     address = null
                     bandName = null
+                    nav.popBackStack()
                 },
                 onCard = { nav.navigate(Routes.CARD) },
                 onBack = { nav.popBackStack() },
