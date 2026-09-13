@@ -42,6 +42,14 @@
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!--
+      The setup page embeds the QR viewfinder itself now (review item 1)
+      rather than handing off to zxing's own CaptureActivity, so CAMERA is
+      ours to ask for.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
     <uses-feature android:name="android.software.companion_device_setup" android:required="true" />
 

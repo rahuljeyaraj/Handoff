@@ -108,4 +108,19 @@ object HandoffIcons {
             "M4.5 9v2M4.5 13v2M2 10.5v3",
             "M19.5 9v2M19.5 13v2M22 10.5v3")
     }
+
+    /**
+     * The band's underside, schematic: the curved body, the QR label, and the
+     * power switch beside it — setup step 1 (review item 13). A stand-in
+     * sketch, not traced from an artboard; swap for real photography of the
+     * label when one exists.
+     */
+    val BandUnderside: ImageVector by lazy {
+        stroked("BandUnderside", 1.5f,
+            "M8 7h8a5 5 0 0 1 5 5a5 5 0 0 1 -5 5h-8a5 5 0 0 1 -5 -5a5 5 0 0 1 5 -5z",
+            "M9 9.5h4v5h-4z",
+            "M10 10.5h0.01M11.5 10.5h0.01M10 12h0.01M13 10.5h0.01M10 13.5h0.01M11.5 13.5h0.01M13 13.5h0.01",
+            "M15.5 11h3a1 1 0 0 1 1 1v0a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v0a1 1 0 0 1 1 -1z",
+            "M16.3 12a0.7 0.7 0 1 0 0.001 0z")
+    }
 }

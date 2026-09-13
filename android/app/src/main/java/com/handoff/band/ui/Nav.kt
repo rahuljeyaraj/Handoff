@@ -35,8 +35,6 @@ import com.handoff.band.ui.screens.ContactEditScreen
 import com.handoff.band.ui.screens.ContactsScreen
 import com.handoff.band.ui.screens.SettingsScreen
 import com.handoff.band.ui.screens.SetupScreen
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 
 /**
@@ -106,20 +104,8 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
 
     NavHost(nav, startDestination = start) {
         composable(Routes.SETUP) {
-            // The label's content, or null when the scan was cancelled.
-            val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
-                BandCode.parse(result.contents)?.let { pair(it) }
-            }
             SetupScreen(
                 pairedName = if (address != null) (bandName ?: "Handoff band") else null,
-                onScan = {
-                    scanner.launch(ScanOptions().apply {
-                        setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                        setPrompt("")
-                        setBeepEnabled(false)
-                        setOrientationLocked(false)
-                    })
-                },
                 onCode = { pair(it) },
                 onSetUpCard = {
                     // Home underneath, the editor on top: back from the
