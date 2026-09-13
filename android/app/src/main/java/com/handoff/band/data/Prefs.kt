@@ -75,6 +75,19 @@ class Prefs private constructor(context: Context) {
         )
     }
 
+    /**
+     * A hash of the last card the band acknowledged. The band reports whether
+     * it holds a card but never which, so this is how the service tells "the
+     * card on the band is the current one" from "it has some card".
+     */
+    private val _pushedCard = MutableStateFlow(sp.getString(KEY_PUSHED, null))
+    val pushedCard: StateFlow<String?> = _pushedCard
+
+    fun setPushedCard(hash: String?) {
+        sp.edit { if (hash == null) remove(KEY_PUSHED) else putString(KEY_PUSHED, hash) }
+        _pushedCard.value = hash
+    }
+
     private val _sort = MutableStateFlow(
         sp.getString(KEY_SORT, null)?.let { runCatching { Sort.valueOf(it) }.getOrNull() }
             ?: Sort.NEWEST
@@ -92,6 +105,7 @@ class Prefs private constructor(context: Context) {
         private const val KEY_SORT = "sort"
         private const val KEY_BAND_OFF = "band_off"
         private const val KEY_OWN_CARD = "own_card"
+        private const val KEY_PUSHED = "pushed_card"
         private val CARD_STRINGS = listOf(".name", ".mobile", ".work", ".email", ".org", ".title")
         private val CARD_FLAGS = listOf(".send_mobile", ".send_work", ".send_email", ".send_org", ".send_title")
 

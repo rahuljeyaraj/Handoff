@@ -225,8 +225,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
             CardScreen(
                 initial = ownCard,
                 onSave = { card ->
-                    prefs.setOwnCard(card)
-                    band.service?.provision(card.vcard())
+                    prefs.setOwnCard(card)     // the service pushes it (§7)
                     nav.popBackStack()
                 },
                 onRemove = {

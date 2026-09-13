@@ -58,12 +58,25 @@ class BandService : LifecycleService(), BandClient.Listener {
     private val binder = LocalBinder()
     private var client: BandClient? = null
 
+    /** The card the wearer wants on the band, observed for the whole service life. */
+    private val prefs by lazy { Prefs.get(this) }
+
+    /** A push or an erase is on the wire; do not send another until it lands. */
+    private var syncInFlight = false
+
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
     override fun onBind(intent: Intent): IBinder {
         super.onBind(intent)
         return binder
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Whenever the local card changes - saved, edited, removed - the band
+        // should follow. The same sync runs on every status the band sends.
+        lifecycleScope.launch { prefs.ownCard.collect { sync() } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -113,7 +126,11 @@ class BandService : LifecycleService(), BandClient.Listener {
 
     // ---- things the UI asks for -----------------------------------------
 
-    fun provision(vcardText: String) = client?.provision(vcardText)
+    fun provision(vcardText: String) {
+        syncInFlight = true
+        pendingHash = vcardText.hashCode().toString(16)
+        client?.provision(vcardText)
+    }
 
     fun control(payload: ByteArray) = client?.control(payload)
 
@@ -154,6 +171,10 @@ class BandService : LifecycleService(), BandClient.Listener {
 
     override fun onConnectionChanged(connected: Boolean, ready: Boolean) {
         _state.value = _state.value.copy(connected = connected, ready = ready)
+        if (!connected) {
+            syncInFlight = false
+            _state.value = _state.value.copy(status = null)
+        }
         updateNotification(
             when {
                 ready -> "Connected"
@@ -207,12 +228,64 @@ class BandService : LifecycleService(), BandClient.Listener {
 
     override fun onStatus(status: BandStatus) {
         _state.value = _state.value.copy(status = status)
+        // A status after an erase reports provisioned=false; that is the
+        // acknowledgement, since CTRL_FORGET has no reply of its own.
+        if (syncInFlight && pendingErase && !status.provisioned) {
+            syncInFlight = false
+            pendingErase = false
+        }
+        sync()
     }
 
     override fun onProvisioned(ok: Boolean) {
+        syncInFlight = false
+        if (ok) prefs.setPushedCard(pendingHash)
+        pendingHash = null
         _state.value = _state.value.copy(
             lastError = if (ok) null else "Provisioning failed"
         )
+    }
+
+    // ---- keeping the band's card in step with the local one --------------
+
+    private var pendingHash: String? = null
+    private var pendingErase = false
+
+    /**
+     * Self-provision on connect, design decisions §7. The band's status says
+     * `provisioned` and a byte count but never what the card is, so the rule
+     * is: push when the local card changed since the last push that landed,
+     * or when the band reports no card at all. If the local card is gone and
+     * the band still holds one, erase it.
+     *
+     * Gated on the link being encrypted: `ble.c:249` silently drops FORGET
+     * on a plain link, and `my_vcard` needs the bond too. The status flag is
+     * what says so, which is why this runs from onStatus rather than firing
+     * the moment the link comes up.
+     */
+    private fun sync() {
+        val c = client ?: return
+        val s = _state.value
+        val status = s.status ?: return
+        if (!s.ready || !status.encrypted || syncInFlight) return
+
+        val local = prefs.ownCard.value?.takeIf { it.complete }?.vcard()
+        if (local == null) {
+            if (status.provisioned) {
+                syncInFlight = true
+                pendingErase = true
+                prefs.setPushedCard(null)
+                c.control(Gatt.forget())
+            }
+            return
+        }
+
+        val hash = local.hashCode().toString(16)
+        if (status.provisioned && hash == prefs.pushedCard.value) return
+
+        syncInFlight = true
+        pendingHash = hash
+        c.provision(local)
     }
 
     override fun onError(message: String) {

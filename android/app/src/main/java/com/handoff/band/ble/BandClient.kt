@@ -220,6 +220,12 @@ class BandClient(
         }
     }
 
+    private fun readStatus(): Boolean {
+        val g = gatt ?: return false
+        val ch = characteristic(Gatt.STATUS) ?: return false
+        return g.readCharacteristic(ch)
+    }
+
     private fun subscribe(uuid: java.util.UUID): Boolean {
         val g = gatt ?: return false
         val ch = g.getService(Gatt.SERVICE)?.getCharacteristic(uuid) ?: return false
@@ -289,6 +295,10 @@ class BandClient(
             val subscribeAll = {
                 queue { subscribe(Gatt.RX_VCARD) }
                 queue { subscribe(Gatt.STATUS) }
+                // A read as well as the subscription: status only notifies
+                // on change, and the service needs a baseline to decide
+                // whether the band already holds the wearer's card.
+                queue { readStatus() }
                 listener.onConnectionChanged(connected = true, ready = true)
             }
             if (bonded()) subscribeAll() else bondThen(subscribeAll)
@@ -313,6 +323,23 @@ class BandClient(
                     listener.onProvisioned(true)
                 }
             }
+            done()
+        }
+
+        override fun onCharacteristicRead(
+            g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int,
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS) deliver(ch, value)
+            done()
+        }
+
+        @Deprecated("Superseded by the four-argument overload on API 33")
+        override fun onCharacteristicRead(
+            g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int,
+        ) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
+            @Suppress("DEPRECATION")
+            if (status == BluetoothGatt.GATT_SUCCESS) ch.value?.let { deliver(ch, it) }
             done()
         }
 
