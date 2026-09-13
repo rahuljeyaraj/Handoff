@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -173,7 +174,11 @@ fun CardScreen(
                     onClick = { confirmRemove = true },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Remove my contact card") }
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Delete my contact card")
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -183,10 +188,15 @@ fun CardScreen(
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
-            title = { Text("Remove your contact card?") },
+            title = { Text("Delete your contact card?") },
             text = { Text("The band will still receive other people's cards.") },
             confirmButton = {
-                TextButton(onClick = { confirmRemove = false; onRemove() }) { Text("Remove") }
+                // The page stays open (review O2): clear the form here rather
+                // than relying on `initial` to change, since the saved state
+                // was seeded from it only once.
+                TextButton(onClick = { confirmRemove = false; card = OwnCard(); onRemove() }) {
+                    Text("Delete")
+                }
             },
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
         )

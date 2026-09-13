@@ -268,10 +268,10 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                     prefs.setOwnCard(card)     // the service pushes it (§7)
                     nav.popBackStack()
                 },
-                onRemove = {
-                    prefs.setOwnCard(null)
-                    nav.popBackStack()
-                },
+                // Stays on the editor rather than popping back (review O2):
+                // the empty form is its own confirmation, and every route
+                // here is one tap away regardless.
+                onRemove = { prefs.setOwnCard(null) },
                 onBack = { nav.popBackStack() },
             )
         }
