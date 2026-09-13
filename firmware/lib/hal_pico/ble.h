@@ -160,6 +160,9 @@ bool ble_notify_telemetry(const void *scores, size_t len);
 /* ---- state ------------------------------------------------------------ */
 
 bool     ble_connected(void);
+
+/* The advertised name, "Handoff 7A3C". Valid after ble_init(). */
+const char *ble_local_name(void);
 bool     ble_encrypted(void);
 bool     ble_telemetry_subscribed(void);
 

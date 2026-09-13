@@ -19,6 +19,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.handoff.band.ble.BandCode
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.Pairing
 import com.handoff.band.contacts.Promote
@@ -33,6 +34,9 @@ import com.handoff.band.ui.screens.ContactDetailScreen
 import com.handoff.band.ui.screens.ContactEditScreen
 import com.handoff.band.ui.screens.ContactsScreen
 import com.handoff.band.ui.screens.SettingsScreen
+import com.handoff.band.ui.screens.SetupScreen
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 
 /**
@@ -46,6 +50,7 @@ object Routes {
     const val BAND = "band"
     const val CARD = "card"
     const val ADVANCED = "advanced"
+    const val SETUP = "setup"
     const val CONTACT = "contact/{id}"
     const val CONTACT_EDIT = "contact/{id}/edit"
 
@@ -75,7 +80,59 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     // "Rohan Iyer", or "Not set". Never a field count (§1, copy discipline).
     val cardSummary = ownCard?.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Not set"
 
-    NavHost(nav, startDestination = Routes.CONTACTS) {
+    // A CompanionDeviceManager chooser, shared by first-run setup and the
+    // Band screen. The result is one band, remembered and connected to.
+    val chooser = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        Pairing.foundFrom(result.data)?.let { found ->
+            Pairing.remember(context, found)
+            prefs.setBandOff(false)
+            address = found.address
+            bandName = found.name
+            BandService.start(context, found.address)
+            band.bind()
+        }
+    }
+    fun pair(target: BandCode?) = Pairing.associate(
+        context as Activity, target,
+        onChooser = { chooser.launch(IntentSenderRequest.Builder(it).build()) },
+        onFailure = { /* the chooser reports its own failure */ },
+    )
+
+    // First run lands on setup; a paired phone lands on the list.
+    val start = remember { if (Pairing.storedAddress(context) == null) Routes.SETUP else Routes.CONTACTS }
+
+    NavHost(nav, startDestination = start) {
+        composable(Routes.SETUP) {
+            // The label's content, or null when the scan was cancelled.
+            val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+                BandCode.parse(result.contents)?.let { pair(it) }
+            }
+            SetupScreen(
+                pairedName = if (address != null) (bandName ?: "Handoff band") else null,
+                onScan = {
+                    scanner.launch(ScanOptions().apply {
+                        setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        setPrompt("")
+                        setBeepEnabled(false)
+                        setOrientationLocked(false)
+                    })
+                },
+                onCode = { pair(it) },
+                onSetUpCard = {
+                    // Home underneath, the editor on top: back from the
+                    // editor lands on the list, not on setup again.
+                    nav.navigate(Routes.CONTACTS) { popUpTo(Routes.SETUP) { inclusive = true } }
+                    nav.navigate(Routes.CARD)
+                },
+                onSkip = {
+                    nav.navigate(Routes.CONTACTS) { popUpTo(Routes.SETUP) { inclusive = true } }
+                },
+            )
+        }
+
         composable(Routes.CONTACTS) {
             val contacts by db.handshakes().all().collectAsState(initial = emptyList())
 
@@ -179,30 +236,11 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.BAND) {
-            val chooser = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartIntentSenderForResult()
-            ) { result ->
-                if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-                Pairing.foundFrom(result.data)?.let { found ->
-                    Pairing.remember(context, found)
-                    prefs.setBandOff(false)
-                    address = found.address
-                    bandName = found.name
-                    BandService.start(context, found.address)
-                    band.bind()
-                }
-            }
             BandScreen(
                 band = view,
                 cardSummary = cardSummary,
                 firmware = view.firmware,
-                onPair = {
-                    Pairing.associate(
-                        context as Activity,
-                        onChooser = { chooser.launch(IntentSenderRequest.Builder(it).build()) },
-                        onFailure = { /* the chooser reports its own failure */ },
-                    )
-                },
+                onPair = { nav.navigate(Routes.SETUP) },
                 onDisconnect = {
                     if (bandOff) {
                         BandService.reconnect(context)

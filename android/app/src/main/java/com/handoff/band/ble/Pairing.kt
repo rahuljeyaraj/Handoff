@@ -98,17 +98,25 @@ object Pairing {
      */
     fun associate(
         activity: Activity,
+        target: BandCode? = null,
         onChooser: (IntentSender) -> Unit,
         onFailure: (CharSequence?) -> Unit,
     ) {
         val manager = activity.getSystemService(CompanionDeviceManager::class.java)
 
+        /*
+         * With a code from the label the filter names that one band, so the
+         * OS's unavoidable confirmation lists exactly one device (design
+         * decisions §2a). The service UUID stays in the filter either way.
+         * Without a code - the bench path - it is any Handoff band in range.
+         */
+        val scan = ScanFilter.Builder().setServiceUuid(ParcelUuid(Gatt.SERVICE))
+        if (target != null) {
+            scan.setDeviceName(target.name)
+            target.address?.let { scan.setDeviceAddress(it) }
+        }
         val filter = BluetoothLeDeviceFilter.Builder()
-            .setScanFilter(
-                ScanFilter.Builder()
-                    .setServiceUuid(ParcelUuid(Gatt.SERVICE))
-                    .build()
-            )
+            .setScanFilter(scan.build())
             .build()
 
         val request = AssociationRequest.Builder()

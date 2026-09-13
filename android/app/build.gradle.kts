@@ -50,6 +50,10 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.navigation.compose)
 
+    // The QR label on the band (design decisions 2a). ZXing runs offline and
+    // adds nothing but a camera activity; ML Kit would pull in Play services.
+    implementation(libs.zxing.android.embedded)
+
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

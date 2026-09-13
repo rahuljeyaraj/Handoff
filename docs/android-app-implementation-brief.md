@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: Phases 1–2 complete on `app/customer-facing`; Phase 3 not started.** Keep this line current — when you finish a phase, tick
+**Status: Phases 1–3 complete on `app/customer-facing`.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -82,7 +82,7 @@ The status struct is exactly 16 bytes and full, so this cannot be split.
 
 ## Phase 3 — QR pairing
 
-- [ ] **12. Scan to pair.** The code yields the band's identity; use it to build a
+- [x] **12. Scan to pair.** The code yields the band's identity; use it to build a
   `ScanFilter` plus `setSingleDevice(true)` so Android's unavoidable confirmation
   shows exactly one device. The label must be generated per board from the same
   `pico_get_unique_board_id()` bytes the firmware already uses for the name. For

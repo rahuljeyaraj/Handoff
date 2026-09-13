@@ -495,6 +495,8 @@ bool ble_notify_rx_vcard(const char *text, size_t len)
 
 bool ble_rx_vcard_busy(void) { return s_rx_vcard_active; }
 
+const char *ble_local_name(void) { return s_name; }
+
 bool ble_notify_status(const ble_status_t *st)
 {
     s_status = *st;
