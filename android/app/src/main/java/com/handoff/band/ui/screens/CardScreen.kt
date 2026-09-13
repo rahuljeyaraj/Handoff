@@ -13,11 +13,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -34,15 +38,17 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.handoff.band.contacts.ContactReader
-import com.handoff.band.ui.theme.MonoStyle
-import com.handoff.band.vcard.VCard
+import com.handoff.band.data.OwnCard
 
 /**
  * Your contact card, design decisions §4a. A real editor: every field is a
@@ -54,39 +60,41 @@ import com.handoff.band.vcard.VCard
  * skin and the wearer should be able to send a name and a mobile without
  * also sending their job title.
  *
+ * A NAME-ONLY CARD IS NEVER SENT, and the control enforces it rather than a
+ * sentence: when only one of mobile or email is left on, that toggle is
+ * disabled. You physically cannot switch it off.
+ *
  * PHOTO is never offered: `compact.c` rejects it at encode time (§8.2).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardScreen(
-    onSave: (vcard: String) -> Unit,
+    initial: OwnCard?,
+    onSave: (OwnCard) -> Unit,
+    onRemove: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    var card by rememberSaveable(stateSaver = OwnCardSaver) {
+        mutableStateOf(initial ?: OwnCard())
+    }
+    var confirmRemove by remember { mutableStateOf(false) }
 
-    var name by rememberSaveable { mutableStateOf("") }
-    var mobile by rememberSaveable { mutableStateOf("") }
-    var email by rememberSaveable { mutableStateOf("") }
-    var org by rememberSaveable { mutableStateOf("") }
-    var title by rememberSaveable { mutableStateOf("") }
-
-    var sendMobile by rememberSaveable { mutableStateOf(true) }
-    var sendEmail by rememberSaveable { mutableStateOf(true) }
-    var sendOrg by rememberSaveable { mutableStateOf(true) }
-    var sendTitle by rememberSaveable { mutableStateOf(true) }
-
-    // A pick overwrites the form; from there it is editable like any other
-    // manual entry.
+    // A pick overwrites the fields; from there it is editable like any other
+    // manual entry. The toggles are left as they were.
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val uri = result.data?.data ?: return@rememberLauncherForActivityResult
         ContactReader.read(context, uri)?.let { p ->
-            name = p.displayName
-            mobile = p.mobile.orEmpty()
-            email = p.email.orEmpty()
-            org = p.org.orEmpty()
-            title = p.title.orEmpty()
+            card = card.copy(
+                name = p.displayName,
+                mobile = p.mobile.orEmpty(),
+                work = p.work.orEmpty(),
+                email = p.email.orEmpty(),
+                org = p.org.orEmpty(),
+                title = p.title.orEmpty(),
+            )
         }
     }
     val readContacts = rememberLauncherForActivityResult(
@@ -95,15 +103,9 @@ fun CardScreen(
         if (granted) picker.launch(Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI))
     }
 
-    val card = VCard.build(
-        fullName = name,
-        structuredName = name.split(' ').takeIf { it.size >= 2 }
-            ?.let { "${it.last()};${it.dropLast(1).joinToString(" ")};;;" },
-        mobile = mobile.takeIf { sendMobile },
-        email = email.takeIf { sendEmail },
-        org = org.takeIf { sendOrg },
-        title = title.takeIf { sendTitle },
-    )
+    // The last contact method standing cannot be switched off.
+    val mobileLocked = card.mobileShared && !card.emailShared
+    val emailLocked = card.emailShared && !card.mobileShared
 
     Scaffold(
         topBar = {
@@ -115,7 +117,7 @@ fun CardScreen(
                     }
                 },
                 actions = {
-                    TextButton(enabled = name.isNotBlank(), onClick = { onSave(card) }) {
+                    TextButton(enabled = card.complete, onClick = { onSave(card) }) {
                         Text("Save")
                     }
                 },
@@ -134,27 +136,54 @@ fun CardScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Filled.Person, contentDescription = null)
-                Spacer(Modifier.padding(4.dp))
+                Spacer(Modifier.width(8.dp))
                 Text("Fill from a phone contact")
             }
 
             Text("Choose what you share.", style = MaterialTheme.typography.bodyMedium,
                  color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-            OutlinedTextField(name, { name = it }, label = { Text("Name") },
+            OutlinedTextField(card.name, { card = card.copy(name = it) }, label = { Text("Name") },
                               singleLine = true, modifier = Modifier.fillMaxWidth())
-            ToggledField("Mobile", mobile, { mobile = it }, sendMobile) { sendMobile = it }
-            ToggledField("Email", email, { email = it }, sendEmail) { sendEmail = it }
-            ToggledField("Organisation", org, { org = it }, sendOrg) { sendOrg = it }
-            ToggledField("Title", title, { title = it }, sendTitle) { sendTitle = it }
+            ToggledField("Mobile", card.mobile, { card = card.copy(mobile = it) },
+                         send = card.sendMobile, enabled = !mobileLocked,
+                         keyboard = KeyboardType.Phone) { card = card.copy(sendMobile = it) }
+            ToggledField("Work phone", card.work, { card = card.copy(work = it) },
+                         send = card.sendWork, keyboard = KeyboardType.Phone) {
+                card = card.copy(sendWork = it)
+            }
+            ToggledField("Email", card.email, { card = card.copy(email = it) },
+                         send = card.sendEmail, enabled = !emailLocked,
+                         keyboard = KeyboardType.Email) { card = card.copy(sendEmail = it) }
+            ToggledField("Organisation", card.org, { card = card.copy(org = it) },
+                         send = card.sendOrg) { card = card.copy(sendOrg = it) }
+            ToggledField("Title", card.title, { card = card.copy(title = it) },
+                         send = card.sendTitle) { card = card.copy(sendTitle = it) }
 
-            HorizontalDivider(Modifier.padding(vertical = 4.dp))
-
-            Text("What gets written to the band", style = MaterialTheme.typography.titleSmall)
-            Text(card, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (initial != null) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                TextButton(
+                    onClick = { confirmRemove = true },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Remove my contact card") }
+            }
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Remove your contact card?") },
+            text = { Text("The band will still receive other people's cards.") },
+            confirmButton = {
+                TextButton(onClick = { confirmRemove = false; onRemove() }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -165,12 +194,20 @@ fun ToggledField(
     onValue: (String) -> Unit,
     send: Boolean,
     enabled: Boolean = true,
+    keyboard: KeyboardType = KeyboardType.Text,
     onSend: (Boolean) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(value, onValue, label = { Text(label) }, singleLine = true,
+                          keyboardOptions = KeyboardOptions(keyboardType = keyboard),
                           modifier = Modifier.weight(1f))
         Switch(checked = send, onCheckedChange = onSend, enabled = enabled)
     }
 }
+
+/** Survives rotation as its flat list. */
+private val OwnCardSaver = listSaver<OwnCard, Any>(
+    save = { it.toList() },
+    restore = { OwnCard.fromList(it) },
+)

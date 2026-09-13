@@ -69,14 +69,10 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     val theme by prefs.theme.collectAsState()
     val sort by prefs.sort.collectAsState()
 
-    // Until the card is persisted locally (a later step), the band's own word
-    // is the only source: nag only when it positively reports no card.
-    val cardSet = state?.status?.provisioned != false
-    val cardSummary = when (state?.status?.provisioned) {
-        true -> "On the band"
-        false -> "Not set"
-        null -> "—"
-    }
+    val ownCard by prefs.ownCard.collectAsState()
+    val cardSet = ownCard != null
+    // "Rohan Iyer", or "Not set". Never a field count (§1, copy discipline).
+    val cardSummary = ownCard?.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Not set"
 
     NavHost(nav, startDestination = Routes.CONTACTS) {
         composable(Routes.CONTACTS) {
@@ -224,8 +220,14 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
 
         composable(Routes.CARD) {
             CardScreen(
-                onSave = { vcard ->
-                    band.service?.provision(vcard)
+                initial = ownCard,
+                onSave = { card ->
+                    prefs.setOwnCard(card)
+                    band.service?.provision(card.vcard())
+                    nav.popBackStack()
+                },
+                onRemove = {
+                    prefs.setOwnCard(null)
                     nav.popBackStack()
                 },
                 onBack = { nav.popBackStack() },
@@ -233,7 +235,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.ADVANCED) {
-            AdvancedScreen(state = state, onBack = { nav.popBackStack() })
+            AdvancedScreen(state = state, ownCard = ownCard, onBack = { nav.popBackStack() })
         }
     }
 }

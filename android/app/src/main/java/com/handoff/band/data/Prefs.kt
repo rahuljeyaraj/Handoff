@@ -47,6 +47,34 @@ class Prefs private constructor(context: Context) {
         _bandOff.value = off
     }
 
+    /** The wearer's own card, or null when none is set. */
+    private val _ownCard = MutableStateFlow(readOwnCard())
+    val ownCard: StateFlow<OwnCard?> = _ownCard
+
+    fun setOwnCard(card: OwnCard?) {
+        sp.edit {
+            if (card == null) {
+                CARD_STRINGS.forEach { remove(KEY_OWN_CARD + it) }
+                CARD_FLAGS.forEach { remove(KEY_OWN_CARD + it) }
+                remove(KEY_OWN_CARD)
+            } else {
+                val l = card.toList()
+                putBoolean(KEY_OWN_CARD, true)
+                CARD_STRINGS.forEachIndexed { i, k -> putString(KEY_OWN_CARD + k, l[i] as String) }
+                CARD_FLAGS.forEachIndexed { i, k -> putBoolean(KEY_OWN_CARD + k, l[6 + i] as Boolean) }
+            }
+        }
+        _ownCard.value = card
+    }
+
+    private fun readOwnCard(): OwnCard? {
+        if (!sp.getBoolean(KEY_OWN_CARD, false)) return null
+        return OwnCard.fromList(
+            CARD_STRINGS.map { sp.getString(KEY_OWN_CARD + it, "") ?: "" } +
+                CARD_FLAGS.map { sp.getBoolean(KEY_OWN_CARD + it, true) }
+        )
+    }
+
     private val _sort = MutableStateFlow(
         sp.getString(KEY_SORT, null)?.let { runCatching { Sort.valueOf(it) }.getOrNull() }
             ?: Sort.NEWEST
@@ -63,6 +91,9 @@ class Prefs private constructor(context: Context) {
         private const val KEY_THEME = "theme"
         private const val KEY_SORT = "sort"
         private const val KEY_BAND_OFF = "band_off"
+        private const val KEY_OWN_CARD = "own_card"
+        private val CARD_STRINGS = listOf(".name", ".mobile", ".work", ".email", ".org", ".title")
+        private val CARD_FLAGS = listOf(".send_mobile", ".send_work", ".send_email", ".send_org", ".send_title")
 
         @Volatile private var instance: Prefs? = null
 

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.Gatt
 import com.handoff.band.ble.Pairing
+import com.handoff.band.data.OwnCard
 import com.handoff.band.ui.LocalBand
 import com.handoff.band.ui.components.SectionHeader
 import com.handoff.band.ui.components.SettingsRow
@@ -48,7 +49,7 @@ import com.handoff.band.ui.theme.MonoStyle
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdvancedScreen(state: BandService.State?, onBack: () -> Unit) {
+fun AdvancedScreen(state: BandService.State?, ownCard: OwnCard?, onBack: () -> Unit) {
     val band = LocalBand.current
     val context = LocalContext.current
 
@@ -123,6 +124,20 @@ fun AdvancedScreen(state: BandService.State?, onBack: () -> Unit) {
 
             SectionHeader("Band status")
             StatusDump(state)
+
+            // The bytes as written to the band. A developer's view, moved
+            // here off the Your card screen where it wore a user's hat (§4a).
+            ownCard?.let { card ->
+                val text = card.vcard()
+                Row(Modifier.fillMaxWidth().padding(end = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.Bottom) {
+                    SectionHeader("Card written to the band", Modifier.weight(1f))
+                    Text("${text.toByteArray(Charsets.UTF_8).size} B", style = MonoStyle,
+                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                         modifier = Modifier.padding(bottom = 8.dp))
+                }
+                Text(text, style = MonoStyle,
+                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
 
             state?.lastIncompleteText?.let { raw ->
                 SectionHeader("Last incomplete handshake")
