@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -183,7 +184,11 @@ fun ContactsScreen(
                           onClose = { searching = false; query = "" })
             } else {
                 TopAppBar(
-                    title = { Text("Handoff") },
+                    title = {
+                        Icon(HandoffIcons.Wordmark, contentDescription = "Handoff",
+                             tint = MaterialTheme.colorScheme.onSurface,
+                             modifier = Modifier.height(20.dp).width(107.dp))
+                    },
                     actions = {
                         IconButton(onClick = { searching = true }) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
