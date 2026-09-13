@@ -16,8 +16,8 @@ android {
         // depends on it, so there is no point supporting anything older.
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1-m2"
+        versionCode = 2
+        versionName = "0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

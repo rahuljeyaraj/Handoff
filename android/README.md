@@ -1,7 +1,7 @@
 # Android app
 
-**This is M2.** A separate Android Studio / Gradle project that happens to live
-in the same repository — neither the Pico SDK nor `scripts/build.py` knows this
+**The customer-facing app, on the M2 phone link.** A separate Android Studio /
+Gradle project that happens to live in the same repository — neither the Pico SDK nor `scripts/build.py` knows this
 directory exists.
 
 The client is settled as a native Android app: no web client, no iOS. See
@@ -41,35 +41,63 @@ Flash the band with `handoff.uf2` first — see the root
 | [`ble/BandClient.kt`](app/src/main/java/com/handoff/band/ble/BandClient.kt) | the GATT client, with one serialised operation at a time |
 | [`ble/BandService.kt`](app/src/main/java/com/handoff/band/ble/BandService.kt) | the foreground service that holds the link with the screen off |
 | [`ble/Pairing.kt`](app/src/main/java/com/handoff/band/ble/Pairing.kt) | `CompanionDeviceManager` — one OS dialog per device, ever |
-| [`data/Handshakes.kt`](app/src/main/java/com/handoff/band/data/Handshakes.kt) | the Room database every received card is written to |
+| [`ble/BandCode.kt`](app/src/main/java/com/handoff/band/ble/BandCode.kt) | what the QR label on the band says |
+| [`data/Handshakes.kt`](app/src/main/java/com/handoff/band/data/Handshakes.kt) | the Room database, schema v2 with the dedup keys and a real migration |
+| [`data/Keys.kt`](app/src/main/java/com/handoff/band/data/Keys.kt), [`Merge.kt`](app/src/main/java/com/handoff/band/data/Merge.kt) | the dedup identity and the fill-blanks merge rule, both JVM-tested |
+| [`data/OwnCard.kt`](app/src/main/java/com/handoff/band/data/OwnCard.kt), [`Prefs.kt`](app/src/main/java/com/handoff/band/data/Prefs.kt) | the wearer's own card and the handful of settings |
 | [`vcard/VCard.kt`](app/src/main/java/com/handoff/band/vcard/VCard.kt) | vCard 3.0, both directions |
 | [`contacts/Promote.kt`](app/src/main/java/com/handoff/band/contacts/Promote.kt) | the Contacts insert intent, and the contact reader |
-| [`ui/`](app/src/main/java/com/handoff/band/ui/) | history list, provisioning form with per-field toggles |
+| [`ui/theme/`](app/src/main/java/com/handoff/band/ui/theme/) | the colour schemes and type scale from the artboards |
+| [`ui/components/`](app/src/main/java/com/handoff/band/ui/components/) | the band status line, the battery glyph, the shared rows and icons |
+| [`ui/screens/`](app/src/main/java/com/handoff/band/ui/screens/) | Contacts (home), detail, edit, Settings, Band, Your card, Setup, Advanced |
+| [`ui/Nav.kt`](app/src/main/java/com/handoff/band/ui/Nav.kt) | the screen set and what each screen is wired to |
+
+The design behind the screens, and every decision it records, is in
+[`docs/android-app-decisions.md`](../docs/android-app-decisions.md). Artboards
+are in [`design/android-redesign/`](../design/android-redesign/).
+
+## Pairing
+
+First run is a two-step setup: scan the QR label on the underside of the band,
+confirm the one device Android then shows, and optionally set your contact
+card. The label's content is the four hex digits after "Handoff " in the band's
+advertised name; the firmware prints it on its USB console at boot
+(`name "Handoff 7A3C", label HANDOFF:7A3C`) and
+[`tools/band_label.py`](../tools/band_label.py) turns that into a printable
+code. *Enter the band code instead* takes the four digits by hand.
 
 ## Walking the M2 exit criteria
 
-The development plan's criteria, and how to check each one:
+The bench tools live under **Settings → Advanced**. They are exit criteria,
+not debug toys, which is why they are still in the build. The development
+plan's criteria, and how to check each one:
 
-1. **A fake card reaches the address book.** Pair, then tap *Fake card in 10 s*.
-   If the pairing chooser times out, *Scan* runs an unfiltered ten-second scan
-   and says whether this handset hears the band at all — hold the phone close
-   to the Pico; its transmit range is short.
-   The band notifies `rx_vcard`; the card appears in the history list; tapping
-   it opens the system contact editor prefilled.
-2. **Provisioning round-trips.** *Provision* → pick a contact or type one →
-   *Write to band*. Power-cycle the Pico. The `status` line in the app shows
-   `provisioned true` and the same record id and byte count as before.
-3. **Provisioning from the address book.** The same, via *Pick from Contacts*.
-   Per-field checkboxes, and the preview is the literal bytes that get written.
+1. **A fake card reaches the address book.** Pair, then Advanced → *Send a fake
+   card in 10 s*. If the pairing chooser times out, *Run a Bluetooth scan* is
+   an unfiltered ten-second scan that says whether this handset hears the band
+   at all — hold the phone close to the Pico; its transmit range is short.
+   The band notifies `rx_vcard`; the card appears in Contacts; open it and
+   *Save to phone contacts* opens the system contact editor prefilled.
+2. **Provisioning round-trips.** Settings → *Your contact card* → type one →
+   *Save*. The service pushes it as soon as the link is encrypted. Power-cycle
+   the Pico. Advanced's status dump shows `provisioned yes` and the same record
+   id and byte count as before.
+3. **Provisioning from the address book.** The same, via *Fill from a phone
+   contact*. Per-field toggles; Advanced shows the literal bytes written.
 4. **Chunked reassembly at the 23-byte MTU floor.** Turn on *Force the 23-byte
-   ATT MTU floor* and repeat 1 and 2. `./gradlew test` proves the same thing on
-   the framing alone, as does `python scripts/test.py --suite chunk` on the C.
-5. **A notify caught with the screen off.** Tap *Fake card in 10 s*, lock the
+   MTU floor* in Advanced and repeat 1 and 2. `./gradlew test` proves the same
+   thing on the framing alone, as does `python scripts/test.py --suite chunk`
+   on the C.
+5. **A notify caught with the screen off.** *Send a fake card in 10 s*, lock the
    phone, put it down. The notification is what the foreground service caught,
    and it is the case a web client structurally could not have handled.
 6. **The bond survives a Pico power cycle.** Unplug and replug the band. The
    app reconnects with no fresh OS pairing dialog — the bond is in BTstack's
    flash bank, three sectors from the end.
+
+Note that the fake card carries a phone and an email, so it lands in Contacts.
+A card with neither is reported as an incomplete handshake and kept only in
+Advanced — that is by design, not a failure of criterion 1.
 
 ## The contract
 
@@ -77,6 +105,12 @@ The development plan's criteria, and how to check each one:
 the other side of it. **Changing a UUID or a property on one side and not the
 other does not fail loudly**: the app connects, discovers nothing it
 recognises, and reports no error at all. Change both in one commit or neither.
+
+The `status` struct is the same kind of contract, with one relaxation: the
+app accepts any version at or above 1 and reads the fields it knows by offset,
+so a newer band degrades to "battery unknown" rather than going blank. Fields
+are only ever appended. At version 2 the struct is 20 bytes, which is all one
+notification holds at the 23-byte floor; a version 3 needs a second notify.
 
 | Characteristic | Access | Purpose |
 |---|---|---|
