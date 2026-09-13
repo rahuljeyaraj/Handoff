@@ -10,7 +10,10 @@ says what was seen, what it means in the code, and where a decision is still
 open. Items marked **decide** need the user's word before building; the rest
 are straightforward.
 
-**Status: documented, not started.** Copy choices are in §Copy at the end.
+**Status: documented and decided, not started.** The user's decisions are
+recorded under each item as **Decided:**; copy choices are in §Copy at the end,
+with the chosen line marked. Open questions that survived the second pass are
+in §Still open.
 
 ---
 
@@ -46,6 +49,12 @@ storage and shows "Handoff band").
 13-byte buffer, and the scan filter matches on it); this is only about what
 the app prints. See §Copy B.
 
+**Decided:** "Band 7A3C" — everywhere, *including the advertised Bluetooth
+name*. That makes it a firmware change (`ble.c`'s `s_name`, the banner line)
+and a contract change with `BandCode.name`, which the scan filter matches on:
+one commit, both sides, as with the status struct. The QR payload's
+`HANDOFF:` prefix is machine-read only and can stay.
+
 ## 4. Step 2 says the same thing twice
 
 **Seen:** the heading "Set up your contact card" and the button "Set up my
@@ -79,6 +88,11 @@ contact editor has none either.
 **Wanted:** a bin icon on both, and a button to clear every field on the card
 editor. See §Copy D for its label.
 
+**Decided:** no clear-all. One *Delete my contact card* button with a bin
+icon, which erases the card on the band (the existing sync does that when the
+local card goes) and clears the fields. Whether the page then closes or stays
+open is still open — see §Still open.
+
 ## 7. Contacts: multi-select instead of long-press-to-merge
 
 **Seen:** long press opens "Merge into…". That is not the behaviour wanted.
@@ -96,6 +110,12 @@ Options: (a) N editors in sequence, no permission; (b) request
 `WRITE_CONTACTS` and insert directly, which also unlocks item 10. The
 decision in §10 settles this.
 
+**Decided:** (b). Add `WRITE_CONTACTS`, requested the first time a batch save
+is attempted, and insert through the provider with no editors. This reverses
+the "do not add WRITE_CONTACTS" line in the brief and decisions §4, on the
+user's say-so. Which account the contacts land in is still open — see §Still
+open.
+
 ## 8. Contacts: add one by hand
 
 **Wanted:** a "+" to create a contact manually, as a contacts app does.
@@ -105,6 +125,12 @@ an empty row; on save, insert with `vcard` built from the fields (`VCard.build`)
 so the "card as received" view stays honest ("entered by hand" rather than a
 band card). Received-vs-manual is worth a column (`source`) so the detail
 screen can say "Added by hand" where it would say "Met today, 14:32".
+
+**Decided:** no "card as received" view on the detail screen at all — it is a
+developer's view, and the brief's "do not remove the raw-vCard view" refers
+to the *own card* bytes under Advanced, which stay. Nothing on screen ever
+says "entered by hand"; a manual contact simply has no band card behind it.
+What replaces the "Met today, 14:32" line for one is in §Still open.
 
 ## 9. A–Z needs letter headers
 
@@ -127,6 +153,9 @@ turned on, plus a provider insert — which also gives item 7 its batch save),
 or remove the row so nothing on the screen looks broken. Building it reverses
 a recorded decision, so it is the user's call, not the implementer's.
 
+**Decided:** remove the feature completely. (`WRITE_CONTACTS` still arrives
+via item 7, but auto-save is not built.)
+
 ## 11. Settings: fewer rows, a vibration switch
 
 **Wanted:** remove *Your contact card* and *Band* from Settings — the band is
@@ -144,6 +173,14 @@ firmware setting the band persists. If it is (b), it is a firmware change and
 a contract change (`ble.h` + `Gatt.kt` in one commit). See §Copy E for the
 label.
 
+**Decided:** (b), the band's motor only. The band vibrates when a card is
+successfully shared and when one is received, with a different pattern for
+each event; the switch turns that on or off. Phone-side, a new contact is
+already a notification, and the phone's own tone/vibrate settings govern it —
+nothing to build there. Settings therefore keeps: Sort order · Vibrate ·
+Theme · App version · Advanced. How the setting reaches the band is in §Still
+open.
+
 ## 12. No "No band paired" page
 
 **Seen:** unpaired, the home status line says "No band paired · Not paired"
@@ -153,6 +190,9 @@ button.
 **Wanted:** no such page. Unpaired, the status line's place holds a single
 *Pair a band* button that goes straight to the pairing page. The Band screen's
 unpaired state goes away (it is unreachable once the line is a button).
+
+**Decided:** the unpaired Band page is deleted, not merely unreachable. The
+Band screen exists only for a paired band.
 
 ## 13. Setup step 1 heading is long; use a picture
 
@@ -196,6 +236,12 @@ connect or reconnect started, flip the state to "not found" and say so on
 the status line (and the Band screen), leaving autoConnect running
 underneath so it still picks the band up when it appears. See §Copy G.
 
+**Decided:** show the failure after the attempt ends. (Note for the
+implementer: with `autoConnect = true` the controller does not actually stop
+trying — what the user sees as "giving up" is the line staying at "Looking for
+the band" forever. The fix is the same either way: a timer, and a "Band 7A3C
+not found" state that clears itself the moment the link comes up.)
+
 ## 16. "Saved to your phone" goes stale
 
 **Seen:** save a contact to the phone from the app, delete it in the phone's
@@ -206,6 +252,10 @@ store it (`contact_uri` column) and check it exists (`READ_CONTACTS`, already
 held) when the detail screen opens and when the list is shown. One query per
 open is cheap; a continuous observer is not needed. Noted for later, not
 demo-critical.
+
+**Decided:** the detail-screen check is fine, but the *home list's* tick has
+no trigger to refresh, so either the tick goes or it gets an efficient
+refresh. Recommendation in §Still open.
 
 ## 17. Long press today merges
 
@@ -221,8 +271,8 @@ Every line the user asked to change, with options. The rule from decisions
 **A. Setup step 2, the line under the heading.** Was: "Your band hands it over
 when you shake someone's hand."
 
-1. "The band hands it over when you shake hands." — the user's line with the
-   article it needs
+1. **Chosen:** "The band hands it over when you shake hands." — the user's line
+   with the article it needs
 2. "Handed over with a handshake."
 3. "It crosses over in a handshake."
 4. Drop the line — the heading and the button already say what the card is
@@ -233,30 +283,22 @@ when you shake someone's hand."
 1. "Handoff 7A3C" — as advertised, as printed on the label, no suffix
 2. "Handoff band 7A3C"
 3. "Handoff 7A3C band"
-4. "Band 7A3C" — "Handoff" is the app's own name and is already on screen
+4. **Chosen:** "Band 7A3C" — "Handoff" is the app's own name and is already on
+   screen. Applies to the advertised name too (item 3).
 
 **C. Setup step 2, heading versus button.** Was: heading "Set up your contact
 card", button "Set up my contact card".
 
-1. Heading "Your contact card" · button "Set it up"
+1. **Chosen:** Heading "Your contact card" · button "Set it up" · "Skip for now"
 2. Heading "Set up your contact card" · button "Set up" / "Skip for now"
 3. Heading "Add your contact card" · button "Add it now"
 4. Heading "One more thing" · button "Set up my contact card"
 
-**D. The clear-all button on the card editor.**
+**D. The clear-all button on the card editor.** Withdrawn — there is no
+clear-all (item 6). The one button is "Delete my contact card", with a bin.
 
-1. "Clear all fields"
-2. "Clear"
-3. "Start over"
-
-**E. The vibration row in Settings.**
-
-1. "Vibrate on a handshake"
-2. "Vibration"
-3. "Handshake buzz"
-
-(If it turns out to be the band's motor rather than the phone: "Band
-vibrates on a handshake".)
+**E. The vibration row in Settings.** **Chosen:** a vibrate icon and the word
+"Vibrate", a switch on the right. It is the band's motor (item 11).
 
 **F. Setup step 1 heading, over a diagram of the band's underside.** Was:
 "Switch on the band and scan its QR code".
@@ -266,10 +308,13 @@ vibrates on a handshake".)
 3. "Scan the band's code"
 4. "Point the camera at the band's label"
 
+**Chosen:** the user's own line, "Switch on and scan QR code". Grammar note:
+it wants an article — "Switch on and scan the QR code" — see §Still open.
+
 **G. When the band is not found (item 15).**
 
-1. "Handoff 7A3C not found" — status line; the Band screen adds "Switch it
-   on and keep the phone close."
+1. **Chosen, renamed per B:** "Band 7A3C not found" — status line; the Band
+   screen adds "Switch it on and keep the phone close."
 2. "Can't find Handoff 7A3C"
 3. "Band not found"
 
@@ -278,3 +323,58 @@ vibrates on a handshake".)
 1. "Pair a band"
 2. "Pair your band"
 3. "Set up a band"
+
+---
+
+## Still open
+
+Questions that survived the decisions above, with a recommendation each.
+
+**O1. The advertised name.** "Band 7A3C" is what the phone's Bluetooth
+settings and the OS pairing dialog will show, outside the app where nothing
+says "Handoff". Next to a "Mi Smart Band 7" in the same list it is anonymous.
+Recommendation: advertise "Handoff 7A3C" and display "Band 7A3C" inside the
+app. The user asked for the Bluetooth name to change too; needs one
+confirmation before the firmware moves.
+
+**O2. After "Delete my contact card": stay or leave?** Recommendation: leave.
+After the delete, the editor is an empty form, and staying on it reads as if
+nothing happened; the screen underneath shows the new state on its own (the
+nudge banner comes back, the Band row says "Not set"), and every route to the
+editor is one tap away.
+
+**O3. Which account batch-saved contacts go into.** A provider insert has to
+name an account; the system editor used to ask. Inserting with no account
+makes "phone-only" contacts that some OEMs hide from sync. Recommendation:
+ask once, the first time, and remember it as a Settings row ("Save contacts
+to · Google · x@gmail.com"), with the phone's default as the preselected
+choice.
+
+**O4. The "Met today, 14:32" line on a contact added by hand.** Recommendation:
+"Added today, 14:32" — same shape, says nothing about how. Needs a `source`
+column so the two are told apart.
+
+**O5. How the vibrate setting reaches the band.** Two ways: (a) the band
+persists it — a format change to the flash record store, or a second settings
+sector; (b) the phone owns it and re-sends it on every connect, exactly as it
+re-sends the card, with the band defaulting to on at boot. Recommendation:
+(b) — no flash format change, no new status field, and a band that reboots
+is back in step within a second of reconnecting. Either way it is a new
+control opcode (`BLE_CTRL_HAPTIC`, on/off) and a firmware+app commit. Note
+the events that would trigger the buzz — a real shared or received card —
+do not exist until M12's body link; for the demo, the fake-card path can
+buzz, and that is what proves the opcode.
+
+**O6. The home list's "saved" tick.** Recommendation: keep it, refreshed by
+one query when the list appears — `Contacts._ID IN (…)` over the stored
+contact ids, a single cursor however many rows — plus a `ContentObserver` on
+Contacts only while the app is in the foreground. That is negligible load and
+also feeds the detail screen. If that still feels like too much machinery,
+drop the tick.
+
+**O7. Step 1 heading grammar.** "Switch on and scan QR code" is missing an
+article. Recommendation: "Switch on and scan the QR code".
+
+**O8. The not-found timeout.** How long before "Band 7A3C not found" — 30 s
+recommended: long enough for a band that is being switched on, short enough
+that the answer arrives before anyone reaches for Settings.
