@@ -4,10 +4,15 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.handoff.band.data.HandoffDb
@@ -86,6 +91,34 @@ class BandService : LifecycleService(), BandClient.Listener {
         // Whenever the local card changes - saved, edited, removed - the band
         // should follow. The same sync runs on every status the band sends.
         lifecycleScope.launch { prefs.ownCard.collect { sync() } }
+        registerReceiver(bondWatch, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+    }
+
+    /**
+     * The band unpaired from Bluetooth settings rather than from the app.
+     *
+     * Left alone, the service kept the link up and re-ran createBond() on
+     * every reconnect, and a band that is connected is a band that is not
+     * advertising — so the next "Pair a band" chooser found nothing (seen
+     * 13 Sep: bond dropped 10:04, a 20 s scan at 10:06 came back empty).
+     * An unpair in settings is the wearer saying Forget, so it does what
+     * Forget does. A pairing that never completed goes BONDING -> NONE and
+     * is BandClient's to report, not this.
+     */
+    private val bondWatch = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            val who: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            else @Suppress("DEPRECATION") i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            val stored = Pairing.storedAddress(this@BandService) ?: return
+            if (!who?.address.equals(stored, ignoreCase = true)) return
+            val was = i.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.BOND_NONE)
+            val now = i.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+            if (was == BluetoothDevice.BOND_BONDED && now == BluetoothDevice.BOND_NONE) {
+                Log.i(TAG, "bond for $stored removed outside the app; forgetting it")
+                forget(this@BandService)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -131,6 +164,7 @@ class BandService : LifecycleService(), BandClient.Listener {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(bondWatch) }
         client?.close()
         client = null
         super.onDestroy()
@@ -374,6 +408,7 @@ class BandService : LifecycleService(), BandClient.Listener {
     }
 
     companion object {
+        private const val TAG = "HandoffService"
         private const val CHANNEL = "handoff.band"
         private const val NOTIFICATION_ID = 1
         private const val NOT_FOUND_TIMEOUT_MS = 15_000L

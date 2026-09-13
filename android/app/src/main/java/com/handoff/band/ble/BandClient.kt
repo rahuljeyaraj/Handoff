@@ -126,7 +126,7 @@ class BandClient(
                     BluetoothDevice.BOND_BONDED -> { stopBondWatch(); next() }
                     BluetoothDevice.BOND_NONE -> {
                         stopBondWatch()
-                        listener.onError("pairing failed or was refused")
+                        listener.onError(ERR_BOND_REFUSED)
                     }
                 }
             }
@@ -373,7 +373,13 @@ class BandClient(
         }
     }
 
-    private companion object {
-        const val TAG = "BandClient"
+    companion object {
+        private const val TAG = "BandClient"
+        /**
+         * The bond went BONDING -> NONE: the wearer dismissed the OS pairing
+         * dialog, or the band refused. Named so the setup page can say
+         * "cancelled" rather than "couldn't connect".
+         */
+        const val ERR_BOND_REFUSED = "pairing failed or was refused"
     }
 }

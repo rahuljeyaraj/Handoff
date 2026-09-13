@@ -1,24 +1,30 @@
 package com.handoff.band.ble
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import android.bluetooth.le.ScanFilter
 import android.companion.AssociationRequest
 import android.companion.BluetoothLeDeviceFilter
 import android.companion.CompanionDeviceManager
 import android.content.Context
 import android.content.IntentSender
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
+import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import java.util.regex.Pattern
 
 /**
  * First-run pairing, architecture §11.3.
@@ -37,10 +43,37 @@ import androidx.core.content.edit
  * ADVERTISEMENT rather than the scan response: CompanionDeviceManager matches
  * on what is advertised, and a band that only answers an active scan would
  * never appear in the chooser.
+ *
+ * NO HARDWARE SCAN FILTER, ANYWHERE. A filtered scan — service UUID, name or
+ * address — is offloaded to the controller, which has a handful of filter
+ * slots shared by every app on the phone. On the bench handset (OnePlus
+ * CPH2569, Android 15) those slots were all taken by other apps, the
+ * controller answered our filter add with MEMORY_CAPACITY_EXCEEDED, and the
+ * stack then ran the scan against a filter that was never installed:
+ * 0 results for 12 s while a PC heard the band at -56 dBm (13 Sep 21:56,
+ * `pairing.log`). The OS chooser's own scan takes the same path, which is
+ * why the "Handoff band 93D1" filter found the band twice and then never
+ * again (pairing-page brief §2). So [locate] scans unfiltered and matches
+ * the name in the app, and [associate] gives CompanionDeviceManager a NAME
+ * PATTERN rather than a ScanFilter — CDM matches that in Java against the
+ * stack's cached device name, and its scan is unfiltered too. CDM stays in
+ * the loop for what it is good at: companion status for the foreground
+ * service, and an association that survives reinstalls.
+ *
+ * Even an unfiltered scan needs one slot for its all-pass parameter, and
+ * on that handset (Play services and OnePlus's HeyTap Accessory service
+ * between them) the slots fill again within minutes of a Bluetooth reset
+ * (22:21 the same evening, after four pairings in a row had worked). The
+ * app cannot fix that; what it can do is tell it apart from a band that is
+ * off: a 12 s unfiltered scan that hears NOTHING — not one advertiser of
+ * any kind — is a phone that cannot scan, and [locate] says so.
  */
 object Pairing {
 
+    private const val TAG = "HandoffPairing"
     private const val PREFS = "handoff.pairing"
+    /** Long enough for a band advertising every 100 ms to be heard several times over. */
+    private const val LOCATE_TIMEOUT_MS = 12_000L
     private const val KEY_ADDRESS = "band_address"
     private const val KEY_NAME = "band_name"
 
@@ -62,16 +95,26 @@ object Pairing {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_NAME, null)
 
+    /**
+     * Bumped by every [remember] and [forget], so a screen can re-read the
+     * stored band when it changes underneath it — which it does when the
+     * service forgets a band that was unpaired from Bluetooth settings.
+     */
+    private val _version = MutableStateFlow(0)
+    val version: StateFlow<Int> = _version
+
     fun remember(context: Context, found: Found) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
             putString(KEY_ADDRESS, found.address)
             if (found.name != null) putString(KEY_NAME, found.name) else remove(KEY_NAME)
         }
+        _version.value++
     }
 
     fun forget(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit { remove(KEY_ADDRESS); remove(KEY_NAME) }
+        _version.value++
     }
 
     /**
@@ -90,7 +133,7 @@ object Pairing {
             } else {
                 manager.disassociate(address)
             }
-        }.onFailure { Log.w("HandoffPairing", "disassociate failed", it) }
+        }.onFailure { Log.w(TAG, "disassociate failed", it) }
     }
 
     /**
@@ -110,14 +153,22 @@ object Pairing {
         if (device.bondState == BluetoothDevice.BOND_NONE) return true
         BluetoothDevice::class.java.getMethod("removeBond").invoke(device) as? Boolean ?: false
     }.getOrElse {
-        Log.w("HandoffPairing", "removeBond failed", it)
+        Log.w(TAG, "removeBond failed", it)
         false
     }
 
     /**
      * Ask the OS to show its device chooser. [onChooser] receives the
      * IntentSender to launch; the result comes back to the activity, and
-     * [addressFrom] pulls the band out of it.
+     * [foundFrom] pulls the band out of it. [onFailure] fires on a discovery
+     * timeout — the OS scans for 20 s — and must be surfaced by the caller:
+     * the chooser itself shows nothing on failure.
+     *
+     * With a code from the label the filter is that one band's name, so the
+     * OS's unavoidable confirmation lists exactly one device (design
+     * decisions §2a). The name is a pattern, not a ScanFilter, for the
+     * reason in the class comment. Without a code — the bench path — it is
+     * any "Handoff band".
      */
     fun associate(
         activity: Activity,
@@ -127,19 +178,9 @@ object Pairing {
     ) {
         val manager = activity.getSystemService(CompanionDeviceManager::class.java)
 
-        /*
-         * With a code from the label the filter names that one band, so the
-         * OS's unavoidable confirmation lists exactly one device (design
-         * decisions §2a). The service UUID stays in the filter either way.
-         * Without a code - the bench path - it is any Handoff band in range.
-         */
-        val scan = ScanFilter.Builder().setServiceUuid(ParcelUuid(Gatt.SERVICE))
-        if (target != null) {
-            scan.setDeviceName(target.name)
-            target.address?.let { scan.setDeviceAddress(it) }
-        }
+        val name = target?.name ?: BandCode.NAME_PREFIX
         val filter = BluetoothLeDeviceFilter.Builder()
-            .setScanFilter(scan.build())
+            .setNamePattern(Pattern.compile(Pattern.quote(name), Pattern.CASE_INSENSITIVE))
             .build()
 
         val request = AssociationRequest.Builder()
@@ -147,6 +188,7 @@ object Pairing {
             .setSingleDevice(true)
             .build()
 
+        Log.i(TAG, "associate: name pattern $name")
         manager.associate(request, object : CompanionDeviceManager.Callback() {
             @Deprecated("Replaced by onAssociationPending on API 33")
             override fun onDeviceFound(intentSender: IntentSender) = onChooser(intentSender)
@@ -154,8 +196,102 @@ object Pairing {
             override fun onAssociationPending(intentSender: IntentSender) =
                 onChooser(intentSender)
 
-            override fun onFailure(error: CharSequence?) = onFailure(error)
+            override fun onFailure(error: CharSequence?) {
+                Log.w(TAG, "associate failed: $error")
+                onFailure(error)
+            }
         }, null)
+    }
+
+    /** A running [locate] scan; [cancel] when the page that asked for it goes. */
+    class Locate internal constructor(private val stop: () -> Unit) {
+        fun cancel() = stop()
+    }
+
+    /**
+     * Find the band the label names, by a scan of our own before the OS
+     * chooser is asked: unfiltered (class comment), the name — which only
+     * the scan response carries — compared here once the stack has merged
+     * the two halves of the scan record. Ends with the band's address and
+     * name, or [onNotFound] after [LOCATE_TIMEOUT_MS] with nothing matching:
+     * a quicker and better-worded failure than the chooser's 20 s silence,
+     * and the chooser only opens once the band is known to be on the air.
+     * [onNotFound] is told how many advertisements of any kind the scan
+     * heard; zero means the phone is not scanning at all (class comment).
+     *
+     * Returns null when this handset cannot scan (permission refused,
+     * Bluetooth off), and the caller goes straight to the chooser.
+     *
+     * The permission is BLUETOOTH_SCAN with `neverForLocation` on API 31+
+     * (no location prompt); below that it is the location permission the
+     * app already asks for.
+     */
+    @SuppressLint("MissingPermission")   // checked just below
+    fun locate(
+        context: Context,
+        target: BandCode,
+        onFound: (Found) -> Unit,
+        onNotFound: (heard: Int) -> Unit,
+    ): Locate? {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            Manifest.permission.BLUETOOTH_SCAN else Manifest.permission.ACCESS_FINE_LOCATION
+        if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "locate: no scan permission, leaving it to the chooser")
+            return null
+        }
+        val scanner = BluetoothAdapter.getDefaultAdapter()?.takeIf { it.isEnabled }?.bluetoothLeScanner
+        if (scanner == null) {
+            Log.w(TAG, "locate: no LE scanner, leaving it to the chooser")
+            return null
+        }
+
+        val handler = Handler(Looper.getMainLooper())
+        var live = true
+        var heard = 0
+        val bands = LinkedHashMap<String, String?>()
+        lateinit var finish: (Found?) -> Unit
+        val cb = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, r: ScanResult) {
+                if (!live) return
+                heard++
+                val rec = r.scanRecord
+                val name = rec?.deviceName ?: runCatching { r.device.name }.getOrNull()
+                val ours = rec?.serviceUuids?.any { it.uuid == Gatt.SERVICE } == true ||
+                    name?.startsWith(BandCode.NAME_PREFIX, ignoreCase = true) == true
+                if (ours && bands.put(r.device.address, name) == null)
+                    Log.i(TAG, "locate: band ${r.device.address} rssi=${r.rssi} name=$name")
+                val hit = name.equals(target.name, ignoreCase = true) ||
+                    r.device.address.equals(target.address, ignoreCase = true)
+                if (hit) finish(Found(r.device.address.uppercase(), name ?: target.name))
+            }
+            override fun onScanFailed(errorCode: Int) {
+                Log.e(TAG, "locate: scan failed $errorCode")
+                if (live) finish(null)
+            }
+        }
+        val timeout = Runnable { if (live) finish(null) }
+        finish = { found ->
+            live = false
+            handler.removeCallbacks(timeout)
+            runCatching { scanner.stopScan(cb) }
+            Log.i(TAG, "locate: ${if (found != null) "found ${found.address}" else "not found"} " +
+                "after $heard results, bands=$bands")
+            if (found != null) onFound(found) else onNotFound(heard)
+        }
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        Log.i(TAG, "locate: looking for ${target.name}")
+        scanner.startScan(null, settings, cb)
+        handler.postDelayed(timeout, LOCATE_TIMEOUT_MS)
+
+        return Locate {
+            if (!live) return@Locate
+            live = false
+            handler.removeCallbacks(timeout)
+            runCatching { scanner.stopScan(cb) }
+        }
     }
 
     /**

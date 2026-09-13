@@ -58,14 +58,26 @@ are in [`design/android-redesign/`](../design/android-redesign/).
 
 ## Pairing
 
-First run is a two-step setup: the setup page's own embedded viewfinder scans
+The app opens on the contact list; unpaired, its status line is a single
+*Pair a band* button into a two-step setup. The setup page's own embedded viewfinder scans
 the QR label on the underside of the band, confirm the one device Android then
 shows, and optionally set your contact card. The label's content is the four
 hex digits after "Handoff band " in the band's advertised name; the firmware
 prints it on its USB console at boot
-(`name "Handoff band 7A3C", label HANDOFF:7A3C`) and
+(`name "Handoff band 7A3C", label 7A3C`) and
 [`tools/band_label.py`](../tools/band_label.py) turns that into a printable
 code. *Enter the band code instead* takes the four digits by hand.
+
+Every stage of the pairing is a toast — *Looking for Handoff band 7A3C…*,
+*Connecting to Handoff band 7A3C…*, and on failure what happened, with *Try
+again*. Two failures are worth knowing apart. *Couldn't find Handoff band
+7A3C* means the phone heard other Bluetooth devices but not the band: switch
+it on and bring it close. *Bluetooth on this phone isn't finding anything*
+means the phone heard nothing at all: its Bluetooth controller has run out of
+scan-filter slots (other apps hold them — Play services and, on OnePlus,
+HeyTap Accessory) and every app's scan comes back empty until Bluetooth is
+switched off and on. The app never asks for a hardware scan filter itself for
+that reason (see `Pairing.kt`), but even an unfiltered scan needs one slot.
 
 ## Walking the M2 exit criteria
 

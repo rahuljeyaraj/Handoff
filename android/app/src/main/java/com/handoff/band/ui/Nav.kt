@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,6 +20,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.handoff.band.ble.BandClient
 import com.handoff.band.ble.BandCode
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.Gatt
@@ -69,8 +71,11 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
 
     val state by band.state.collectAsState()
     val bandOff by prefs.bandOff.collectAsState()
-    var address by remember { mutableStateOf(Pairing.storedAddress(context)) }
-    var bandName by remember { mutableStateOf(Pairing.storedName(context)) }
+    // Re-read whenever Pairing changes it: the chooser below, Forget on the
+    // Band screen, or the service forgetting a band unpaired from settings.
+    val pairingVersion by Pairing.version.collectAsState()
+    val address = remember(pairingVersion) { Pairing.storedAddress(context) }
+    val bandName = remember(pairingVersion) { Pairing.storedName(context) }
     val view = bandView(state, address, bandName, bandOff)
     val theme by prefs.theme.collectAsState()
     val sort by prefs.sort.collectAsState()
@@ -84,44 +89,106 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     // one-shot event for whichever screen the wearer lands back on.
     var forgetFailedAt by remember { mutableStateOf<Long?>(null) }
 
-    // A CompanionDeviceManager chooser, shared by first-run setup and the
-    // Band screen. The result is one band, remembered and connected to.
+    // First-run pairing, every state of it on screen (pairing-page brief
+    // §1). Owned here rather than by the setup page because the chooser
+    // result and the service state both land here.
+    var step by remember { mutableStateOf<PairStep>(PairStep.Scanning) }
+    var locating by remember { mutableStateOf<Pairing.Locate?>(null) }
+
+    fun couldNotFind(code: BandCode) = PairStep.Failed(
+        "Couldn't find ${code.name}.\nIs it switched on and close by?", code)
+    // The phone's scanner, not the band (Pairing's class comment). The only
+    // remedy is the wearer's, so it is named.
+    val cannotScan =
+        "Bluetooth on this phone isn't finding anything.\nTurn it off and on, then try again."
+
+    // The CompanionDeviceManager chooser. RESULT_OK carries one band, which
+    // is remembered and connected to; anything else is the wearer dismissing
+    // the sheet, and the page has to say so — the chooser says nothing.
     val chooser = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        Pairing.foundFrom(result.data)?.let { found ->
-            Pairing.remember(context, found)
-            prefs.setBandOff(false)
-            address = found.address
-            bandName = found.name
-            BandService.start(context, found.address)
-            band.bind()
+        val code = (step as? PairStep.Looking)?.code ?: return@rememberLauncherForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) {
+            step = PairStep.Failed("Pairing was cancelled", code)
+            return@rememberLauncherForActivityResult
         }
+        val found = Pairing.foundFrom(result.data)
+        if (found == null) {
+            step = PairStep.Failed("Couldn't connect to ${code.name}", code)
+            return@rememberLauncherForActivityResult
+        }
+        // The label's name is authoritative; the chooser's display name is
+        // whatever the stack had cached, which can be nothing.
+        Pairing.remember(context, Pairing.Found(found.address, code.name))
+        prefs.setBandOff(false)
+        BandService.start(context, found.address)
+        band.bind()
+        step = PairStep.Connecting(code.name, code)
     }
-    fun pair(target: BandCode?) = Pairing.associate(
-        context as Activity, target,
+
+    // Reached only after locate() heard the band seconds earlier, so a
+    // chooser that then times out is the phone's scanning giving out
+    // between the two, not a band that went away.
+    fun associate(code: BandCode, located: Boolean) = Pairing.associate(
+        context as Activity, code,
         onChooser = { chooser.launch(IntentSenderRequest.Builder(it).build()) },
-        onFailure = { /* the chooser reports its own failure */ },
+        onFailure = { step = if (located) PairStep.Failed(cannotScan, code) else couldNotFind(code) },
     )
 
-    // First run lands on setup; a paired phone lands on the list.
-    val start = remember { if (Pairing.storedAddress(context) == null) Routes.SETUP else Routes.CONTACTS }
+    // The same path whether the code was scanned or typed. Our own scan
+    // confirms the band is on the air before the chooser is asked (brief
+    // §2); a handset that cannot scan goes straight to the chooser.
+    fun pair(code: BandCode) {
+        locating?.cancel()
+        step = PairStep.Looking(code)
+        locating = Pairing.locate(
+            context, code,
+            onFound = { locating = null; associate(code, located = true) },
+            onNotFound = { heard ->
+                locating = null
+                step = if (heard == 0) PairStep.Failed(cannotScan, code) else couldNotFind(code)
+            },
+        ) ?: run { associate(code, located = false); null }
+    }
 
-    NavHost(nav, startDestination = start) {
+    // Connecting is the service's to finish: the link comes up and bonds
+    // (ready), or the bond is refused, or nothing answers for 15 s. A band
+    // remembered and then not connected is forgotten again, so that a retry
+    // — or the next visit — starts clean rather than on top of a service
+    // still trying.
+    val connecting = step as? PairStep.Connecting
+    LaunchedEffect(connecting, state?.ready, state?.lastError, state?.notFoundAt) {
+        if (connecting == null) return@LaunchedEffect
+        val s = state ?: return@LaunchedEffect
+        val failed = when {
+            s.ready -> { step = PairStep.Connected(connecting.name); return@LaunchedEffect }
+            s.lastError == BandClient.ERR_BOND_REFUSED -> "Pairing was cancelled"
+            s.lastError != null || s.notFoundAt != null -> "Couldn't connect to ${connecting.name}"
+            else -> return@LaunchedEffect
+        }
+        BandService.forget(context)
+        step = PairStep.Failed(failed, connecting.code)
+    }
+
+    // Home is the list, paired or not: unpaired, its status line is a single
+    // "Pair a band" button into setup, and setup pops back to it when done.
+    NavHost(nav, startDestination = Routes.CONTACTS) {
         composable(Routes.SETUP) {
+            // A fresh attempt each visit, and a scan that cannot outlive the
+            // page.
+            LaunchedEffect(Unit) { step = PairStep.Scanning }
+            DisposableEffect(Unit) { onDispose { locating?.cancel(); locating = null } }
             SetupScreen(
-                pairedName = if (address != null) (bandName ?: "Handoff band") else null,
+                step = step,
                 onCode = { pair(it) },
                 onSetUpCard = {
                     // Home underneath, the editor on top: back from the
                     // editor lands on the list, not on setup again.
-                    nav.navigate(Routes.CONTACTS) { popUpTo(Routes.SETUP) { inclusive = true } }
+                    nav.popBackStack()
                     nav.navigate(Routes.CARD)
                 },
-                onSkip = {
-                    nav.navigate(Routes.CONTACTS) { popUpTo(Routes.SETUP) { inclusive = true } }
-                },
+                onSkip = { nav.popBackStack() },
             )
         }
 
@@ -248,6 +315,13 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.BAND) {
+            // The band can go from under this screen — the service forgets
+            // one that was unpaired in Bluetooth settings — and unpaired
+            // there is no Band screen (review item 12). Popping to home is
+            // a no-op when Forget below already did it.
+            LaunchedEffect(address) {
+                if (address == null) nav.popBackStack(Routes.CONTACTS, inclusive = false)
+            }
             BandScreen(
                 band = view,
                 cardSummary = cardSummary,
@@ -266,8 +340,6 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 // the band is forgotten.
                 onForget = {
                     if (!BandService.forget(context)) forgetFailedAt = System.currentTimeMillis()
-                    address = null
-                    bandName = null
                     nav.popBackStack()
                 },
                 onCard = { nav.navigate(Routes.CARD) },
