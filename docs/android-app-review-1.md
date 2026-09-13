@@ -12,8 +12,9 @@ are straightforward.
 
 **Status: documented and decided, not started.** The user's decisions are
 recorded under each item as **Decided:**; copy choices are in §Copy at the end,
-with the chosen line marked. Open questions that survived the second pass are
-in §Still open.
+with the chosen line marked. The questions from the second pass and their
+answers are in §Still open, now closed; the one thing that grew out of them
+into a firmware feature is in §Carried forward.
 
 ---
 
@@ -49,8 +50,10 @@ storage and shows "Handoff band").
 13-byte buffer, and the scan filter matches on it); this is only about what
 the app prints. See §Copy B.
 
-**Decided:** "Band 7A3C" — everywhere, *including the advertised Bluetooth
-name*. That makes it a firmware change (`ble.c`'s `s_name`, the banner line)
+**Decided (third pass):** "Handoff band 7A3C" — everywhere, *including the
+advertised Bluetooth name*, which keeps the product name where the OS shows
+it. 17 characters: `ble.c`'s name buffer grows from 13 to 18, and the scan
+response from 14 to 19 bytes, well inside the 31-byte limit. That makes it a firmware change (`ble.c`'s `s_name`, the banner line)
 and a contract change with `BandCode.name`, which the scan filter matches on:
 one commit, both sides, as with the status struct. The QR payload's
 `HANDOFF:` prefix is machine-read only and can stay.
@@ -110,11 +113,10 @@ Options: (a) N editors in sequence, no permission; (b) request
 `WRITE_CONTACTS` and insert directly, which also unlocks item 10. The
 decision in §10 settles this.
 
-**Decided:** (b). Add `WRITE_CONTACTS`, requested the first time a batch save
-is attempted, and insert through the provider with no editors. This reverses
-the "do not add WRITE_CONTACTS" line in the brief and decisions §4, on the
-user's say-so. Which account the contacts land in is still open — see §Still
-open.
+**Decided (third pass):** no batch save at all — keep it simple. Selection
+mode offers batch **delete** only; saving to the phone stays a single-contact
+action through the system editor, and `WRITE_CONTACTS` is *not* added after
+all. The brief's rule stands.
 
 ## 8. Contacts: add one by hand
 
@@ -153,8 +155,7 @@ turned on, plus a provider insert — which also gives item 7 its batch save),
 or remove the row so nothing on the screen looks broken. Building it reverses
 a recorded decision, so it is the user's call, not the implementer's.
 
-**Decided:** remove the feature completely. (`WRITE_CONTACTS` still arrives
-via item 7, but auto-save is not built.)
+**Decided:** remove the feature completely.
 
 ## 11. Settings: fewer rows, a vibration switch
 
@@ -236,7 +237,10 @@ connect or reconnect started, flip the state to "not found" and say so on
 the status line (and the Band screen), leaving autoConnect running
 underneath so it still picks the band up when it appears. See §Copy G.
 
-**Decided:** show the failure after the attempt ends. (Note for the
+**Decided:** show the failure after the attempt ends — 15 seconds, and it
+must be seen: the status line's state, a snackbar on whichever screen is open,
+and the foreground-service notification's text, so it reaches a pocketed phone
+too. (Note for the
 implementer: with `autoConnect = true` the controller does not actually stop
 trying — what the user sees as "giving up" is the line staying at "Looking for
 the band" forever. The fix is the same either way: a timer, and a "Band 7A3C
@@ -283,8 +287,10 @@ when you shake someone's hand."
 1. "Handoff 7A3C" — as advertised, as printed on the label, no suffix
 2. "Handoff band 7A3C"
 3. "Handoff 7A3C band"
-4. **Chosen:** "Band 7A3C" — "Handoff" is the app's own name and is already on
-   screen. Applies to the advertised name too (item 3).
+4. "Band 7A3C" — "Handoff" is the app's own name and is already on screen
+
+**Chosen (third pass):** "Handoff band 7A3C" — option 2 — in the app and on
+the radio (item 3).
 
 **C. Setup step 2, heading versus button.** Was: heading "Set up your contact
 card", button "Set up my contact card".
@@ -308,13 +314,12 @@ clear-all (item 6). The one button is "Delete my contact card", with a bin.
 3. "Scan the band's code"
 4. "Point the camera at the band's label"
 
-**Chosen:** the user's own line, "Switch on and scan QR code". Grammar note:
-it wants an article — "Switch on and scan the QR code" — see §Still open.
+**Chosen:** "Switch on and scan the QR code".
 
 **G. When the band is not found (item 15).**
 
-1. **Chosen, renamed per B:** "Band 7A3C not found" — status line; the Band
-   screen adds "Switch it on and keep the phone close."
+1. **Chosen, renamed per B:** "Handoff band 7A3C not found" — status line;
+   the Band screen adds "Switch it on and keep the phone close."
 2. "Can't find Handoff 7A3C"
 3. "Band not found"
 
@@ -326,9 +331,10 @@ it wants an article — "Switch on and scan the QR code" — see §Still open.
 
 ---
 
-## Still open
+## Still open — now closed
 
-Questions that survived the decisions above, with a recommendation each.
+Questions that survived the second pass, each with the recommendation made
+and the answer given (third pass, 13 Sep).
 
 **O1. The advertised name.** "Band 7A3C" is what the phone's Bluetooth
 settings and the OS pairing dialog will show, outside the app where nothing
@@ -337,11 +343,15 @@ Recommendation: advertise "Handoff 7A3C" and display "Band 7A3C" inside the
 app. The user asked for the Bluetooth name to change too; needs one
 confirmation before the firmware moves.
 
+**Answer:** "Handoff band 7A3C" everywhere, radio included. Item 3 and Copy B updated.
+
 **O2. After "Delete my contact card": stay or leave?** Recommendation: leave.
 After the delete, the editor is an empty form, and staying on it reads as if
 nothing happened; the screen underneath shows the new state on its own (the
 nudge banner comes back, the Band row says "Not set"), and every route to the
 editor is one tap away.
+
+**Answer:** leave.
 
 **O3. Which account batch-saved contacts go into.** A provider insert has to
 name an account; the system editor used to ask. Inserting with no account
@@ -350,9 +360,13 @@ ask once, the first time, and remember it as a Settings row ("Save contacts
 to · Google · x@gmail.com"), with the phone's default as the preselected
 choice.
 
+**Answer:** moot — batch save is withdrawn (item 7). Selection mode deletes only.
+
 **O4. The "Met today, 14:32" line on a contact added by hand.** Recommendation:
 "Added today, 14:32" — same shape, says nothing about how. Needs a `source`
 column so the two are told apart.
+
+**Answer:** "Added today, 14:32", with a `source` column.
 
 **O5. How the vibrate setting reaches the band.** Two ways: (a) the band
 persists it — a format change to the flash record store, or a second settings
@@ -365,6 +379,8 @@ the events that would trigger the buzz — a real shared or received card —
 do not exist until M12's body link; for the demo, the fake-card path can
 buzz, and that is what proves the opcode.
 
+**Answer:** the band persists it in flash, like the card. And a wider point: a handshake received while the phone is out of reach must be persisted on the band until the phone is back. Both are firmware work — see §Carried forward.
+
 **O6. The home list's "saved" tick.** Recommendation: keep it, refreshed by
 one query when the list appears — `Contacts._ID IN (…)` over the stored
 contact ids, a single cursor however many rows — plus a `ContentObserver` on
@@ -372,9 +388,55 @@ Contacts only while the app is in the foreground. That is negligible load and
 also feeds the detail screen. If that still feels like too much machinery,
 drop the tick.
 
+**Answer:** keep it with the refresh — but the user doubts a bare tick is understood. See the note under §Carried forward, "the tick".
+
 **O7. Step 1 heading grammar.** "Switch on and scan QR code" is missing an
 article. Recommendation: "Switch on and scan the QR code".
+
+**Answer:** "Switch on and scan the QR code".
 
 **O8. The not-found timeout.** How long before "Band 7A3C not found" — 30 s
 recommended: long enough for a band that is being switched on, short enough
 that the answer arrives before anyone reaches for Settings.
+
+**Answer:** 15 seconds, and the failure must be shown, not just a state change (item 15).
+
+---
+
+## Carried forward
+
+**The band must hold what the phone is not there to receive.** Two things
+the vibrate question turned up, both firmware, both persisted in flash the
+way the card already is:
+
+1. **The vibrate setting lives on the band.** A settings field alongside the
+   record in the store (`store.c` / `flash.c`; a format bump), set by a new
+   control opcode (`BLE_CTRL_HAPTIC`, on/off) and reported back in `status`
+   as a flag bit — the flags byte has room (`0x20`) even though the struct
+   itself is full at 20 bytes — so the switch in the app shows the band's
+   truth, not the phone's memory. The band defaults to on.
+
+2. **Received handshakes are queued on the band until the phone is back.** A
+   card that arrives while the phone is disconnected must not be lost. That
+   is a second flash area — a queue of compact records, drained over
+   `rx_vcard` on connect, each dropped only when the phone acknowledges it
+   (a new `BLE_CTRL_ACK_RX` opcode with the record's index). Sizing: a compact
+   card is 100–200 bytes, so one 4 KB sector holds 16–32 handshakes, which is
+   a conference day; the flash bank map in `flash.c` has to be re-checked
+   against the BTstack bond bank before a sector is claimed. The app already
+   copes with replays — dedup by key makes a re-delivered card a merge, not a
+   duplicate. No real receive path exists until M12, but the fake-card path
+   can exercise the queue now: arm a fake card while disconnected, connect,
+   and it arrives — which is a demo in itself. This belongs in the firmware
+   plan as an M12 prerequisite, not in the app's next round; recorded here so
+   it is not lost.
+
+**The tick.** The user asks whether a bare green tick beside a time reads as
+"saved to your phone". Honest answer: no — a tick alone says "done" or
+"verified" as easily as "saved", and green is reserved by decisions §12 for
+connection and battery, so this tick is also off-palette. Two ways out, for
+the next pass to pick: (a) a neutral grey *phone-with-check* glyph, which at
+least says "in your phone"; (b) no marker in the list at all — the line
+already carries name, organisation, contact and time, and "is it in my phone"
+is a question asked on the detail screen, which keeps its "Saved to your
+phone" line and gets the one-query refresh. Recommendation: (b).
