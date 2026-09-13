@@ -49,9 +49,10 @@ import com.handoff.band.ui.components.SettingsRow
  * needed WRITE_CONTACTS and a provider insert, which the brief rules out
  * (review item 10).
  *
- * Vibrate's switch is drawn but not yet wired: the band persists the
- * setting itself, reported back in `status`, which lands in a later commit
- * alongside the opcode that turns the motor on and off.
+ * Vibrate reflects the band's own truth rather than the phone's memory of
+ * it: [hapticOn] comes off `status`'s flags, and the band persists whatever
+ * the switch sends through [onSetHaptic] (`BLE_CTRL_HAPTIC`), so a band that
+ * reboots is back in step within a second of reconnecting (review O5).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,8 +60,10 @@ fun SettingsScreen(
     theme: Prefs.Theme,
     sort: Prefs.Sort,
     appVersion: String,
+    hapticOn: Boolean,
     onTheme: (Prefs.Theme) -> Unit,
     onSort: (Prefs.Sort) -> Unit,
+    onSetHaptic: (Boolean) -> Unit,
     onAdvanced: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -88,7 +91,7 @@ fun SettingsScreen(
 
             SectionHeader("Band")
             SettingsRow("Vibrate", icon = HandoffIcons.Vibrate, chevron = false,
-                        trailing = { Switch(checked = false, onCheckedChange = null, enabled = false) })
+                        trailing = { Switch(checked = hapticOn, onCheckedChange = onSetHaptic) })
 
             SectionHeader("Appearance")
             SettingsRow("Theme", icon = HandoffIcons.Theme, subtitle = theme.label,

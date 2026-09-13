@@ -52,10 +52,11 @@ object Pairing {
             .getString(KEY_ADDRESS, null)?.uppercase()
 
     /**
-     * The band's advertised name — "Handoff 7A3C", built by `ble.c` from the
-     * last two bytes of the Pico's unique board id. It is how two bands on one
-     * bench are told apart, and the only identity the wearer ever sees: the
-     * MAC address appears nowhere in the customer-facing UI (design §2).
+     * The band's advertised name — "Handoff band 7A3C" (review item 3),
+     * built by `ble.c` from the last two bytes of the Pico's unique board
+     * id. It is how two bands on one bench are told apart, and the only
+     * identity the wearer ever sees: the MAC address appears nowhere in the
+     * customer-facing UI (design §2).
      */
     fun storedName(context: Context): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

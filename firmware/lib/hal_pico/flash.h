@@ -35,7 +35,19 @@
 /* Magic and version, so a blob written by an older build is rejected rather
  * than decoded into somebody else half-formed. */
 #define FLASH_RECORD_MAGIC   0x48414E44u   /* "HAND" */
-#define FLASH_RECORD_VERSION 1u
+/*
+ * Version 2 gives one of the header's reserved bytes a meaning (the haptic
+ * preference, review item 11, O5) rather than leaving it always zero. Bumped
+ * rather than left at 1: a record an old build wrote has that byte at zero by
+ * construction, which would silently decode as "vibrate off" instead of the
+ * intended default of on. Rejecting it instead means a band re-provisioned
+ * with this firmware needs its card written again — acceptable at this
+ * stage, and exactly what the version field exists to make happen instead of
+ * a wrong-but-plausible read.
+ */
+#define FLASH_RECORD_VERSION 2u
+
+#define FLASH_RECORD_FLAG_HAPTIC 0x01u
 
 /*
  * Register this as lib/record/store.c's backend. Call once at start-up,
@@ -47,8 +59,10 @@ bool flash_record_bind(void);
 
 /* The backend itself. Public so that a bring-up app can poke at it directly;
  * everything above lib/hal_pico should go through store.h instead. */
-bool flash_record_load(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id);
-bool flash_record_save(const uint8_t *blob, size_t len, uint8_t record_id);
+bool flash_record_load(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id,
+                       bool *haptic_on);
+bool flash_record_save(const uint8_t *blob, size_t len, uint8_t record_id,
+                       bool haptic_on);
 bool flash_record_erase(void);
 
 /* Where the record sector actually is, for the console banner. Both are byte

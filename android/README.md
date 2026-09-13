@@ -58,11 +58,12 @@ are in [`design/android-redesign/`](../design/android-redesign/).
 
 ## Pairing
 
-First run is a two-step setup: scan the QR label on the underside of the band,
-confirm the one device Android then shows, and optionally set your contact
-card. The label's content is the four hex digits after "Handoff " in the band's
-advertised name; the firmware prints it on its USB console at boot
-(`name "Handoff 7A3C", label HANDOFF:7A3C`) and
+First run is a two-step setup: the setup page's own embedded viewfinder scans
+the QR label on the underside of the band, confirm the one device Android then
+shows, and optionally set your contact card. The label's content is the four
+hex digits after "Handoff band " in the band's advertised name; the firmware
+prints it on its USB console at boot
+(`name "Handoff band 7A3C", label HANDOFF:7A3C`) and
 [`tools/band_label.py`](../tools/band_label.py) turns that into a printable
 code. *Enter the band code instead* takes the four digits by hand.
 

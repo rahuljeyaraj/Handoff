@@ -3,14 +3,14 @@
 The QR label for the underside of a band (android-app-decisions.md §2a).
 
 The label carries the band's identity as the radio advertises it: the four
-hex digits after "Handoff " in its BLE name, which ble.c derives from the last
-two bytes of pico_get_unique_board_id(). The app scans it, builds a scan
+hex digits after "Handoff band " in its BLE name, which ble.c derives from the
+last two bytes of pico_get_unique_board_id(). The app scans it, builds a scan
 filter for exactly that band, and Android's confirmation shows one device.
 
 For the demo, read the code off the band's USB console — the boot banner
 prints a line like
 
-    name "Handoff 7A3C", label HANDOFF:7A3C
+    name "Handoff band 7A3C", label HANDOFF:7A3C
 
 — and pass it here:
 

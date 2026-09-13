@@ -19,26 +19,31 @@
 static uint8_t g_blob[COMPACT_MAX_BLOB];
 static size_t  g_len;
 static uint8_t g_id;
+static bool    g_haptic;
 static bool    g_present;
 static bool    g_fail_writes;
 static int     g_saves;
 
-static bool fake_load(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id)
+static bool fake_load(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id,
+                      bool *haptic_on)
 {
     if (!g_present || g_len > max) return false;
     memcpy(blob, g_blob, g_len);
     *len = g_len;
     *record_id = g_id;
+    *haptic_on = g_haptic;
     return true;
 }
 
-static bool fake_save(const uint8_t *blob, size_t len, uint8_t record_id)
+static bool fake_save(const uint8_t *blob, size_t len, uint8_t record_id,
+                      bool haptic_on)
 {
     g_saves++;
     if (g_fail_writes || len > sizeof g_blob) return false;
     memcpy(g_blob, blob, len);
     g_len = len;
     g_id = record_id;
+    g_haptic = haptic_on;
     g_present = true;
     return true;
 }
@@ -58,6 +63,7 @@ static void fake_reset(void)
     memset(g_blob, 0, sizeof g_blob);
     g_len = 0;
     g_id = 0;
+    g_haptic = false;
     g_present = false;
     g_fail_writes = false;
     g_saves = 0;
@@ -224,6 +230,34 @@ static void forgetting_clears_both_halves(void)
     HF_EQ_INT(store_load(&s), STORE_ERR_EMPTY);
 }
 
+static void haptic_defaults_on_and_survives_a_power_cycle(void)
+{
+    store_t s, after;
+
+    fake_reset();
+    store_set_backend(&k_fake);
+
+    /* review O5: the band defaults to on, with nothing loaded yet. */
+    store_init(&s);
+    HF_CHECK(store_haptic_on(&s));
+
+    /* Turning it off has nowhere to go until a card exists (review O5's
+     * documented limitation) — the RAM value still changes, but nothing
+     * persists. */
+    store_set_haptic(&s, false);
+    HF_CHECK(!store_haptic_on(&s));
+    HF_EQ_INT(store_save(&s), STORE_ERR_EMPTY);
+
+    /* Once a card exists, the preference rides along with it. */
+    HF_EQ_INT(store_put_vcard(&s, k_card, strlen(k_card)), STORE_OK);
+    HF_EQ_INT(store_save(&s), STORE_OK);
+
+    store_init(&after);
+    HF_CHECK(store_haptic_on(&after));   /* the fresh default, pre-load */
+    HF_EQ_INT(store_load(&after), STORE_OK);
+    HF_CHECK(!store_haptic_on(&after));  /* the persisted off survives reload */
+}
+
 static void what_is_stored_is_the_compact_form_not_the_text(void)
 {
     store_t s;
@@ -279,6 +313,9 @@ void test_store(void)
 
     hf_begin("store: forgetting clears RAM and flash together");
     forgetting_clears_both_halves();
+
+    hf_begin("store: haptic defaults on and survives a power cycle");
+    haptic_defaults_on_and_survives_a_power_cycle();
 
     hf_begin("store: what is stored is the compact form, not the text");
     what_is_stored_is_the_compact_form_not_the_text();

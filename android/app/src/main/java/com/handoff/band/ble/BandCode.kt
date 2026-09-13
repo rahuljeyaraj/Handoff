@@ -4,10 +4,12 @@ package com.handoff.band.ble
  * The label on the underside of the band, design decisions §2a.
  *
  * Its content is the band's identity as the radio advertises it: the four
- * hex digits `ble.c` puts after "Handoff " in the Complete Local Name, taken
- * from the last two bytes of `pico_get_unique_board_id()`. Optionally the
- * MAC address, when a production label has it. Either way it is generated
- * per board from the same id the firmware uses, never typed by hand.
+ * hex digits `ble.c` puts after "Handoff band " in the Complete Local Name
+ * (review item 3 — renamed from "Handoff " so the product name is what the
+ * OS shows too), taken from the last two bytes of
+ * `pico_get_unique_board_id()`. Optionally the MAC address, when a
+ * production label has it. Either way it is generated per board from the
+ * same id the firmware uses, never typed by hand.
  *
  *     HANDOFF:7A3C
  *     HANDOFF:7A3C:28:CD:C1:0A:1B:2C
@@ -18,7 +20,7 @@ package com.handoff.band.ble
 data class BandCode(val suffix: String, val address: String? = null) {
 
     /** The advertised name, which is what the scan filter matches on. */
-    val name: String get() = "Handoff $suffix"
+    val name: String get() = "Handoff band $suffix"
 
     override fun toString(): String =
         if (address != null) "$PREFIX:$suffix:$address" else "$PREFIX:$suffix"

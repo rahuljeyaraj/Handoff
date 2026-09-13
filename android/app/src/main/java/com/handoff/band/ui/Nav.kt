@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.handoff.band.ble.BandCode
 import com.handoff.band.ble.BandService
+import com.handoff.band.ble.Gatt
 import com.handoff.band.ble.Pairing
 import com.handoff.band.contacts.Promote
 import com.handoff.band.data.HandoffDb
@@ -237,8 +238,10 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 theme = theme,
                 sort = sort,
                 appVersion = appVersion(context),
+                hapticOn = view.hapticOn,
                 onTheme = prefs::setTheme,
                 onSort = prefs::setSort,
+                onSetHaptic = { on -> band.service?.control(Gatt.haptic(on)) },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },
                 onBack = { nav.popBackStack() },
             )

@@ -80,6 +80,8 @@ data class BandView(
     val battery: BatteryLevel,
     /** "0.2.0", or null until a version-2 band has reported. */
     val firmware: String?,
+    /** The band's own vibrate preference (review item 11). True until reported. */
+    val hapticOn: Boolean,
 ) {
     enum class Connection(val label: String) {
         NOT_PAIRED("Not paired"),
@@ -113,13 +115,16 @@ data class BandView(
             }
             return BandView(
                 paired = paired,
-                // The advertised name, "Handoff 7A3C". A band paired before
-                // names were stored has none; "Handoff band" until re-paired.
+                // The advertised name, "Handoff band 7A3C" (review item 3).
+                // A band paired before names were stored has none, and one
+                // paired before the rename shows "Handoff band" until
+                // forgotten and re-paired — both fall back the same way.
                 name = name ?: "Handoff band",
                 connection = connection,
                 cardOnBand = state?.status?.provisioned,
                 battery = BatteryLevel.from(state?.status),
                 firmware = state?.status?.firmware,
+                hapticOn = state?.status?.hapticOn ?: true,
             )
         }
     }

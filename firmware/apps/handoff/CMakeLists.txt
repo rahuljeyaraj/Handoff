@@ -7,6 +7,7 @@
 
 add_executable(handoff
     handoff.c
+    motor.c
 )
 
 target_link_libraries(handoff

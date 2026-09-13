@@ -101,10 +101,17 @@ static const uint8_t s_adv_data[] = {
     0x46, 0x4f, 0x01, 0x00, 0x44, 0x4e, 0x41, 0x48,
 };
 
-/* "Handoff ABCD" — the last four hex digits of the board id, so two
- * wristbands on one bench are distinguishable at M14 without a label. */
-static uint8_t s_scan_resp[1 + 1 + 12];
-static char    s_name[13];
+/*
+ * "Handoff band ABCD" — the last four hex digits of the board id, so two
+ * wristbands on one bench are distinguishable at M14 without a label.
+ *
+ * Review item 3 (third pass): the product name goes where the OS shows it —
+ * Bluetooth settings, the pairing dialog — not just inside the app. 17
+ * characters plus the terminator, well inside the 31-byte advertisement
+ * budget once folded into the scan response (19 of it, see scan_response_len).
+ */
+static uint8_t s_scan_resp[1 + 1 + 17];
+static char    s_name[18];
 
 /* ---------------------------------------------------------------------- */
 
@@ -113,7 +120,7 @@ static void build_name_and_scan_response(void)
     pico_unique_board_id_t id;
 
     pico_get_unique_board_id(&id);
-    snprintf(s_name, sizeof s_name, "Handoff %02X%02X",
+    snprintf(s_name, sizeof s_name, "Handoff band %02X%02X",
              id.id[PICO_UNIQUE_BOARD_ID_SIZE_BYTES - 2],
              id.id[PICO_UNIQUE_BOARD_ID_SIZE_BYTES - 1]);
 

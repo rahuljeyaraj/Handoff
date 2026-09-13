@@ -7,7 +7,11 @@
 void store_init(store_t *s)
 {
     memset(s, 0, sizeof *s);
+    s->haptic_on = true;   /* the band defaults to on (review O5) */
 }
+
+void store_set_haptic(store_t *s, bool on) { s->haptic_on = on; }
+bool store_haptic_on(const store_t *s)     { return s->haptic_on; }
 
 store_err_t store_put(store_t *s, const uint8_t *blob, size_t len)
 {
@@ -65,11 +69,12 @@ store_err_t store_load(store_t *s)
 {
     size_t len = 0;
     uint8_t id = 0;
+    bool haptic_on = true;
 
     if (!s_backend || !s_backend->load) return STORE_ERR_BACKEND;
 
     store_init(s);
-    if (!s_backend->load(s->blob, sizeof s->blob, &len, &id))
+    if (!s_backend->load(s->blob, sizeof s->blob, &len, &id, &haptic_on))
         return STORE_ERR_EMPTY;
 
     /* A backend that hands back more than the blob can hold has already
@@ -82,9 +87,20 @@ store_err_t store_load(store_t *s)
     s->len       = (uint16_t)len;
     s->record_id = (uint8_t)(id & FRAME_MAX_RECORD_ID);
     s->valid     = true;
+    s->haptic_on = haptic_on;
     return STORE_OK;
 }
 
+/*
+ * record_id and the haptic preference are saved with the blob rather than in
+ * a second flash area (review O5) — one write, one place, and the vibrate
+ * setting survives a power cycle exactly as the card does. The limitation
+ * that comes with sharing the record: an unprovisioned band has nowhere to
+ * persist the preference to yet, since STORE_ERR_EMPTY below refuses the
+ * write until a card exists. The wearer's toggle still applies immediately
+ * in RAM for the rest of that boot; it starts riding along the moment a card
+ * is saved.
+ */
 store_err_t store_save(const store_t *s)
 {
     if (!s_backend || !s_backend->save) return STORE_ERR_BACKEND;
@@ -96,8 +112,8 @@ store_err_t store_save(const store_t *s)
      * frag_rx_add), so a wristband that power-cycled between two frames must
      * not claim to still be sending the record it was sending before.
      */
-    return s_backend->save(s->blob, s->len, s->record_id) ? STORE_OK
-                                                          : STORE_ERR_BACKEND;
+    return s_backend->save(s->blob, s->len, s->record_id, s->haptic_on)
+        ? STORE_OK : STORE_ERR_BACKEND;
 }
 
 store_err_t store_forget(store_t *s)

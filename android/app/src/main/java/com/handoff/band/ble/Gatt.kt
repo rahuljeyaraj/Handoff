@@ -51,6 +51,7 @@ object Gatt {
     const val CTRL_TLM_DECIMATE = 0x04
     const val CTRL_FAKE_RX = 0x05
     const val CTRL_FORGET = 0x06
+    const val CTRL_HAPTIC = 0x07
 
     /**
      * Ask the band to notify its hardcoded card in [seconds]. M2 only, and the
@@ -62,6 +63,10 @@ object Gatt {
         byteArrayOf(CTRL_FAKE_RX.toByte(), seconds.coerceIn(0, 255).toByte())
 
     fun forget(): ByteArray = byteArrayOf(CTRL_FORGET.toByte())
+
+    /** The Settings switch (review item 11). The band persists this itself. */
+    fun haptic(on: Boolean): ByteArray =
+        byteArrayOf(CTRL_HAPTIC.toByte(), if (on) 1 else 0)
 
     fun telemetryDecimate(n: Int): ByteArray {
         val b = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
@@ -103,6 +108,8 @@ data class BandStatus(
     val provisioned get() = flags and PROVISIONED != 0
     val flashOk get() = flags and FLASH_OK != 0
     val telemetryOn get() = flags and TLM_ON != 0
+    /** The band's own vibrate preference (review item 11), persisted there. */
+    val hapticOn get() = flags and HAPTIC_ON != 0
 
     /**
      * VBUS at the Pico. NOT charging: the charger is off-board on J5 and the
@@ -121,6 +128,7 @@ data class BandStatus(
         const val FLASH_OK = 0x04
         const val TLM_ON = 0x08
         const val USB_POWER = 0x10
+        const val HAPTIC_ON = 0x20
 
         /** Above this VSYS is not a cell (design decisions §8). */
         const val USB_VSYS_MV = 4300

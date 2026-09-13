@@ -13,7 +13,7 @@ class BandCodeTest {
         assertEquals(BandCode("7A3C"), BandCode.parse("HANDOFF:7A3C"))
         assertEquals(BandCode("7A3C", "28:CD:C1:0A:1B:2C"),
                      BandCode.parse("HANDOFF:7A3C:28:CD:C1:0A:1B:2C"))
-        assertEquals("Handoff 7A3C", BandCode.parse("HANDOFF:7A3C")!!.name)
+        assertEquals("Handoff band 7A3C", BandCode.parse("HANDOFF:7A3C")!!.name)
         assertEquals("HANDOFF:7A3C", BandCode("7A3C").toString())
     }
 

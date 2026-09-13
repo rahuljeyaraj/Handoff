@@ -34,6 +34,7 @@
 #include "ble.h"
 #include "config.h"
 #include "flash.h"
+#include "motor.h"
 #include "power.h"
 #include "store.h"
 #include "vcard.h"
@@ -89,6 +90,7 @@ static void report_status(void)
     if (s_flash_ok)                                 st.flags |= BLE_ST_FLASH_OK;
     if (ble_telemetry_subscribed())                 st.flags |= BLE_ST_TLM_ON;
     if (power_on_usb())                             st.flags |= BLE_ST_USB_POWER;
+    if (store_haptic_on(&s_store))                  st.flags |= BLE_ST_HAPTIC_ON;
 
     st.own_blob_len = (uint16_t)len;
     st.chunk_errors = ble_chunk_errors();
@@ -165,6 +167,25 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
         report_status();
         break;
 
+    case BLE_CTRL_HAPTIC: {
+        bool on = len >= 1u && arg[0] != 0u;
+        bool persisted;
+
+        store_set_haptic(&s_store, on);
+        /*
+         * Only a provisioned band has anywhere to persist this to (store.c's
+         * record-or-nothing format, review O5): an unprovisioned one keeps
+         * the preference in RAM for the rest of this boot and it starts
+         * riding along the moment a card is saved.
+         */
+        persisted = store_get(&s_store, NULL, NULL) == STORE_OK
+            && store_save(&s_store) == STORE_OK;
+        printf("handoff: haptic %s%s\n", on ? "on" : "off",
+               persisted ? ", persisted" : ", not yet persisted (no card)");
+        report_status();
+        break;
+    }
+
     case BLE_CTRL_CARRIER:
     case BLE_CTRL_RAW_TRIGGER:
     case BLE_CTRL_FORCE_ROLE:
@@ -192,6 +213,13 @@ static void send_fake_card(btstack_timer_source_t *ts)
     printf("handoff: fake rx_vcard %s (%u bytes, ATT MTU %u)\n",
            sent ? "sent" : "REFUSED", (unsigned)(sizeof k_fake_card - 1u),
            (unsigned)ble_att_mtu());
+
+    /*
+     * The only "a card arrived" event this image has (review "Carried
+     * forward", O5): no real body link exists until M12, so this is what
+     * proves BLE_CTRL_HAPTIC actually reaches the motor.
+     */
+    if (sent && store_haptic_on(&s_store)) motor_play(MOTOR_PATTERN_RECEIVED);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -209,8 +237,10 @@ static void print_banner(void)
     printf("  record sector at 0x%06x, %u bytes\n",
            (unsigned)flash_record_offset(), (unsigned)flash_record_sector_size());
     /* The QR label's content, from the same board id the name comes from.
-     * tools/band_label.py turns this line into the label. */
-    printf("  name \"%s\", label HANDOFF:%s\n", ble_local_name(), ble_local_name() + 8);
+     * tools/band_label.py turns this line into the label. Offset 13 skips
+     * "Handoff band " (review item 3 renamed the advertised name from
+     * "Handoff "). */
+    printf("  name \"%s\", label HANDOFF:%s\n", ble_local_name(), ble_local_name() + 13);
 
     if (store_get(&s_store, &blob, &len) == STORE_OK)
         printf("  provisioned: %u compact bytes, record id %u\n",
@@ -235,6 +265,13 @@ static void print_banner(void)
 int main(void)
 {
     stdio_init_all();
+
+    /*
+     * First thing, not merely early: R17 only holds Q1's gate down while
+     * GP28 is an input, which is the reset state and stays that way until
+     * this call claims it (hardware README, "R17 ... Not optional").
+     */
+    motor_init();
 
     if (cyw43_arch_init()) {
         printf("handoff: cyw43_arch_init failed\n");

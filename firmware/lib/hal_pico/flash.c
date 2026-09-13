@@ -49,7 +49,8 @@ typedef struct {
     uint16_t version;
     uint16_t len;        /* compact TLV bytes that follow */
     uint8_t  record_id;  /* 0..63, frame.h's field width */
-    uint8_t  reserved[3];
+    uint8_t  flags;      /* FLASH_RECORD_FLAG_* (v2) — reserved[0] before it */
+    uint8_t  reserved[2];
     uint16_t crc;        /* CRC-16/CCITT over the blob */
     uint16_t hdr_crc;    /* ...and over everything above it */
 } flash_record_hdr_t;
@@ -116,7 +117,8 @@ static bool run_write(write_req_t *req)
 
 /* ---- the backend ------------------------------------------------------ */
 
-bool flash_record_load(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id)
+bool flash_record_load(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id,
+                       bool *haptic_on)
 {
     const uint8_t *p = record_flash();
     flash_record_hdr_t h;
@@ -134,10 +136,12 @@ bool flash_record_load(uint8_t *blob, size_t max, size_t *len, uint8_t *record_i
     memcpy(blob, p + sizeof h, h.len);
     *len = h.len;
     *record_id = h.record_id;
+    if (haptic_on) *haptic_on = (h.flags & FLASH_RECORD_FLAG_HAPTIC) != 0;
     return true;
 }
 
-bool flash_record_save(const uint8_t *blob, size_t len, uint8_t record_id)
+bool flash_record_save(const uint8_t *blob, size_t len, uint8_t record_id,
+                       bool haptic_on)
 {
     /*
      * The whole sector is staged in RAM first. flash_range_program writes
@@ -156,6 +160,7 @@ bool flash_record_save(const uint8_t *blob, size_t len, uint8_t record_id)
     h.version   = FLASH_RECORD_VERSION;
     h.len       = (uint16_t)len;
     h.record_id = record_id;
+    h.flags     = haptic_on ? FLASH_RECORD_FLAG_HAPTIC : 0u;
     h.crc       = crc16(blob, len);
     h.hdr_crc   = hdr_crc_of(&h);
 

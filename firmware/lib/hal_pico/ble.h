@@ -70,7 +70,8 @@ typedef enum {
     BLE_CTRL_FORCE_ROLE   = 0x03,  /* u8: 0 = target, 1 = initiator   (M14) */
     BLE_CTRL_TLM_DECIMATE = 0x04,  /* u16 LE, 0 disables telemetry    (M4)  */
     BLE_CTRL_FAKE_RX      = 0x05,  /* u8 delay seconds                (M2)  */
-    BLE_CTRL_FORGET       = 0x06   /* erase the provisioned record    (M2)  */
+    BLE_CTRL_FORGET       = 0x06,  /* erase the provisioned record    (M2)  */
+    BLE_CTRL_HAPTIC       = 0x07   /* u8: 0 = off, 1 = on, persisted (review item 11) */
 } ble_ctrl_op_t;
 
 /* ---- status ----------------------------------------------------------- */
@@ -83,6 +84,7 @@ typedef enum {
 #define BLE_ST_TLM_ON      0x08u  /* telemetry notifications are subscribed  */
 #define BLE_ST_USB_POWER   0x10u  /* VBUS present at the Pico (v2). NOT charging: the
                                      charger is off-board on J5 and invisible here */
+#define BLE_ST_HAPTIC_ON   0x20u  /* the motor fires on a shared/received card (review item 11) */
 
 /*
  * 20 bytes, which is exactly one notification at the 23-byte ATT floor
@@ -161,7 +163,8 @@ bool ble_notify_telemetry(const void *scores, size_t len);
 
 bool     ble_connected(void);
 
-/* The advertised name, "Handoff 7A3C". Valid after ble_init(). */
+/* The advertised name, "Handoff band 7A3C" (review item 3). Valid after
+ * ble_init(). */
 const char *ble_local_name(void);
 bool     ble_encrypted(void);
 bool     ble_telemetry_subscribed(void);

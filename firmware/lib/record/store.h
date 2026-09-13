@@ -38,9 +38,21 @@ typedef struct {
     uint16_t len;
     uint8_t  record_id;      /* 0..63, bumped on every successful write */
     bool     valid;
+    /*
+     * The band's own vibrate preference (review item 11, O5), persisted
+     * alongside the record rather than in a second flash area. Defaults to
+     * on at store_init() and is overwritten by store_load() only when a
+     * saved record actually exists.
+     */
+    bool     haptic_on;
 } store_t;
 
 void        store_init(store_t *s);
+
+/* The wearer's vibrate preference. Set immediately in RAM; store_save()
+ * carries it to flash the next time a record is written. */
+void    store_set_haptic(store_t *s, bool on);
+bool    store_haptic_on(const store_t *s);
 
 /* Replace the stored record. Bumps record_id so a receiver mid-transfer does
  * not merge the old card with the new one (see frag_rx_add). */
@@ -63,8 +75,10 @@ uint8_t     store_record_id(const store_t *s);
  * be described in three lines is a backend doing too much.
  */
 typedef struct {
-    bool (*load)(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id);
-    bool (*save)(const uint8_t *blob, size_t len, uint8_t record_id);
+    bool (*load)(uint8_t *blob, size_t max, size_t *len, uint8_t *record_id,
+                 bool *haptic_on);
+    bool (*save)(const uint8_t *blob, size_t len, uint8_t record_id,
+                 bool haptic_on);
     bool (*erase)(void);
 } store_backend_t;
 

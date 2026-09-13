@@ -74,6 +74,15 @@ class BandStatusTest {
     }
 
     @Test
+    fun hapticOnFromTheFlag() {
+        // 0x23 = ENCRYPTED | PROVISIONED | HAPTIC_ON
+        val on = BandStatus.parse(v1(flags = 0x23))
+        assertEquals(true, on!!.hapticOn)
+        val off = BandStatus.parse(v1(flags = 0x03))
+        assertEquals(false, off!!.hapticOn)
+    }
+
+    @Test
     fun rejectsVersionZeroAndShortPayloads() {
         assertNull(BandStatus.parse(v1(version = 0)))
         assertNull(BandStatus.parse(ByteArray(15)))
