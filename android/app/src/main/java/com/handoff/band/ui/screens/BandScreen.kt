@@ -45,6 +45,7 @@ import com.handoff.band.ui.components.ConnectionDot
 import com.handoff.band.ui.components.HandoffIcons
 import com.handoff.band.ui.components.HandoffSnackbarHost
 import com.handoff.band.ui.components.SettingsRow
+import com.handoff.band.ui.theme.semantic
 
 /**
  * The Band screen: name, connection, battery, firmware, your card, and the
@@ -106,11 +107,11 @@ fun BandScreen(
             Hero(band)
 
             // The card first: it is the one row here you act on, and its
-            // glyph is the home page's — the slashed card, in red, until
-            // one is set.
+            // glyph is the home page's — green card once one is set, the
+            // slashed card in red until then.
             SettingsRow("Your contact card",
                         icon = if (cardSet) HandoffIcons.Card else HandoffIcons.CardOff,
-                        iconTint = if (cardSet) MaterialTheme.colorScheme.onSurfaceVariant
+                        iconTint = if (cardSet) MaterialTheme.semantic.ok
                                    else MaterialTheme.colorScheme.error,
                         subtitle = cardSummary, onClick = onCard)
             SettingsRow("Battery", subtitle = band.battery.label, chevron = false,
