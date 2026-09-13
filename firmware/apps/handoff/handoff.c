@@ -34,6 +34,7 @@
 #include "ble.h"
 #include "config.h"
 #include "flash.h"
+#include "power.h"
 #include "store.h"
 #include "vcard.h"
 
@@ -64,6 +65,13 @@ static bool    s_flash_ok;
  */
 static btstack_timer_source_t s_fake_rx_timer;
 
+/* Status is only notified on change, and the battery changes on its own, so
+ * a slow tick keeps the phone's battery glyph honest. Thirty seconds: a
+ * Li-ion curve does not move faster than that, and each read wakes the
+ * CYW43 for the shared GP29. */
+static btstack_timer_source_t s_status_timer;
+#define STATUS_TICK_MS 30000u
+
 /* ---------------------------------------------------------------------- */
 
 static void report_status(void)
@@ -80,9 +88,20 @@ static void report_status(void)
     if (store_get(&s_store, &blob, &len) == STORE_OK) st.flags |= BLE_ST_PROVISIONED;
     if (s_flash_ok)                                 st.flags |= BLE_ST_FLASH_OK;
     if (ble_telemetry_subscribed())                 st.flags |= BLE_ST_TLM_ON;
+    if (power_on_usb())                             st.flags |= BLE_ST_USB_POWER;
 
     st.own_blob_len = (uint16_t)len;
     st.chunk_errors = ble_chunk_errors();
+
+    /* Version 2: the supply and the image. VSYS is after D1; the app adds
+     * the diode drop and draws the battery, or a plug when USB is in. */
+    {
+        uint32_t mv = power_vsys_mv();
+        st.vsys_20mv = (uint8_t)((mv + 10u) / 20u > 255u ? 255u : (mv + 10u) / 20u);
+    }
+    st.fw_major = HANDOFF_FW_VERSION_MAJOR;
+    st.fw_minor = HANDOFF_FW_VERSION_MINOR;
+    st.fw_patch = HANDOFF_FW_VERSION_PATCH;
 
     /* link_state, last_score, frag_bitmap and frame_errors stay zero: there is
      * no body link in this image yet, and reporting a plausible-looking zero
@@ -157,6 +176,13 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
     }
 }
 
+static void status_tick(btstack_timer_source_t *ts)
+{
+    if (ble_connected()) report_status();
+    btstack_run_loop_set_timer(ts, STATUS_TICK_MS);
+    btstack_run_loop_add_timer(ts);
+}
+
 static void send_fake_card(btstack_timer_source_t *ts)
 {
     (void)ts;
@@ -175,7 +201,8 @@ static void print_banner(void)
     const uint8_t *blob = NULL;
     size_t len = 0;
 
-    printf("\nhandoff (M2: phone link)\n");
+    printf("\nhandoff (M2: phone link) v%d.%d.%d\n", HANDOFF_FW_VERSION_MAJOR,
+           HANDOFF_FW_VERSION_MINOR, HANDOFF_FW_VERSION_PATCH);
     printf("  carrier %d Hz, %d chips/s, %d bps, Goertzel N=%d bin %d\n",
            HANDOFF_CARRIER_HZ, HANDOFF_CHIP_RATE_HZ,
            HANDOFF_BIT_RATE_BPS, HANDOFF_GZ_N, HANDOFF_GZ_BIN);
@@ -220,6 +247,9 @@ int main(void)
         printf("handoff: flash holds no readable record\n");
 
     btstack_run_loop_set_timer_handler(&s_fake_rx_timer, send_fake_card);
+    btstack_run_loop_set_timer_handler(&s_status_timer, status_tick);
+    btstack_run_loop_set_timer(&s_status_timer, STATUS_TICK_MS);
+    btstack_run_loop_add_timer(&s_status_timer);
 
     ble_set_vcard_handler(on_my_vcard, NULL);
     ble_set_control_handler(on_control, NULL);

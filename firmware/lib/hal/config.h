@@ -12,6 +12,15 @@
 
 /* ---- the knobs -------------------------------------------------------- */
 
+/*
+ * The firmware version the band reports in its BLE status, and the app
+ * shows on the Band screen. Updates are a USB job (BOOTSEL + .uf2); this is
+ * so the wrist and the phone can be told apart. Bump it with the image.
+ */
+#define HANDOFF_FW_VERSION_MAJOR  0
+#define HANDOFF_FW_VERSION_MINOR  2
+#define HANDOFF_FW_VERSION_PATCH  0
+
 #ifndef HANDOFF_CARRIER_HZ
 #define HANDOFF_CARRIER_HZ        200000  /* 40000 during M3/M10 bring-up      */
 #endif

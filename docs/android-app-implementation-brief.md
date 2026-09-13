@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: Phase 1 complete on `app/customer-facing`; Phase 2 not started.** Keep this line current — when you finish a phase, tick
+**Status: Phases 1–2 complete on `app/customer-facing`; Phase 3 not started.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -74,7 +74,7 @@ Nothing in firmware changes. Each step should build and run on its own.
 
 The status struct is exactly 16 bytes and full, so this cannot be split.
 
-- [ ] **11. Status struct version 2**, adding battery and firmware version. Read
+- [x] **11. Status struct version 2**, adding battery and firmware version. Read
   VSYS the way `pico-examples/adc/read_vsys` does, because the Pico 2 W shares
   GP29 with the CYW43 SPI clock. Add ~0.35 V for D1's drop. Treat VSYS above
   ~4.3 V as **USB power**, which is *not* charging — the charger is off-board on

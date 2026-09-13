@@ -195,7 +195,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
             BandScreen(
                 band = view,
                 cardSummary = cardSummary,
-                firmware = null,
+                firmware = view.firmware,
                 onPair = {
                     Pairing.associate(
                         context as Activity,

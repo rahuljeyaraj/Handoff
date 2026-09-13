@@ -78,6 +78,8 @@ data class BandView(
     /** null until the band has reported a status. */
     val cardOnBand: Boolean?,
     val battery: BatteryLevel,
+    /** "0.2.0", or null until a version-2 band has reported. */
+    val firmware: String?,
 ) {
     enum class Connection(val label: String) {
         NOT_PAIRED("Not paired"),
@@ -109,7 +111,8 @@ data class BandView(
                 name = name ?: "Handoff band",
                 connection = connection,
                 cardOnBand = state?.status?.provisioned,
-                battery = BatteryLevel.UNKNOWN,
+                battery = BatteryLevel.from(state?.status),
+                firmware = state?.status?.firmware,
             )
         }
     }

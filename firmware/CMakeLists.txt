@@ -84,6 +84,7 @@ add_library(handoff_ble STATIC
     lib/hal_pico/ble.c
     lib/hal_pico/flash.c
     lib/hal_pico/tlm_ble.c
+    lib/hal_pico/power.c    # reads GP29 through the CYW43 driver, hence here
 )
 
 target_link_libraries(handoff_ble

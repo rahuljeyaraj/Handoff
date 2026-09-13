@@ -73,7 +73,9 @@ object Gatt {
 
 /**
  * The `status` payload. Little-endian, versioned — see `ble_status_t` in
- * `firmware/lib/hal_pico/ble.h`. Version 1 is 16 bytes.
+ * `firmware/lib/hal_pico/ble.h`. Version 1 is 16 bytes; version 2 appends
+ * the supply and the firmware version for 20, which is the whole of one
+ * notification at the 23-byte floor.
  *
  * FORWARD-COMPATIBLE BY OFFSET (design decisions §9). Any version at or
  * above 1 is accepted: the fields this app knows are read from their fixed
@@ -92,36 +94,67 @@ data class BandStatus(
     val fragBitmap: Long,
     val chunkErrors: Int,
     val frameErrors: Int,
+    /** VSYS after D1, millivolts. Null from a version-1 band or before it is read. */
+    val vsysMv: Int? = null,
+    /** "0.2.0". Null from a version-1 band. */
+    val firmware: String? = null,
 ) {
     val encrypted get() = flags and ENCRYPTED != 0
     val provisioned get() = flags and PROVISIONED != 0
     val flashOk get() = flags and FLASH_OK != 0
     val telemetryOn get() = flags and TLM_ON != 0
 
+    /**
+     * VBUS at the Pico. NOT charging: the charger is off-board on J5 and the
+     * band cannot see it. Also inferred from VSYS, which sits above any
+     * Li-ion voltage when the Pico's Schottky is ORing USB in.
+     */
+    val usbPower get() = flags and USB_POWER != 0 || (vsysMv ?: 0) > USB_VSYS_MV
+
     companion object {
         const val SIZE = 16
+        const val SIZE_V2 = 20
         const val VERSION = 1
 
         const val ENCRYPTED = 0x01
         const val PROVISIONED = 0x02
         const val FLASH_OK = 0x04
         const val TLM_ON = 0x08
+        const val USB_POWER = 0x10
+
+        /** Above this VSYS is not a cell (design decisions §8). */
+        const val USB_VSYS_MV = 4300
 
         fun parse(raw: ByteArray): BandStatus? {
             if (raw.size < SIZE) return null
             val b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
             val version = b.get().toInt() and 0xFF
             if (version < VERSION) return null
+            val flags = b.get().toInt() and 0xFF
+            val linkState = b.get().toInt() and 0xFF
+            val recordId = b.get().toInt() and 0xFF
+            val lastScore = b.short.toInt() and 0xFFFF
+            val ownBlobLen = b.short.toInt() and 0xFFFF
+            val fragBitmap = b.int.toLong() and 0xFFFFFFFFL
+            val chunkErrors = b.short.toInt() and 0xFFFF
+            val frameErrors = b.short.toInt() and 0xFFFF
+
+            var vsysMv: Int? = null
+            var firmware: String? = null
+            if (version >= 2 && raw.size >= SIZE_V2) {
+                // 20 mV steps; 0 means the band has not read it yet.
+                vsysMv = (b.get().toInt() and 0xFF).takeIf { it != 0 }?.let { it * 20 }
+                val major = b.get().toInt() and 0xFF
+                val minor = b.get().toInt() and 0xFF
+                val patch = b.get().toInt() and 0xFF
+                firmware = "$major.$minor.$patch"
+            }
+
             return BandStatus(
-                version = version,
-                flags = b.get().toInt() and 0xFF,
-                linkState = b.get().toInt() and 0xFF,
-                recordId = b.get().toInt() and 0xFF,
-                lastScore = b.short.toInt() and 0xFFFF,
-                ownBlobLen = b.short.toInt() and 0xFFFF,
-                fragBitmap = b.int.toLong() and 0xFFFFFFFFL,
-                chunkErrors = b.short.toInt() and 0xFFFF,
-                frameErrors = b.short.toInt() and 0xFFFF,
+                version = version, flags = flags, linkState = linkState, recordId = recordId,
+                lastScore = lastScore, ownBlobLen = ownBlobLen, fragBitmap = fragBitmap,
+                chunkErrors = chunkErrors, frameErrors = frameErrors,
+                vsysMv = vsysMv, firmware = firmware,
             )
         }
     }

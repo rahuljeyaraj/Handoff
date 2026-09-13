@@ -176,6 +176,9 @@ private fun StatusDump(state: BandService.State?) {
         "frame errors" to (s?.frameErrors?.toString() ?: "—"),
         "link state" to (s?.linkState?.toString() ?: "—"),
         "status version" to (s?.version?.toString() ?: "—"),
+        "vsys" to (s?.vsysMv?.let { "$it mV" } ?: "—"),
+        "usb power" to (s?.let { it.usbPower.yesNo() } ?: "—"),
+        "firmware" to (s?.firmware ?: "—"),
     )
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
         for ((k, v) in rows) {

@@ -75,16 +75,24 @@ typedef enum {
 
 /* ---- status ----------------------------------------------------------- */
 
-#define BLE_STATUS_VERSION 1
+#define BLE_STATUS_VERSION 2
 
 #define BLE_ST_ENCRYPTED   0x01u  /* the link is bonded and encrypted        */
 #define BLE_ST_PROVISIONED 0x02u  /* a record is stored and transmittable    */
 #define BLE_ST_FLASH_OK    0x04u  /* the flash backend registered at boot    */
 #define BLE_ST_TLM_ON      0x08u  /* telemetry notifications are subscribed  */
+#define BLE_ST_USB_POWER   0x10u  /* VBUS present at the Pico (v2). NOT charging: the
+                                     charger is off-board on J5 and invisible here */
 
 /*
- * 16 bytes, so it fits one notification at the 23-byte floor with room to
- * spare. Little-endian, and versioned, because android/ parses it by offset.
+ * 20 bytes, which is exactly one notification at the 23-byte ATT floor
+ * (3 bytes of opcode and handle). Little-endian, and versioned, because
+ * android/ parses it by offset.
+ *
+ * Version 1 was the first 16 bytes. Version 2 appended the supply and the
+ * firmware version; the app reads any version >= 1 by offset and ignores
+ * what it does not know, so a field is only ever appended, never moved.
+ * There is no room left at the floor: a version 3 needs a second notify.
  */
 typedef struct {
     uint8_t  version;
@@ -96,7 +104,14 @@ typedef struct {
     uint32_t frag_bitmap;   /* reassembly of the incoming record  (§8.3)     */
     uint16_t chunk_errors;  /* phone-link chunks rejected since boot         */
     uint16_t frame_errors;  /* body-link CRC failures since boot             */
+    /* ---- version 2 ---- */
+    uint8_t  vsys_20mv;     /* VSYS after D1, in 20 mV steps (0..5.1 V); 0 = not read */
+    uint8_t  fw_major;      /* HANDOFF_FW_VERSION_*                          */
+    uint8_t  fw_minor;
+    uint8_t  fw_patch;
 } ble_status_t;
+
+_Static_assert(sizeof(ble_status_t) == 20, "status must fit one notify at the 23-byte floor");
 
 /* ---- handlers --------------------------------------------------------- */
 

@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.handoff.band.ble.BandStatus
 import com.handoff.band.ui.theme.semantic
 
 /**
@@ -38,6 +39,28 @@ enum class BatteryLevel(val label: String) {
     USB("USB power");
 
     val blocks: Int get() = when (this) { FULL -> 3; GOOD -> 2; LOW -> 1; else -> 0 }
+
+    companion object {
+        /** D1's drop between the cell and VSYS: 0.3 V idle, 0.4 V with the radio on. */
+        const val DIODE_MV = 350
+
+        /**
+         * From the band's status. VSYS is after D1, so the cell is VSYS plus
+         * the drop. Thresholds are coarse on purpose: a Li-ion curve is nearly
+         * flat between 3.7 and 3.9 V, so a percentage would be fiction.
+         */
+        fun from(status: BandStatus?): BatteryLevel {
+            val vsys = status?.vsysMv ?: return UNKNOWN
+            if (status.usbPower) return USB
+            val cell = vsys + DIODE_MV
+            return when {
+                cell >= 4000 -> FULL
+                cell >= 3700 -> GOOD
+                cell >= 3500 -> LOW
+                else -> CRITICAL
+            }
+        }
+    }
 }
 
 /** Battery is always the icon, never words or volts (§12). */

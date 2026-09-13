@@ -38,11 +38,39 @@ class BandStatusTest {
     }
 
     @Test
-    fun acceptsANewerVersionAndIgnoresTheTail() {
-        val s = BandStatus.parse(v1(version = 2, tail = byteArrayOf(0x34, 0x0F, 1, 2, 3)))
+    fun parsesVersionTwoSupplyAndFirmware() {
+        // 0xBE = 190 * 20 mV = 3.80 V VSYS; firmware 0.2.0
+        val s = BandStatus.parse(v1(version = 2, tail = byteArrayOf(0xBE.toByte(), 0, 2, 0)))
         assertNotNull(s)
-        assertEquals(2, s!!.version)
+        assertEquals(3800, s!!.vsysMv)
+        assertEquals("0.2.0", s.firmware)
+        assertEquals(false, s.usbPower)
+    }
+
+    @Test
+    fun versionTwoWithoutTheBytesReadsAsVersionOne() {
+        val s = BandStatus.parse(v1(version = 2))
+        assertNotNull(s)
+        assertNull(s!!.vsysMv)
+        assertNull(s.firmware)
+    }
+
+    @Test
+    fun acceptsANewerVersionAndIgnoresTheTail() {
+        val s = BandStatus.parse(v1(version = 3, tail = byteArrayOf(0xBE.toByte(), 0, 2, 0, 9, 9, 9)))
+        assertNotNull(s)
+        assertEquals(3, s!!.version)
         assertEquals(128, s.ownBlobLen)
+        assertEquals(3800, s.vsysMv)
+    }
+
+    @Test
+    fun usbPowerFromTheFlagOrFromVsys() {
+        val flagged = BandStatus.parse(v1(version = 2, flags = 0x13, tail = byteArrayOf(0xBE.toByte(), 0, 2, 0)))
+        assertEquals(true, flagged!!.usbPower)
+        // 0xE6 = 230 * 20 = 4.60 V: above any cell, so USB even without the flag
+        val high = BandStatus.parse(v1(version = 2, tail = byteArrayOf(0xE6.toByte(), 0, 2, 0)))
+        assertEquals(true, high!!.usbPower)
     }
 
     @Test
