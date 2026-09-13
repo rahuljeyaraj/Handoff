@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -153,15 +151,6 @@ fun ContactsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            // A contacts app's own "+" (review item 8) — hidden while search
-            // or selection already own the app bar.
-            if (!searching && !selecting) {
-                FloatingActionButton(onClick = onAddContact) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add contact")
-                }
-            }
-        },
         topBar = {
             if (selecting) {
                 TopAppBar(
@@ -190,6 +179,13 @@ fun ContactsScreen(
                              modifier = Modifier.height(20.dp).width(107.dp))
                     },
                     actions = {
+                        // Create is an app-bar action beside search, not a
+                        // pill heading the list: the wearer found the pill
+                        // too much on a home that already has one for the
+                        // band. Four actions fit beside the wordmark.
+                        IconButton(onClick = onAddContact) {
+                            Icon(HandoffIcons.PersonAdd, contentDescription = "Create contact")
+                        }
                         IconButton(onClick = { searching = true }) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
                         }

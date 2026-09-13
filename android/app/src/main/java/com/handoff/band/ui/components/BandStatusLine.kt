@@ -32,7 +32,8 @@ import com.handoff.band.ui.theme.semantic
  * home screen doing two jobs.
  *
  * Unpaired, there is no Band screen to open (review item 12) — the line's
- * place holds a single "Pair a band" button straight into setup instead.
+ * place holds a single "Pair a band" button straight into setup instead —
+ * a pill, matching the "Create contact" pill below it.
  */
 @Composable
 fun BandStatusLine(

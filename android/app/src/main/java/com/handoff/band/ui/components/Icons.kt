@@ -42,6 +42,15 @@ object HandoffIcons {
             "M8 8V6.4a4 4 0 0 1 8 0V8M8 16v1.6a4 4 0 0 0 8 0V16")
     }
 
+    /** A person with a plus beside the head — "Create contact", the shape
+     *  the system Contacts app uses for the same button. */
+    val PersonAdd: ImageVector by lazy {
+        stroked("PersonAdd", 1.75f,
+            "M13 8a4 4 0 1 1 -8 0a4 4 0 0 1 8 0z",
+            "M1.5 20v-0.5a5.5 5.5 0 0 1 5.5 -5.5h4a5.5 5.5 0 0 1 5.5 5.5v0.5",
+            "M19.5 7.5v6M16.5 10.5h6")
+    }
+
     /** Three lines of decreasing length — the sort control. */
     val Sort: ImageVector by lazy { stroked("Sort", 1.75f, "M4 7h13M4 12h9M4 17h5") }
 
@@ -126,20 +135,5 @@ object HandoffIcons {
                 fill = SolidColor(Color.Black),
             )
         }.build()
-    }
-
-    /**
-     * The band's underside, schematic: the curved body, the QR label, and the
-     * power switch beside it — setup step 1 (review item 13). A stand-in
-     * sketch, not traced from an artboard; swap for real photography of the
-     * label when one exists.
-     */
-    val BandUnderside: ImageVector by lazy {
-        stroked("BandUnderside", 1.5f,
-            "M8 7h8a5 5 0 0 1 5 5a5 5 0 0 1 -5 5h-8a5 5 0 0 1 -5 -5a5 5 0 0 1 5 -5z",
-            "M9 9.5h4v5h-4z",
-            "M10 10.5h0.01M11.5 10.5h0.01M10 12h0.01M13 10.5h0.01M10 13.5h0.01M11.5 13.5h0.01M13 13.5h0.01",
-            "M15.5 11h3a1 1 0 0 1 1 1v0a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v0a1 1 0 0 1 1 -1z",
-            "M16.3 12a0.7 0.7 0 1 0 0.001 0z")
     }
 }
