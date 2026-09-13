@@ -72,11 +72,15 @@ object Gatt {
 }
 
 /**
- * The `status` payload. 16 bytes, little-endian, versioned — see `ble_status_t`
- * in `firmware/lib/hal_pico/ble.h`.
+ * The `status` payload. Little-endian, versioned — see `ble_status_t` in
+ * `firmware/lib/hal_pico/ble.h`. Version 1 is 16 bytes.
  *
- * Parsed by offset rather than by any framework, so a firmware that grows the
- * struct is handled by the version check rather than by a crash.
+ * FORWARD-COMPATIBLE BY OFFSET (design decisions §9). Any version at or
+ * above 1 is accepted: the fields this app knows are read from their fixed
+ * offsets and trailing bytes are ignored. A newer band therefore degrades to
+ * "battery unknown" rather than blanking the status line, which is what
+ * rejecting the version did. Only a payload too short for the version-1
+ * fields is refused.
  */
 data class BandStatus(
     val version: Int,
@@ -107,7 +111,7 @@ data class BandStatus(
             if (raw.size < SIZE) return null
             val b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
             val version = b.get().toInt() and 0xFF
-            if (version != VERSION) return null
+            if (version < VERSION) return null
             return BandStatus(
                 version = version,
                 flags = b.get().toInt() and 0xFF,

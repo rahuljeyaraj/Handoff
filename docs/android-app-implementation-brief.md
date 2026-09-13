@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: Phase 1 in progress on `app/customer-facing` — steps 1–9 done.** Keep this line current — when you finish a phase, tick
+**Status: Phase 1 complete on `app/customer-facing`; Phase 2 not started.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -66,7 +66,7 @@ Nothing in firmware changes. Each step should build and run on its own.
   appears nowhere in the customer-facing UI.
 - [x] **9. Self-provision on connect**, and send `CTRL_FORGET` when the card is
   removed. Both primitives already exist.
-- [ ] **10. Forward-compatible `BandStatus.parse`** — accept `version >= 1`, read
+- [x] **10. Forward-compatible `BandStatus.parse`** — accept `version >= 1`, read
   known offsets, ignore trailing bytes. **Do this before Phase 2** or a newer band
   blanks the status line entirely.
 
