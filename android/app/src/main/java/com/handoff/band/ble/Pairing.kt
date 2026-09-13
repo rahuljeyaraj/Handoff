@@ -41,19 +41,35 @@ object Pairing {
 
     private const val PREFS = "handoff.pairing"
     private const val KEY_ADDRESS = "band_address"
+    private const val KEY_NAME = "band_name"
+
+    /** What the chooser handed back: the MAC for the client, the name for people. */
+    data class Found(val address: String, val name: String?)
 
     fun storedAddress(context: Context): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_ADDRESS, null)?.uppercase()
 
-    fun remember(context: Context, address: String) {
+    /**
+     * The band's advertised name — "Handoff 7A3C", built by `ble.c` from the
+     * last two bytes of the Pico's unique board id. It is how two bands on one
+     * bench are told apart, and the only identity the wearer ever sees: the
+     * MAC address appears nowhere in the customer-facing UI (design §2).
+     */
+    fun storedName(context: Context): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit { putString(KEY_ADDRESS, address) }
+            .getString(KEY_NAME, null)
+
+    fun remember(context: Context, found: Found) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putString(KEY_ADDRESS, found.address)
+            if (found.name != null) putString(KEY_NAME, found.name) else remove(KEY_NAME)
+        }
     }
 
     fun forget(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit { remove(KEY_ADDRESS) }
+            .edit { remove(KEY_ADDRESS); remove(KEY_NAME) }
     }
 
     /**
@@ -113,12 +129,16 @@ object Pairing {
 
     /**
      * The chooser result. On API 33+ the association is delivered as a
-     * `CompanionDeviceManager.EXTRA_ASSOCIATION`; below that it is the
-     * BluetoothDevice itself under the deprecated extra. Both end in a MAC
-     * address, which is all BandClient needs.
+     * `CompanionDeviceManager.EXTRA_ASSOCIATION`, which carries the display
+     * name the chooser showed; below that it is the BluetoothDevice itself
+     * under the deprecated extra, and its name is the cached one.
+     *
+     * Do not read the name from the GATT GAP characteristic later: that one
+     * is the generic "Handoff" for every board, because `gap_set_local_name()`
+     * belongs to BTstack's Classic half (`ble.c:457`).
      */
-    @Suppress("DEPRECATION")
-    fun addressFrom(data: android.content.Intent?): String? {
+    @Suppress("DEPRECATION", "MissingPermission")
+    fun foundFrom(data: android.content.Intent?): Found? {
         data ?: return null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -128,13 +148,15 @@ object Pairing {
             )
             // MacAddress.toString() is lowercase; BluetoothAdapter.getRemoteDevice
             // rejects anything but uppercase hex, and rejects it by throwing.
-            association?.deviceMacAddress?.toString()?.uppercase()?.let { return it }
+            association?.deviceMacAddress?.toString()?.uppercase()?.let { address ->
+                return Found(address, association.displayName?.toString()?.takeIf { it.isNotBlank() })
+            }
         }
 
         val device: BluetoothDevice? = data.getParcelableExtra(
             CompanionDeviceManager.EXTRA_DEVICE
         )
-        return device?.address
+        return device?.let { Found(it.address, runCatching { it.name }.getOrNull()) }
     }
 
     /**

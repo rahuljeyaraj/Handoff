@@ -3,7 +3,7 @@
 Instructions for whoever picks up the customer-facing rebuild, in this session or
 a later one. Written 13 Sep 2026, alongside the design it implements.
 
-**Status: Phase 1 in progress on `app/customer-facing` — steps 1–7 done.** Keep this line current — when you finish a phase, tick
+**Status: Phase 1 in progress on `app/customer-facing` — steps 1–8 done.** Keep this line current — when you finish a phase, tick
 its boxes and say so here, because the next session starts from this file.
 
 ---
@@ -62,7 +62,7 @@ Nothing in firmware changes. Each step should build and run on its own.
 - [x] **7. The card editor.** Every field editable; "Fill from a phone contact" is
   prefill only; a Work phone field; per-field send toggles; and the last remaining
   contact-method toggle disabled, so a name-only card cannot be authored.
-- [ ] **8. Band name** from `AssociationInfo.getDisplayName()`. The MAC address
+- [x] **8. Band name** from `AssociationInfo.getDisplayName()`. The MAC address
   appears nowhere in the customer-facing UI.
 - [ ] **9. Self-provision on connect**, and send `CTRL_FORGET` when the card is
   removed. Both primitives already exist.

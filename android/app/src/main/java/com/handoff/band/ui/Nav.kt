@@ -65,7 +65,8 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     val state by band.state.collectAsState()
     val bandOff by prefs.bandOff.collectAsState()
     var address by remember { mutableStateOf(Pairing.storedAddress(context)) }
-    val view = bandView(state, address, bandOff)
+    var bandName by remember { mutableStateOf(Pairing.storedName(context)) }
+    val view = bandView(state, address, bandName, bandOff)
     val theme by prefs.theme.collectAsState()
     val sort by prefs.sort.collectAsState()
 
@@ -182,11 +183,12 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 ActivityResultContracts.StartIntentSenderForResult()
             ) { result ->
                 if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-                Pairing.addressFrom(result.data)?.let { found ->
+                Pairing.foundFrom(result.data)?.let { found ->
                     Pairing.remember(context, found)
                     prefs.setBandOff(false)
-                    address = found
-                    BandService.start(context, found)
+                    address = found.address
+                    bandName = found.name
+                    BandService.start(context, found.address)
                     band.bind()
                 }
             }
@@ -212,6 +214,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 onForget = {
                     BandService.forget(context)
                     address = null
+                    bandName = null
                 },
                 onCard = { nav.navigate(Routes.CARD) },
                 onBack = { nav.popBackStack() },

@@ -93,7 +93,7 @@ data class BandView(
          * the user disconnects, the service is gone and its state is null,
          * but the band is still theirs.
          */
-        fun from(state: BandService.State?, address: String?, off: Boolean): BandView {
+        fun from(state: BandService.State?, address: String?, name: String?, off: Boolean): BandView {
             val paired = address != null
             val connection = when {
                 !paired -> Connection.NOT_PAIRED
@@ -104,7 +104,9 @@ data class BandView(
             }
             return BandView(
                 paired = paired,
-                name = "Handoff band",
+                // The advertised name, "Handoff 7A3C". A band paired before
+                // names were stored has none; "Handoff band" until re-paired.
+                name = name ?: "Handoff band",
                 connection = connection,
                 cardOnBand = state?.status?.provisioned,
                 battery = BatteryLevel.UNKNOWN,
@@ -114,5 +116,5 @@ data class BandView(
 }
 
 @Composable
-fun bandView(state: BandService.State?, address: String?, off: Boolean): BandView =
-    BandView.from(state, address, off)
+fun bandView(state: BandService.State?, address: String?, name: String?, off: Boolean): BandView =
+    BandView.from(state, address, name, off)
