@@ -93,6 +93,7 @@ fun ContactsScreen(
     onContact: (Handshake) -> Unit,
     onMerge: (keep: Handshake, absorb: Handshake) -> Unit,
     onBand: () -> Unit,
+    onPair: () -> Unit,
     onSetUpCard: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -153,7 +154,7 @@ fun ContactsScreen(
                 return@Column
             }
 
-            BandStatusLine(band, onClick = onBand)
+            BandStatusLine(band, onClick = onBand, onPair = onPair)
 
             // The nudge sits above the list whenever no card is set, not only
             // while the list is empty: someone can collect a dozen cards

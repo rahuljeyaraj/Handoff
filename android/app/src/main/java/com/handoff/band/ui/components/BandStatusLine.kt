@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,9 +30,25 @@ import com.handoff.band.ui.theme.semantic
  * One line under the app bar, design decisions §1. It navigates to the Band
  * screen and never expands: an expander pushes the list down and leaves the
  * home screen doing two jobs.
+ *
+ * Unpaired, there is no Band screen to open (review item 12) — the line's
+ * place holds a single "Pair a band" button straight into setup instead.
  */
 @Composable
-fun BandStatusLine(band: BandView, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun BandStatusLine(
+    band: BandView,
+    onClick: () -> Unit,
+    onPair: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!band.paired) {
+        Button(
+            onClick = onPair,
+            modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp).height(56.dp),
+        ) { Text("Pair a band") }
+        return
+    }
+
     val connected = band.connection == BandView.Connection.CONNECTED
     Row(
         modifier
@@ -49,8 +66,7 @@ fun BandStatusLine(band: BandView, onClick: () -> Unit, modifier: Modifier = Mod
              tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
 
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(if (band.paired) band.name else "No band paired",
-                 style = MaterialTheme.typography.titleSmall)
+            Text(band.name, style = MaterialTheme.typography.titleSmall)
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ConnectionDot(connected)
@@ -59,10 +75,8 @@ fun BandStatusLine(band: BandView, onClick: () -> Unit, modifier: Modifier = Mod
             }
         }
 
-        if (band.paired) {
-            CardOnBandIcon(band.cardOnBand)
-            BatteryIcon(band.battery)
-        }
+        CardOnBandIcon(band.cardOnBand)
+        BatteryIcon(band.battery)
 
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
              tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(20.dp))

@@ -151,6 +151,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                     }
                 },
                 onBand = { nav.navigate(Routes.BAND) },
+                onPair = { nav.navigate(Routes.SETUP) },
                 onSetUpCard = { nav.navigate(Routes.CARD) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },
             )
@@ -221,15 +222,11 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
 
         composable(Routes.SETTINGS) {
             SettingsScreen(
-                band = view,
-                cardSummary = cardSummary,
                 theme = theme,
                 sort = sort,
                 appVersion = appVersion(context),
                 onTheme = prefs::setTheme,
                 onSort = prefs::setSort,
-                onCard = { nav.navigate(Routes.CARD) },
-                onBand = { nav.navigate(Routes.BAND) },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },
                 onBack = { nav.popBackStack() },
             )
@@ -240,7 +237,6 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 band = view,
                 cardSummary = cardSummary,
                 firmware = view.firmware,
-                onPair = { nav.navigate(Routes.SETUP) },
                 onDisconnect = {
                     if (bandOff) {
                         BandService.reconnect(context)

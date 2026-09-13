@@ -100,4 +100,12 @@ object HandoffIcons {
             "M6 8h12v4a6 6 0 0 1 -12 0z",
             "M12 18v3")
     }
+
+    /** A body with motion lines either side — the Vibrate row. */
+    val Vibrate: ImageVector by lazy {
+        stroked("Vibrate", 1.75f,
+            "M9 4.5h6a1 1 0 0 1 1 1v13a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1v-13a1 1 0 0 1 1 -1z",
+            "M4.5 9v2M4.5 13v2M2 10.5v3",
+            "M19.5 9v2M19.5 13v2M22 10.5v3")
+    }
 }

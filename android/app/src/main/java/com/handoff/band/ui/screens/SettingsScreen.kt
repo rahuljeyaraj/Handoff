@@ -14,7 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -37,30 +36,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.handoff.band.data.Prefs
-import com.handoff.band.ui.BandView
-import com.handoff.band.ui.components.BatteryIcon
 import com.handoff.band.ui.components.HandoffIcons
 import com.handoff.band.ui.components.SectionHeader
 import com.handoff.band.ui.components.SettingsRow
 
 /**
- * Settings: Your card · Band · Contacts · Appearance · About · Advanced.
+ * Settings: Contacts · Band · Appearance · About · Advanced.
  *
- * "Save to phone automatically" is drawn, off, and disabled: it needs
- * WRITE_CONTACTS and a provider insert, and is deliberately not built.
+ * Your contact card and the band's own screen are one tap from home (the
+ * nudge/Band row and the status line), so this screen does not repeat them
+ * (review item 11). "Save to phone automatically" is gone for good — it
+ * needed WRITE_CONTACTS and a provider insert, which the brief rules out
+ * (review item 10).
+ *
+ * Vibrate's switch is drawn but not yet wired: the band persists the
+ * setting itself, reported back in `status`, which lands in a later commit
+ * alongside the opcode that turns the motor on and off.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    band: BandView,
-    cardSummary: String,
     theme: Prefs.Theme,
     sort: Prefs.Sort,
     appVersion: String,
     onTheme: (Prefs.Theme) -> Unit,
     onSort: (Prefs.Sort) -> Unit,
-    onCard: () -> Unit,
-    onBand: () -> Unit,
     onAdvanced: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -82,24 +82,12 @@ fun SettingsScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
-            SectionHeader("Your card")
-            SettingsRow("Your contact card", icon = Icons.Filled.Person,
-                        subtitle = cardSummary, onClick = onCard)
-
-            SectionHeader("Band")
-            SettingsRow(
-                if (band.paired) band.name else "No band paired",
-                icon = HandoffIcons.Band,
-                subtitle = band.connection.label,
-                onClick = onBand,
-                trailing = if (band.paired) ({ BatteryIcon(band.battery) }) else null,
-            )
-
             SectionHeader("Contacts")
             SettingsRow("Sort order", icon = HandoffIcons.Sort, subtitle = sort.label,
                         onClick = { sortDialog = true })
-            SettingsRow("Save to phone automatically", icon = HandoffIcons.PhoneAdd,
-                        chevron = false,
+
+            SectionHeader("Band")
+            SettingsRow("Vibrate", icon = HandoffIcons.Vibrate, chevron = false,
                         trailing = { Switch(checked = false, onCheckedChange = null, enabled = false) })
 
             SectionHeader("Appearance")

@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
@@ -37,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.handoff.band.ui.BandView
 import com.handoff.band.ui.components.BatteryIcon
@@ -50,6 +48,9 @@ import com.handoff.band.ui.components.SettingsRow
  * two ways to let go of it. One band — the screen shows one, which is the
  * statement; forgetting it is how you swap (§6).
  *
+ * Reachable only for a paired band (review item 12) — the status line on
+ * home is a "Pair a band" button when there isn't one, and never opens here.
+ *
  * No MAC address anywhere here. It is an identifier for us, not the wearer;
  * Advanced shows it.
  */
@@ -59,7 +60,6 @@ fun BandScreen(
     band: BandView,
     cardSummary: String,
     firmware: String?,
-    onPair: () -> Unit,
     onDisconnect: () -> Unit,
     onForget: () -> Unit,
     onCard: () -> Unit,
@@ -82,11 +82,6 @@ fun BandScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
-            if (!band.paired) {
-                Unpaired(onPair)
-                return@Column
-            }
-
             Hero(band)
 
             SettingsRow("Battery", subtitle = band.battery.label, chevron = false,
@@ -161,25 +156,5 @@ private fun Hero(band: BandView) {
             Text(band.connection.label, style = MaterialTheme.typography.labelLarge,
                  color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
-    }
-}
-
-@Composable
-private fun Unpaired(onPair: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(HandoffIcons.Band, contentDescription = null,
-             tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(56.dp))
-        Spacer(Modifier.height(20.dp))
-        Text("No band paired", style = MaterialTheme.typography.titleLarge,
-             textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
-        Text("Switch on the band and keep the phone close.",
-             style = MaterialTheme.typography.bodyMedium,
-             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onPair) { Text("Pair a band") }
     }
 }
