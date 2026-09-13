@@ -197,8 +197,32 @@ the case.
 
 "Save to phone contacts" becomes a *secondary* action on the detail screen
 rather than the only thing a tap can do. It keeps using
-`ContactsContract.Intents.Insert` — no `WRITE_CONTACTS` permission, the system
-editor confirms — which is the existing, deliberate design.
+`ContactsContract.Intents.Insert` — no permission asked, the system editor
+confirms — which is the existing, deliberate design.
+
+> **Revised 14 Sep 2026.** The button under a received contact is one button
+> in three states, and the caption beneath it is gone (the wearer: a button
+> and a line saying the same thing is bad UI):
+>
+> - *Save to phone contacts* — not saved yet; the Insert intent as before.
+> - *Saved to phone contacts*, disabled — saved, and nothing has changed
+>   since.
+> - *Update phone contact* — saved, then edited here (`edited_since_promote`,
+>   set by a real change in the editor or a merge that filled a blank; a
+>   Save with nothing changed does not set it).
+>
+> Update is a **direct write** to the raw contact the save created
+> (`raw_contact_id`, recorded from the editor's result), replacing its name,
+> phones, email, organisation/title and note rows and leaving anything else
+> on that contact alone. This is the one place the app holds `WRITE_CONTACTS`,
+> requested at that tap (on a phone where READ_CONTACTS is already granted
+> the group grant makes it silent). The intent routes were tried and rejected:
+> `INSERT_OR_EDIT` is "add these values to a contact you pick", so a changed
+> name cannot find its own contact and every value must be retyped; a plain
+> Insert makes a second contact. If the write cannot happen — permission
+> refused, contact gone — the system editor opens on that contact. Saving a
+> *new* contact still never writes directly, and the auto-save setting stays
+> unbuilt.
 
 **The note and the prefix/suffix do reach the phone contact.** `Promote` already
 passes `NOTES` (`Promote.kt:53`); it has simply never had a note to pass. And
@@ -225,6 +249,17 @@ detail screen's overflow can show it.
 >   it, with *Add another phone* for a second row — two at most. The label
 >   menu offers Mobile and Work only, because those are the two typed slots
 >   the band carries; Home and Other would need a codec change.
+>
+>   **Wanted, not yet built (wearer, 14 Sep 2026):** the four labels the
+>   design board draws — Mobile, Work, Home, Other — and the same label on
+>   both rows (two mobiles). This is a wire-format change, not an editor
+>   change: `compact.h` has exactly `TAG_TEL_CELL` and `TAG_TEL_WORK`, and
+>   the app's own card, the received-contact row (`mobile`/`work` columns),
+>   the contact editor, the dedup key and the phone-contacts insert/update
+>   are all shaped as one mobile plus one work. Doing it means two new tags
+>   (or a label byte on the TEL value) in the firmware codec and its tests,
+>   reflashing the band, and number+label pairs end to end in the app.
+>   Deferred by the wearer until it can be its own change.
 > - **A saved card opens read-only**, the same page a received contact gets:
 >   pen and bin in the app bar, the header, the rows, and one chip under the
 >   name for the fact only this page knows — *On Handoff band 93D1*, *Not on
@@ -555,5 +590,8 @@ switch SW1 off while charging.
 - Sort toggle placement: top app bar action vs. Settings. Currently drawn as
   both (action on home, remembered preference in Settings).
 - "Save to phone automatically" is drawn in Settings, off by default. It needs
-  `WRITE_CONTACTS` and a provider insert, and is deliberately not built yet.
+  a provider insert and is deliberately not built yet. (`WRITE_CONTACTS` is
+  now declared for "Update phone contact", §4 — the setting would reuse it.)
+- Four phone labels with duplicates allowed on the own card — a firmware
+  codec change, see §4a.
 - Search is drawn in the app bar but its behaviour is unspecified.

@@ -34,13 +34,15 @@
 
     <!--
       READ_CONTACTS is for provisioning from a contact the wearer picks
-      (architecture §11.3). WRITE_CONTACTS is NOT declared: promoting a
-      received card opens the system contact editor with an Insert intent,
-      which needs no permission at all. It would only be needed by the
-      auto-save setting, which is off by default and deliberately not built
-      at M2.
+      (architecture §11.3). Saving a received card still opens the system
+      contact editor with an Insert intent, which needs no permission at
+      all. WRITE_CONTACTS is for one thing: "Update phone contact" on a
+      person the wearer already saved, rewriting the rows of the contact
+      the save created (Promote.update). It is requested at that tap and
+      never at a save, and the auto-save setting stays unbuilt.
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 
     <!--
       The setup page embeds the QR viewfinder itself now (review item 1)

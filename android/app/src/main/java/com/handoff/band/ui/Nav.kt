@@ -1,6 +1,8 @@
 package com.handoff.band.ui
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -41,7 +44,9 @@ import com.handoff.band.ui.screens.ContactEditScreen
 import com.handoff.band.ui.screens.ContactsScreen
 import com.handoff.band.ui.screens.SettingsScreen
 import com.handoff.band.ui.screens.SetupScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The screen set from design decisions §1. Contacts is home; there is no
@@ -241,24 +246,56 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 .possibleDuplicates(c.id, c.phoneKey, c.emailKey)
                 .collectAsState(initial = emptyList())
 
+            var phoneNotice by remember { mutableStateOf<Notice?>(null) }
+
             // The system editor returns OK only when the person actually
             // saved, and hands back the new contact's URI so a later delete
-            // in Contacts can be noticed (review item 16).
+            // in Contacts can be noticed (review item 16) and the update
+            // below knows which raw contact is ours.
             val promote = rememberLauncherForActivityResult(
                 ActivityResultContracts.StartActivityForResult()
             ) { result ->
                 if (result.resultCode == Activity.RESULT_OK) {
-                    val uri = result.data?.data?.toString()
-                    scope.launch { db.handshakes().markPromoted(id, uri) }
+                    val uri = result.data?.data
+                    scope.launch {
+                        val rawId = uri?.let { Promote.rawContactIdOf(context, it) }
+                        db.handshakes().markPromoted(id, uri?.toString(), rawId)
+                    }
                 }
             }
+
+            // "Update phone contact": rewrite the saved contact in place. If
+            // the write cannot happen — permission refused, contact not
+            // found — the system editor opens on that contact instead, so
+            // the wearer is never left with nothing.
+            fun openInEditor() {
+                val edit = Promote.editIntentFor(c)
+                if (edit != null) promote.launch(edit)
+                else phoneNotice = Notice(System.currentTimeMillis(), "Couldn't find the phone contact")
+            }
+            fun updatePhone() {
+                scope.launch {
+                    val ok = withContext(Dispatchers.IO) { Promote.update(context, c) }
+                    if (ok) {
+                        db.handshakes().markPromoted(id, c.contactUri, c.rawContactId)
+                        phoneNotice = Notice(System.currentTimeMillis(), "Phone contact updated")
+                    } else {
+                        openInEditor()
+                    }
+                }
+            }
+            val requestWrite = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { granted -> if (granted) updatePhone() else openInEditor() }
 
             // Checked once per visit, not continuously: a deleted contact
             // clears "Saved to your phone" the next time this screen opens.
             LaunchedEffect(c.id) {
                 val uri = c.contactUri
                 if (c.promoted && uri != null && !Promote.exists(context, android.net.Uri.parse(uri))) {
-                    db.handshakes().update(c.copy(promoted = false, contactUri = null))
+                    db.handshakes().update(c.copy(
+                        promoted = false, contactUri = null, rawContactId = null,
+                        editedSincePromote = false))
                 }
             }
 
@@ -267,6 +304,12 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 duplicates = duplicates,
                 onEdit = { nav.navigate(Routes.contactEdit(id)) },
                 onSaveToPhone = { promote.launch(Promote.intentFor(c)) },
+                onUpdatePhone = {
+                    val held = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                    if (held) updatePhone() else requestWrite.launch(Manifest.permission.WRITE_CONTACTS)
+                },
+                notice = phoneNotice,
                 onMerge = { other ->
                     scope.launch {
                         db.handshakes().update(Merge.merge(into = c, from = other))

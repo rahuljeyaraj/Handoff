@@ -96,8 +96,10 @@ The status struct is exactly 16 bytes and full, so this cannot be split.
   displays the version. §10 of the decisions doc explains why.
 - **Do not touch `hardware/`.** The board is routed, DRC-clean and at PCBWay.
   Nothing in this work needs a board change.
-- **Do not add `WRITE_CONTACTS`.** The auto-save setting is drawn but deliberately
-  unbuilt.
+- **`WRITE_CONTACTS` is for "Update phone contact" only** (decisions §4,
+  revised 14 Sep 2026): a direct rewrite of the contact the wearer already
+  saved. Never for saving a new one, and the auto-save setting is drawn but
+  deliberately unbuilt.
 - **Do not remove** the per-field send toggles, or the raw-vCard view in Advanced.
 
 ## Decide with the user before building

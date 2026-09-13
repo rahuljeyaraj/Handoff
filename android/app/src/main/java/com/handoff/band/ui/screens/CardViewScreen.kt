@@ -153,7 +153,8 @@ fun CardViewScreen(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete your contact card?") },
-            text = { Text("It will be removed from the band as well.") },
+            // The consequence, not the mechanism: what stops and what does not.
+            text = { Text("The band will stop sharing your contact. It will still receive contacts from others.") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Delete") }
             },

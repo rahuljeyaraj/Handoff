@@ -85,17 +85,18 @@ fun ContactEditScreen(
             displayName = displayName,
             addedByHand = true,
         )
-        onSave(
-            base.copy(
-                displayName = displayName,
-                mobile = formattedMobile,
-                work = formattedWork,
-                email = email.orNull(),
-                org = org.orNull(),
-                title = title.orNull(),
-                note = note.orNull(),
-            ).rekeyed()
-        )
+        val next = base.copy(
+            displayName = displayName,
+            mobile = formattedMobile,
+            work = formattedWork,
+            email = email.orNull(),
+            org = org.orNull(),
+            title = title.orNull(),
+            note = note.orNull(),
+        ).rekeyed()
+        // Opening the editor and pressing save changes nothing; only a real
+        // change makes the phone's copy stale.
+        onSave(if (next == base) base else next.edited())
     }
 
     Scaffold(

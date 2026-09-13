@@ -25,11 +25,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,10 +43,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.handoff.band.contacts.PhoneFormat
 import com.handoff.band.data.Handshake
+import com.handoff.band.ui.Notice
 import com.handoff.band.ui.components.DetailRow
+import com.handoff.band.ui.components.HandoffSnackbarHost
 import com.handoff.band.ui.components.HandoffIcons
 import com.handoff.band.ui.components.PersonHeader
-import com.handoff.band.ui.theme.semantic
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,13 +68,23 @@ fun ContactDetailScreen(
     duplicates: List<Handshake>,
     onEdit: () -> Unit,
     onSaveToPhone: () -> Unit,
+    onUpdatePhone: () -> Unit,
     onMerge: (into: Handshake) -> Unit,
     onDelete: () -> Unit,
     onBack: () -> Unit,
+    notice: Notice? = null,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+
+    // The outcome of "Update phone contact": a silent write needs one line
+    // saying it happened (the button going quiet is not enough on its own).
+    LaunchedEffect(notice) {
+        notice?.take()?.let { snackbar.showSnackbar(it) }
+    }
 
     Scaffold(
+        snackbarHost = { HandoffSnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = {},
@@ -130,20 +143,16 @@ fun ContactDetailScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            Column(Modifier.padding(horizontal = 16.dp),
-                   horizontalAlignment = Alignment.CenterHorizontally) {
-                Button(onClick = onSaveToPhone, modifier = Modifier.fillMaxWidth()) {
-                    Text("Save to phone contacts")
-                }
-                Text(
-                    if (contact.promoted) "Saved to your phone"
-                    else "Not in your phone's address book yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (contact.promoted) MaterialTheme.semantic.ok
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
+            // One button says where the phone stands: not saved, saved (and
+            // nothing to do), or saved but behind this row's edits. No line
+            // under it — the wearer found a button plus a caption saying the
+            // same thing twice.
+            val phoneState = phoneButton(contact)
+            Button(
+                onClick = if (phoneState.update) onUpdatePhone else onSaveToPhone,
+                enabled = phoneState.enabled,
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+            ) { Text(phoneState.label) }
 
             Spacer(Modifier.height(24.dp))
         }
@@ -159,6 +168,15 @@ fun ContactDetailScreen(
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
+}
+
+/** What the phone-contacts button says and whether it does anything. */
+data class PhoneButton(val label: String, val enabled: Boolean, val update: Boolean)
+
+fun phoneButton(h: Handshake): PhoneButton = when {
+    !h.promoted -> PhoneButton("Save to phone contacts", enabled = true, update = false)
+    h.editedSincePromote -> PhoneButton("Update phone contact", enabled = true, update = true)
+    else -> PhoneButton("Saved to phone contacts", enabled = false, update = false)
 }
 
 /**

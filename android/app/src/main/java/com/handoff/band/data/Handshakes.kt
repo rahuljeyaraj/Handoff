@@ -76,13 +76,30 @@ data class Handshake(
     @ColumnInfo(name = "contact_uri") val contactUri: String? = null,
 
     /**
+     * The raw contact the save created — the exact rows "Update phone
+     * contact" rewrites, so a later edit here lands on this person and
+     * nobody else. Null for rows saved before this was recorded.
+     */
+    @ColumnInfo(name = "raw_contact_id") val rawContactId: Long? = null,
+
+    /**
      * Entered by hand on the "+" screen rather than received over the body
      * link (review item 8) — "Added" versus "Met" on the detail screen (O4).
      */
     @ColumnInfo(name = "added_by_hand") val addedByHand: Boolean = false,
+
+    /**
+     * Edited here after it was saved to the phone, so the phone's copy is
+     * behind. The detail screen's one button reads "Update phone contact"
+     * while this is set; cleared by the next save.
+     */
+    @ColumnInfo(name = "edited_since_promote") val editedSincePromote: Boolean = false,
 ) {
     /** Recompute the keys from the current mobile and email. Call after any edit. */
     fun rekeyed(): Handshake = copy(phoneKey = Keys.phone(mobile), emailKey = Keys.email(email))
+
+    /** After a change to the fields: the phone's copy, if there is one, is now stale. */
+    fun edited(): Handshake = if (promoted) copy(editedSincePromote = true) else this
 }
 
 @Dao
@@ -117,8 +134,11 @@ interface HandshakeDao {
     @Update
     suspend fun update(h: Handshake)
 
-    @Query("UPDATE handshakes SET promoted = 1, contact_uri = :uri WHERE id = :id")
-    suspend fun markPromoted(id: Long, uri: String?)
+    @Query(
+        "UPDATE handshakes SET promoted = 1, contact_uri = :uri, raw_contact_id = :rawId, " +
+            "edited_since_promote = 0 WHERE id = :id"
+    )
+    suspend fun markPromoted(id: Long, uri: String?, rawId: Long?)
 
     @Query("DELETE FROM handshakes WHERE id = :id")
     suspend fun delete(id: Long)
@@ -128,7 +148,7 @@ interface HandshakeDao {
     suspend fun deleteMany(ids: Collection<Long>)
 }
 
-@Database(entities = [Handshake::class], version = 4, exportSchema = false)
+@Database(entities = [Handshake::class], version = 6, exportSchema = false)
 abstract class HandoffDb : RoomDatabase() {
     abstract fun handshakes(): HandshakeDao
 
@@ -138,7 +158,8 @@ abstract class HandoffDb : RoomDatabase() {
         fun get(context: Context): HandoffDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, HandoffDb::class.java, "handoff.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .build().also { instance = it }
         }
 
         /**
@@ -192,6 +213,28 @@ abstract class HandoffDb : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE handshakes ADD COLUMN added_by_hand INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * Version 5 adds "edited since saved to the phone". Nothing on the
+         * phone knows whether an old row was edited after its save, so every
+         * row starts as up to date and the flag is earned by the next edit.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE handshakes ADD COLUMN edited_since_promote INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * Version 6 records which raw contact a save created, so an update
+         * rewrites that one. Rows saved earlier have null and resolve it at
+         * update time when the phone contact has a single raw contact.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE handshakes ADD COLUMN raw_contact_id INTEGER")
             }
         }
     }
