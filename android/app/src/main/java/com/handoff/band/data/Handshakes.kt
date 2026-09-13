@@ -74,6 +74,12 @@ data class Handshake(
      * so deleting the contact in Contacts clears "Saved to your phone" here.
      */
     @ColumnInfo(name = "contact_uri") val contactUri: String? = null,
+
+    /**
+     * Entered by hand on the "+" screen rather than received over the body
+     * link (review item 8) — "Added" versus "Met" on the detail screen (O4).
+     */
+    @ColumnInfo(name = "added_by_hand") val addedByHand: Boolean = false,
 ) {
     /** Recompute the keys from the current mobile and email. Call after any edit. */
     fun rekeyed(): Handshake = copy(phoneKey = Keys.phone(mobile), emailKey = Keys.email(email))
@@ -122,7 +128,7 @@ interface HandshakeDao {
     suspend fun deleteMany(ids: Collection<Long>)
 }
 
-@Database(entities = [Handshake::class], version = 3, exportSchema = false)
+@Database(entities = [Handshake::class], version = 4, exportSchema = false)
 abstract class HandoffDb : RoomDatabase() {
     abstract fun handshakes(): HandshakeDao
 
@@ -132,7 +138,7 @@ abstract class HandoffDb : RoomDatabase() {
         fun get(context: Context): HandoffDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, HandoffDb::class.java, "handoff.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
 
         /**
@@ -175,6 +181,17 @@ abstract class HandoffDb : RoomDatabase() {
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE handshakes ADD COLUMN contact_uri TEXT")
+            }
+        }
+
+        /**
+         * Version 4 adds "entered by hand" (review item 8). Existing rows all
+         * came off the body link, so the default of 0 is already correct for
+         * every row already on the phone.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE handshakes ADD COLUMN added_by_hand INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

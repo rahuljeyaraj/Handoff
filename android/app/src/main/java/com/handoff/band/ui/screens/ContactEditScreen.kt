@@ -35,58 +35,73 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.handoff.band.data.Handshake
+import com.handoff.band.vcard.VCard
 
 /**
  * In-app editing, design decisions §4. The name field alone carries any
  * prefix or suffix a person wants to add — no separate boxes. Two phone
  * numbers, Mobile and Work, because that is what the codec carries. The raw
- * vCard is never touched by an edit.
+ * vCard of a received card is never touched by an edit.
+ *
+ * [contact] null means the "+" screen (review item 8): an empty row, no
+ * delete section (there is nothing to delete yet), and a vCard built from
+ * what is typed rather than one that crossed a body link.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactEditScreen(
-    contact: Handshake,
+    contact: Handshake?,
     onSave: (Handshake) -> Unit,
-    onDelete: () -> Unit,
+    onDelete: (() -> Unit)?,
     onBack: () -> Unit,
 ) {
-    var name by rememberSaveable { mutableStateOf(contact.displayName) }
-    var mobile by rememberSaveable { mutableStateOf(contact.mobile.orEmpty()) }
-    var work by rememberSaveable { mutableStateOf(contact.work.orEmpty()) }
-    var email by rememberSaveable { mutableStateOf(contact.email.orEmpty()) }
-    var org by rememberSaveable { mutableStateOf(contact.org.orEmpty()) }
-    var title by rememberSaveable { mutableStateOf(contact.title.orEmpty()) }
-    var note by rememberSaveable { mutableStateOf(contact.note.orEmpty()) }
+    var name by rememberSaveable { mutableStateOf(contact?.displayName.orEmpty()) }
+    var mobile by rememberSaveable { mutableStateOf(contact?.mobile.orEmpty()) }
+    var work by rememberSaveable { mutableStateOf(contact?.work.orEmpty()) }
+    var email by rememberSaveable { mutableStateOf(contact?.email.orEmpty()) }
+    var org by rememberSaveable { mutableStateOf(contact?.org.orEmpty()) }
+    var title by rememberSaveable { mutableStateOf(contact?.title.orEmpty()) }
+    var note by rememberSaveable { mutableStateOf(contact?.note.orEmpty()) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     fun String.orNull() = trim().takeIf { it.isNotEmpty() }
 
+    fun save() {
+        val displayName = name.trim()
+        val base = contact ?: Handshake(
+            receivedAt = System.currentTimeMillis(),
+            vcard = VCard.build(
+                fullName = displayName, mobile = mobile.orNull(), work = work.orNull(),
+                email = email.orNull(), org = org.orNull(), title = title.orNull(),
+                note = note.orNull(),
+            ),
+            displayName = displayName,
+            addedByHand = true,
+        )
+        onSave(
+            base.copy(
+                displayName = displayName,
+                mobile = mobile.orNull(),
+                work = work.orNull(),
+                email = email.orNull(),
+                org = org.orNull(),
+                title = title.orNull(),
+                note = note.orNull(),
+            ).rekeyed()
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Edit contact") },
+                title = { Text(if (contact == null) "New contact" else "Edit contact") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    TextButton(
-                        enabled = name.isNotBlank(),
-                        onClick = {
-                            onSave(
-                                contact.copy(
-                                    displayName = name.trim(),
-                                    mobile = mobile.orNull(),
-                                    work = work.orNull(),
-                                    email = email.orNull(),
-                                    org = org.orNull(),
-                                    title = title.orNull(),
-                                    note = note.orNull(),
-                                ).rekeyed()
-                            )
-                        },
-                    ) { Text("Save") }
+                    TextButton(enabled = name.isNotBlank(), onClick = ::save) { Text("Save") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface),
@@ -109,21 +124,23 @@ fun ContactEditScreen(
                 minLines = 3, modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider()
-            TextButton(
-                onClick = { confirmDelete = true },
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) { Text("Delete this contact") }
+            if (onDelete != null) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                TextButton(
+                    onClick = { confirmDelete = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete this contact") }
+            }
 
             Spacer(Modifier.height(24.dp))
         }
     }
 
-    if (confirmDelete) {
+    if (confirmDelete && onDelete != null) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete ${contact.displayName}?") },
+            title = { Text("Delete ${contact?.displayName}?") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Delete") }
             },

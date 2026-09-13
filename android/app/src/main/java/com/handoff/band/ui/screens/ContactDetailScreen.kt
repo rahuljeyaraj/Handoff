@@ -18,12 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.handoff.band.data.Handshake
 import com.handoff.band.ui.components.initials
-import com.handoff.band.ui.theme.MonoStyle
 import com.handoff.band.ui.theme.semantic
 import java.text.DateFormat
 import java.text.SimpleDateFormat
@@ -56,8 +53,10 @@ import java.util.Locale
 /**
  * A received card, design decisions §4. View, the wearer's note, and "Save to
  * phone contacts" as a secondary action rather than the only thing a tap can
- * do. The raw vCard is behind the overflow: a card that crossed a body in
- * 250 ms is partial by design, and the exact text is worth a look.
+ * do. There is no "card as received" view here — that is a developer's look
+ * at a card that crossed a body in 250 ms, not something to show the wearer
+ * (review item 8); the raw-vCard view the brief keeps is the own card's
+ * bytes, under Advanced.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,8 +69,6 @@ fun ContactDetailScreen(
     onDelete: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
-    var rawCard by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -87,16 +84,8 @@ fun ContactDetailScreen(
                     IconButton(onClick = onEdit) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit")
                     }
-                    Box {
-                        IconButton(onClick = { menu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                        }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Card as received") },
-                                             onClick = { menu = false; rawCard = true })
-                            DropdownMenuItem(text = { Text("Delete") },
-                                             onClick = { menu = false; confirmDelete = true })
-                        }
+                    IconButton(onClick = { confirmDelete = true }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -154,15 +143,6 @@ fun ContactDetailScreen(
         }
     }
 
-    if (rawCard) {
-        AlertDialog(
-            onDismissRequest = { rawCard = false },
-            title = { Text("Card as received") },
-            text = { Text(contact.vcard, style = MonoStyle) },
-            confirmButton = { TextButton(onClick = { rawCard = false }) { Text("Close") } },
-        )
-    }
-
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -196,7 +176,7 @@ private fun Header(h: Handshake) {
                  color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
                  modifier = Modifier.padding(top = 2.dp))
         }
-        Text(metLabel(h.receivedAt), style = MaterialTheme.typography.bodySmall,
+        Text(metLabel(h.receivedAt, h.addedByHand), style = MaterialTheme.typography.bodySmall,
              color = MaterialTheme.colorScheme.onSurfaceVariant,
              modifier = Modifier.padding(top = 8.dp))
     }
@@ -244,12 +224,17 @@ private fun DuplicateBanner(h: Handshake, other: Handshake, onMerge: () -> Unit)
     }
 }
 
-/** "Met today, 14:32" · "Met yesterday, 18:47" · "Met 8 Sep, 10:12". */
-fun metLabel(at: Long, now: Long = System.currentTimeMillis()): String {
+/**
+ * "Met today, 14:32" for a card that crossed a body link; "Added today,
+ * 14:32" for one entered by hand (review item 8, O4) — same shape, honest
+ * about which.
+ */
+fun metLabel(at: Long, addedByHand: Boolean, now: Long = System.currentTimeMillis()): String {
+    val verb = if (addedByHand) "Added" else "Met"
     val time = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(at))
     return when (daysBetween(at, now)) {
-        0 -> "Met today, $time"
-        1 -> "Met yesterday, $time"
-        else -> "Met ${SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(at))}, $time"
+        0 -> "$verb today, $time"
+        1 -> "$verb yesterday, $time"
+        else -> "$verb ${SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(at))}, $time"
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -91,6 +93,7 @@ fun ContactsScreen(
     incompleteAt: Long?,
     onContact: (Handshake) -> Unit,
     onDeleteMany: (Set<Long>) -> Unit,
+    onAddContact: () -> Unit,
     onBand: () -> Unit,
     onPair: () -> Unit,
     onSetUpCard: () -> Unit,
@@ -120,6 +123,15 @@ fun ContactsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        floatingActionButton = {
+            // A contacts app's own "+" (review item 8) — hidden while search
+            // or selection already own the app bar.
+            if (!searching && !selecting) {
+                FloatingActionButton(onClick = onAddContact) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add contact")
+                }
+            }
+        },
         topBar = {
             if (selecting) {
                 TopAppBar(
@@ -298,10 +310,17 @@ private fun ContactList(
                 }
             }
             Prefs.Sort.AZ -> {
-                items(contacts.sortedBy { it.displayName.lowercase() }, key = { it.id }) { h ->
-                    ContactRow(h, timeLabel(h.receivedAt, now, sectioned = false),
-                               selecting = selecting, selected = selected(h),
-                               onClick = { onClick(h) }, onLongClick = { onLongClick(h) })
+                val groups = contacts
+                    .sortedBy { it.displayName.lowercase() }
+                    .groupBy { azHeader(it.displayName) }
+                    .toSortedMap(compareBy({ it == "#" }, { it }))
+                for ((letter, rows) in groups) {
+                    item(key = "hdr-$letter") { DateHeader(letter) }
+                    items(rows, key = { it.id }) { h ->
+                        ContactRow(h, timeLabel(h.receivedAt, now, sectioned = false),
+                                   selecting = selecting, selected = selected(h),
+                                   onClick = { onClick(h) }, onLongClick = { onLongClick(h) })
+                    }
                 }
             }
         }
@@ -312,6 +331,12 @@ private fun section(at: Long, now: Long): String = when (daysBetween(at, now)) {
     0 -> "Today"
     1 -> "Yesterday"
     else -> "Earlier"
+}
+
+/** The initial letter, uppercased; anything that doesn't start with one groups under "#". */
+private fun azHeader(name: String): String {
+    val c = name.trim().firstOrNull()?.uppercaseChar()
+    return if (c != null && c in 'A'..'Z') c.toString() else "#"
 }
 
 @OptIn(ExperimentalFoundationApi::class)

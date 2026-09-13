@@ -51,6 +51,7 @@ object Routes {
     const val SETUP = "setup"
     const val CONTACT = "contact/{id}"
     const val CONTACT_EDIT = "contact/{id}/edit"
+    const val CONTACT_NEW = "contact_new"
 
     fun contact(id: Long) = "contact/$id"
     fun contactEdit(id: Long) = "contact/$id/edit"
@@ -131,6 +132,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 incompleteAt = state?.lastIncompleteAt,
                 onContact = { nav.navigate(Routes.contact(it.id)) },
                 onDeleteMany = { ids -> scope.launch { db.handshakes().deleteMany(ids) } },
+                onAddContact = { nav.navigate(Routes.CONTACT_NEW) },
                 onBand = { nav.navigate(Routes.BAND) },
                 onPair = { nav.navigate(Routes.SETUP) },
                 onSetUpCard = { nav.navigate(Routes.CARD) },
@@ -208,6 +210,18 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                     scope.launch { db.handshakes().delete(id) }
                     nav.popBackStack(Routes.CONTACTS, inclusive = false)
                 },
+                onBack = { nav.popBackStack() },
+            )
+        }
+
+        composable(Routes.CONTACT_NEW) {
+            ContactEditScreen(
+                contact = null,
+                onSave = { created ->
+                    scope.launch { db.handshakes().insert(created) }
+                    nav.popBackStack()
+                },
+                onDelete = null,
                 onBack = { nav.popBackStack() },
             )
         }
