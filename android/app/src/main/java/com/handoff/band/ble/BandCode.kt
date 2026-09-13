@@ -11,21 +11,28 @@ package com.handoff.band.ble
  * production label has it. Either way it is generated per board from the
  * same id the firmware uses, never typed by hand.
  *
- *     HANDOFF:7A3C
- *     HANDOFF:7A3C:28:CD:C1:0A:1B:2C
+ *     7A3C
+ *     7A3C:28:CD:C1:0A:1B:2C
  *
- * The manual fallback accepts the bare four digits, for a label that has
- * worn off. Plain Kotlin, tested on the JVM.
+ * Just the digits: the sticker on a band is small, and four characters at
+ * the highest error-correction level still fit the smallest QR there is,
+ * where a `HANDOFF:` prefix (an earlier form, still accepted) pushed it
+ * up a version. The same four digits are what a person types for a label
+ * that will not scan. Plain Kotlin, tested on the JVM.
  */
 data class BandCode(val suffix: String, val address: String? = null) {
 
-    /** The advertised name, which is what the scan filter matches on. */
-    val name: String get() = "Handoff band $suffix"
+    /** The advertised name, which is what the pairing matches on. */
+    val name: String get() = "$NAME_PREFIX $suffix"
 
+    /** The label's content. */
     override fun toString(): String =
-        if (address != null) "$PREFIX:$suffix:$address" else "$PREFIX:$suffix"
+        if (address != null) "$suffix:$address" else suffix
 
     companion object {
+        /** What every band advertises before its four digits (`ble.c`). */
+        const val NAME_PREFIX = "Handoff band"
+        /** Labels printed before the digits stood alone carried this. */
         private const val PREFIX = "HANDOFF"
         private val SUFFIX = Regex("^[0-9A-F]{4}$")
         private val MAC = Regex("^([0-9A-F]{2}:){5}[0-9A-F]{2}$")

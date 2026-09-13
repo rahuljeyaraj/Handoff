@@ -236,11 +236,11 @@ static void print_banner(void)
            HANDOFF_BIT_RATE_BPS, HANDOFF_GZ_N, HANDOFF_GZ_BIN);
     printf("  record sector at 0x%06x, %u bytes\n",
            (unsigned)flash_record_offset(), (unsigned)flash_record_sector_size());
-    /* The QR label's content, from the same board id the name comes from.
-     * tools/band_label.py turns this line into the label. Offset 13 skips
-     * "Handoff band " (review item 3 renamed the advertised name from
-     * "Handoff "). */
-    printf("  name \"%s\", label HANDOFF:%s\n", ble_local_name(), ble_local_name() + 13);
+    /* The QR label's content — just the four digits — from the same board
+     * id the name comes from. tools/band_label.py turns this line into the
+     * label. Offset 13 skips "Handoff band " (review item 3 renamed the
+     * advertised name from "Handoff "). */
+    printf("  name \"%s\", label %s\n", ble_local_name(), ble_local_name() + 13);
 
     if (store_get(&s_store, &blob, &len) == STORE_OK)
         printf("  provisioned: %u compact bytes, record id %u\n",

@@ -88,3 +88,7 @@ _autosave-*
 
 # Editor local-history extension (has its own .git)
 .history/
+
+# Band labels (python tools/band_label.py XXXX regenerates one in a second)
+/band-*.png
+/band-*.svg
