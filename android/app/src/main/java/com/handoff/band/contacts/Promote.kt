@@ -3,6 +3,7 @@ package com.handoff.band.contacts
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
+import android.net.Uri
 import android.provider.ContactsContract
 import com.handoff.band.data.Handshake
 import com.handoff.band.vcard.VCard
@@ -76,6 +77,15 @@ object Promote {
         title?.takeIf { it.isNotBlank() }?.let { putExtra(ContactsContract.Intents.Insert.JOB_TITLE, it) }
         note?.takeIf { it.isNotBlank() }?.let { putExtra(ContactsContract.Intents.Insert.NOTES, it) }
     }
+
+    /**
+     * Whether the URI a previous Insert returned still resolves to a contact
+     * (review item 16) — READ_CONTACTS is already held for provisioning.
+     */
+    fun exists(context: Context, uri: Uri): Boolean = runCatching {
+        context.contentResolver.query(uri, arrayOf(ContactsContract.Contacts._ID), null, null, null)
+            ?.use { it.moveToFirst() } ?: false
+    }.getOrDefault(false)
 }
 
 /**

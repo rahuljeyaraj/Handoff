@@ -4,10 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,11 +21,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -69,7 +69,6 @@ import com.handoff.band.ui.components.Avatar
 import com.handoff.band.ui.components.BandStatusLine
 import com.handoff.band.ui.components.DateHeader
 import com.handoff.band.ui.components.HandoffIcons
-import com.handoff.band.ui.theme.semantic
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -91,7 +90,7 @@ fun ContactsScreen(
     onSort: (Prefs.Sort) -> Unit,
     incompleteAt: Long?,
     onContact: (Handshake) -> Unit,
-    onMerge: (keep: Handshake, absorb: Handshake) -> Unit,
+    onDeleteMany: (Set<Long>) -> Unit,
     onBand: () -> Unit,
     onPair: () -> Unit,
     onSetUpCard: () -> Unit,
@@ -99,9 +98,16 @@ fun ContactsScreen(
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var mergeFrom by remember { mutableStateOf<Handshake?>(null) }
+    var selection by remember { mutableStateOf(emptySet<Long>()) }
+    var confirmDeleteSelection by remember { mutableStateOf(false) }
+    val selecting = selection.isNotEmpty()
     val snackbar = remember { SnackbarHostState() }
 
+    fun toggleSelect(h: Handshake) {
+        selection = if (h.id in selection) selection - h.id else selection + h.id
+    }
+
+    BackHandler(enabled = selecting) { selection = emptySet() }
     BackHandler(enabled = searching) { searching = false; query = "" }
 
     // A handshake that arrived with no phone and no email is not a contact,
@@ -115,7 +121,23 @@ fun ContactsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            if (searching) {
+            if (selecting) {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { selection = emptySet() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Cancel selection")
+                        }
+                    },
+                    title = { Text("${selection.size} selected") },
+                    actions = {
+                        IconButton(onClick = { confirmDeleteSelection = true }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface),
+                )
+            } else if (searching) {
                 SearchBar(query, onQuery = { query = it },
                           onClose = { searching = false; query = "" })
             } else {
@@ -147,8 +169,10 @@ fun ContactsScreen(
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     items(hits, key = { it.id }) { h ->
                         ContactRow(h, timeLabel(h.receivedAt, sectioned = false),
-                                   highlight = query, onClick = { onContact(h) },
-                                   onLongClick = { mergeFrom = h })
+                                   highlight = query,
+                                   selecting = selecting, selected = h.id in selection,
+                                   onClick = { if (selecting) toggleSelect(h) else onContact(h) },
+                                   onLongClick = { toggleSelect(h) })
                     }
                 }
                 return@Column
@@ -166,61 +190,31 @@ fun ContactsScreen(
             if (contacts.isEmpty()) {
                 EmptyState(cardSet, onSetUpCard)
             } else {
-                ContactList(contacts, sort, onContact, onLongClick = { mergeFrom = it })
+                ContactList(
+                    contacts, sort,
+                    onClick = { if (selecting) toggleSelect(it) else onContact(it) },
+                    selecting = selecting, selected = { it.id in selection },
+                    onLongClick = { toggleSelect(it) },
+                )
             }
         }
     }
 
-    mergeFrom?.let { from ->
-        MergeDialog(
-            from = from,
-            candidates = contacts.filter { it.id != from.id },
-            onPick = { keep -> onMerge(keep, from); mergeFrom = null },
-            onDismiss = { mergeFrom = null },
+    if (confirmDeleteSelection) {
+        val n = selection.size
+        AlertDialog(
+            onDismissRequest = { confirmDeleteSelection = false },
+            title = { Text("Delete $n ${if (n == 1) "contact" else "contacts"}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDeleteSelection = false
+                    onDeleteMany(selection)
+                    selection = emptySet()
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteSelection = false }) { Text("Cancel") } },
         )
     }
-}
-
-/**
- * "Merge into…" — the manual escape hatch for duplicates the keys did not
- * catch (§3). The long-pressed row is absorbed into the one picked here.
- */
-@Composable
-private fun MergeDialog(
-    from: Handshake,
-    candidates: List<Handshake>,
-    onPick: (Handshake) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Merge ${from.displayName} into…") },
-        text = {
-            if (candidates.isEmpty()) {
-                Text("No other contacts to merge with.",
-                     style = MaterialTheme.typography.bodyMedium)
-            } else {
-                LazyColumn(Modifier.heightIn(max = 360.dp)) {
-                    items(candidates.sortedBy { it.displayName.lowercase() }, key = { it.id }) { c ->
-                        Row(
-                            Modifier.fillMaxWidth().clickable { onPick(c) }.padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Avatar(c.displayName)
-                            Column {
-                                Text(c.displayName, style = MaterialTheme.typography.bodyLarge)
-                                Text(secondaryLine(c), style = MaterialTheme.typography.bodySmall,
-                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 /**
@@ -282,7 +276,9 @@ fun matches(h: Handshake, query: String): Boolean {
 private fun ContactList(
     contacts: List<Handshake>,
     sort: Prefs.Sort,
-    onContact: (Handshake) -> Unit,
+    onClick: (Handshake) -> Unit,
+    selecting: Boolean,
+    selected: (Handshake) -> Boolean,
     onLongClick: (Handshake) -> Unit,
 ) {
     val now = System.currentTimeMillis()
@@ -295,15 +291,17 @@ private fun ContactList(
                 for ((title, rows) in groups) {
                     item(key = "hdr-$title") { DateHeader(title) }
                     items(rows, key = { it.id }) { h ->
-                        ContactRow(h, timeLabel(h.receivedAt, now), onClick = { onContact(h) },
-                                   onLongClick = { onLongClick(h) })
+                        ContactRow(h, timeLabel(h.receivedAt, now),
+                                   selecting = selecting, selected = selected(h),
+                                   onClick = { onClick(h) }, onLongClick = { onLongClick(h) })
                     }
                 }
             }
             Prefs.Sort.AZ -> {
                 items(contacts.sortedBy { it.displayName.lowercase() }, key = { it.id }) { h ->
                     ContactRow(h, timeLabel(h.receivedAt, now, sectioned = false),
-                               onClick = { onContact(h) }, onLongClick = { onLongClick(h) })
+                               selecting = selecting, selected = selected(h),
+                               onClick = { onClick(h) }, onLongClick = { onLongClick(h) })
                 }
             }
         }
@@ -324,18 +322,25 @@ fun ContactRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     highlight: String = "",
+    selecting: Boolean = false,
+    selected: Boolean = false,
     onLongClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier
             .fillMaxWidth()
+            .then(
+                if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                else Modifier
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .height(72.dp)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Avatar(h.displayName)
+        if (selecting) Checkbox(checked = selected, onCheckedChange = null)
+        else Avatar(h.displayName)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(highlighted(h.displayName, highlight), style = MaterialTheme.typography.bodyLarge,
                  maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -343,14 +348,8 @@ fun ContactRow(
                  color = MaterialTheme.colorScheme.onSurfaceVariant,
                  maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(time, style = MaterialTheme.typography.bodySmall,
-                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (h.promoted) {
-                Icon(Icons.Filled.Check, contentDescription = "Saved to phone",
-                     tint = MaterialTheme.semantic.ok, modifier = Modifier.size(15.dp))
-            }
-        }
+        Text(time, style = MaterialTheme.typography.bodySmall,
+             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

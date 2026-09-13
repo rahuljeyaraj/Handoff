@@ -130,12 +130,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 onSort = prefs::setSort,
                 incompleteAt = state?.lastIncompleteAt,
                 onContact = { nav.navigate(Routes.contact(it.id)) },
-                onMerge = { keep, absorb ->
-                    scope.launch {
-                        db.handshakes().update(Merge.merge(into = keep, from = absorb))
-                        db.handshakes().delete(absorb.id)
-                    }
-                },
+                onDeleteMany = { ids -> scope.launch { db.handshakes().deleteMany(ids) } },
                 onBand = { nav.navigate(Routes.BAND) },
                 onPair = { nav.navigate(Routes.SETUP) },
                 onSetUpCard = { nav.navigate(Routes.CARD) },
@@ -155,12 +150,23 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 .collectAsState(initial = emptyList())
 
             // The system editor returns OK only when the person actually
-            // saved, so that is when the tick appears in the list.
+            // saved, and hands back the new contact's URI so a later delete
+            // in Contacts can be noticed (review item 16).
             val promote = rememberLauncherForActivityResult(
                 ActivityResultContracts.StartActivityForResult()
             ) { result ->
                 if (result.resultCode == Activity.RESULT_OK) {
-                    scope.launch { db.handshakes().markPromoted(id) }
+                    val uri = result.data?.data?.toString()
+                    scope.launch { db.handshakes().markPromoted(id, uri) }
+                }
+            }
+
+            // Checked once per visit, not continuously: a deleted contact
+            // clears "Saved to your phone" the next time this screen opens.
+            LaunchedEffect(c.id) {
+                val uri = c.contactUri
+                if (c.promoted && uri != null && !Promote.exists(context, android.net.Uri.parse(uri))) {
+                    db.handshakes().update(c.copy(promoted = false, contactUri = null))
                 }
             }
 

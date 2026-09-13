@@ -67,6 +67,13 @@ data class Handshake(
 
     /** Set once the wearer promotes it into Contacts. */
     @ColumnInfo(name = "promoted") val promoted: Boolean = false,
+
+    /**
+     * The URI the system contact editor returned for the promoted contact
+     * (review item 16). Checked for existence when the detail screen opens,
+     * so deleting the contact in Contacts clears "Saved to your phone" here.
+     */
+    @ColumnInfo(name = "contact_uri") val contactUri: String? = null,
 ) {
     /** Recompute the keys from the current mobile and email. Call after any edit. */
     fun rekeyed(): Handshake = copy(phoneKey = Keys.phone(mobile), emailKey = Keys.email(email))
@@ -104,14 +111,18 @@ interface HandshakeDao {
     @Update
     suspend fun update(h: Handshake)
 
-    @Query("UPDATE handshakes SET promoted = 1 WHERE id = :id")
-    suspend fun markPromoted(id: Long)
+    @Query("UPDATE handshakes SET promoted = 1, contact_uri = :uri WHERE id = :id")
+    suspend fun markPromoted(id: Long, uri: String?)
 
     @Query("DELETE FROM handshakes WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /** Batch delete for selection mode (review item 7). */
+    @Query("DELETE FROM handshakes WHERE id IN (:ids)")
+    suspend fun deleteMany(ids: Collection<Long>)
 }
 
-@Database(entities = [Handshake::class], version = 2, exportSchema = false)
+@Database(entities = [Handshake::class], version = 3, exportSchema = false)
 abstract class HandoffDb : RoomDatabase() {
     abstract fun handshakes(): HandshakeDao
 
@@ -121,7 +132,7 @@ abstract class HandoffDb : RoomDatabase() {
         fun get(context: Context): HandoffDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, HandoffDb::class.java, "handoff.db"
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
 
         /**
@@ -157,6 +168,13 @@ abstract class HandoffDb : RoomDatabase() {
                                   values, "id = ?", arrayOf(id))
                     }
                 }
+            }
+        }
+
+        /** Version 3 adds the promoted contact's URI (review item 16). */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE handshakes ADD COLUMN contact_uri TEXT")
             }
         }
     }
