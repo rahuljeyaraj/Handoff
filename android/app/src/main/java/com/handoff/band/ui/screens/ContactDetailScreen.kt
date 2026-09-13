@@ -40,8 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.handoff.band.contacts.PhoneFormat
 import com.handoff.band.data.Handshake
 import com.handoff.band.ui.components.initials
 import com.handoff.band.ui.theme.semantic
@@ -93,6 +95,7 @@ fun ContactDetailScreen(
             )
         },
     ) { padding ->
+        val context = LocalContext.current
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
             Header(contact)
 
@@ -102,8 +105,8 @@ fun ContactDetailScreen(
 
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
-            contact.mobile?.let { FieldRow(it, "Mobile") }
-            contact.work?.let { FieldRow(it, "Work") }
+            contact.mobile?.let { FieldRow(PhoneFormat.format(context, it), "Mobile") }
+            contact.work?.let { FieldRow(PhoneFormat.format(context, it), "Work") }
             contact.email?.let { FieldRow(it, "Email") }
             contact.org?.let { FieldRow(it, "Organisation") }
 

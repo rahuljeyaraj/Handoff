@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.handoff.band.contacts.ContactReader
+import com.handoff.band.contacts.PhoneFormat
 import com.handoff.band.data.OwnCard
 
 /**
@@ -89,8 +90,8 @@ fun CardScreen(
         ContactReader.read(context, uri)?.let { p ->
             card = card.copy(
                 name = p.displayName,
-                mobile = p.mobile.orEmpty(),
-                work = p.work.orEmpty(),
+                mobile = p.mobile?.let { PhoneFormat.format(context, it) }.orEmpty(),
+                work = p.work?.let { PhoneFormat.format(context, it) }.orEmpty(),
                 email = p.email.orEmpty(),
                 org = p.org.orEmpty(),
                 title = p.title.orEmpty(),
@@ -117,7 +118,12 @@ fun CardScreen(
                     }
                 },
                 actions = {
-                    TextButton(enabled = card.complete, onClick = { onSave(card) }) {
+                    TextButton(enabled = card.complete, onClick = {
+                        onSave(card.copy(
+                            mobile = PhoneFormat.format(context, card.mobile),
+                            work = PhoneFormat.format(context, card.work),
+                        ))
+                    }) {
                         Text("Save")
                     }
                 },

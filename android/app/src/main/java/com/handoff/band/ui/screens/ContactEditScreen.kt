@@ -32,8 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.handoff.band.contacts.PhoneFormat
 import com.handoff.band.data.Handshake
 import com.handoff.band.vcard.VCard
 
@@ -55,6 +57,7 @@ fun ContactEditScreen(
     onDelete: (() -> Unit)?,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     var name by rememberSaveable { mutableStateOf(contact?.displayName.orEmpty()) }
     var mobile by rememberSaveable { mutableStateOf(contact?.mobile.orEmpty()) }
     var work by rememberSaveable { mutableStateOf(contact?.work.orEmpty()) }
@@ -68,10 +71,12 @@ fun ContactEditScreen(
 
     fun save() {
         val displayName = name.trim()
+        val formattedMobile = mobile.orNull()?.let { PhoneFormat.format(context, it) }
+        val formattedWork = work.orNull()?.let { PhoneFormat.format(context, it) }
         val base = contact ?: Handshake(
             receivedAt = System.currentTimeMillis(),
             vcard = VCard.build(
-                fullName = displayName, mobile = mobile.orNull(), work = work.orNull(),
+                fullName = displayName, mobile = formattedMobile, work = formattedWork,
                 email = email.orNull(), org = org.orNull(), title = title.orNull(),
                 note = note.orNull(),
             ),
@@ -81,8 +86,8 @@ fun ContactEditScreen(
         onSave(
             base.copy(
                 displayName = displayName,
-                mobile = mobile.orNull(),
-                work = work.orNull(),
+                mobile = formattedMobile,
+                work = formattedWork,
                 email = email.orNull(),
                 org = org.orNull(),
                 title = title.orNull(),
