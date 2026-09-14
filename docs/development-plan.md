@@ -554,7 +554,7 @@ it entirely did not materialise for this loop — `--dc 6` in the simulator
 changes nothing. And the bench noise floor drifted from 0.7 to 1.4 LSB RMS
 across an afternoon of USB and rewiring; the table quotes each point's own.
 
-### M6 — Two boards over a wire
+### M6 — Two boards over a wire — **verified 14 Sep 2026, all three criteria**
 
 **Hardware: a second board + 2 resistors.**
 
@@ -577,6 +577,83 @@ Exit criteria:
   later analogue result gets compared against.
 
 Cannot prove: anything about the amplifier, or capacitive coupling.
+
+**Verified, with `apps/linktest`: the band (93D1) transmitting, a second
+Pico 2 W receiving, role from the GP14 strap.** The channel was M5's divider,
+not the plan's bare 1 MΩ: 10 kΩ from TX GP2 into RX GP26 with 540 Ω to ground,
+so the only new thing in the loop was the second crystal, and the received
+amplitude could be compared directly with M5's. Then the series leg was
+swapped for the curve.
+
+| Criterion | Measured |
+|---|---|
+| Frames cross between two clocks, both carriers | A = 134 LSB (M5 read 132 through the same divider); 763/763 at 200 kHz, 265/265 at 40 kHz, margin 130–133 |
+| An hour free-running, no cumulative timing failure | **21 300 / 21 300 in 3 791 s** at 200 kHz, 0 CRC, 0 lost, 0 false syncs, 0 overruns, 0 stalls; margin 132 in every one of the 216 reports |
+| FER against series resistance, plotted | four points, 10 kΩ to 300 kΩ, `docs/m6-fer-vs-series.svg`; table below |
+
+The soak is the actual test of clock independence, and the margin figure is
+the sharper half of it: a drift between the two crystals would have shown up
+as a slowly falling margin long before it lost a frame, and the margin did
+not move in an hour.
+
+![FER against series resistance](m6-fer-vs-series.svg)
+
+The curve, ~500 frames per point per carrier. *A* is the receiver's own
+integer chip-energy maximum with frames flowing, σ the raw RMS with the
+transmitter paused (both from `m`). The simulator column is
+`handoff_ber --random-phase --amplitude A --noise σ`, 1000 frames, at the
+divider's predicted fundamental.
+
+| Series (shunt 220 Ω) | A | σ | FER 200 kHz | FER 40 kHz | simulator |
+|---|---|---|---|---|---|
+| 10 kΩ (over 540 Ω) | 134 | 0.7 | 0 / 21 300 | 0 / 265 | 0 |
+| 100 kΩ | 6 | 0.9–1.0 | 0 / 506 | 0 / 508 | 0 at 5.7 LSB |
+| 200 kΩ | 2–3 | 1.0–1.1 | 0.081 (29 CRC + 12 lost) | 0.132 (57 CRC + 10 lost) | 0.02 at 2.9, 0.41 at 2.5 |
+| 300 kΩ | 1–2 | 1.0–1.3 | 1.0, never syncs | 1.0, never syncs | 0.89 at 1.9 |
+
+**The attenuation budget.** The bare-ADC receiver is error-free down to 6 LSB
+of received fundamental, **27 dB below the 10 kΩ reference**, and still
+partly alive at 33 dB (the 200 kΩ knee, FER 0.08–0.13); it is dead at 37 dB.
+That is the number every analogue result from M7 on is compared against —
+the AFE's ×121 should move the whole curve by ~42 dB. The sweep stops at
+300 kΩ rather than the plan's 10 MΩ because the receiver is already at the
+noise floor there; the upper decades only mean something once R2 feeds an
+amplifier, which is M8.
+
+**What running it found.**
+
+1. **The bench agrees with the simulator to about a decibel at the knee.**
+   The 200 kΩ point, FER 0.08–0.13 at 2–3 LSB, lies between the model's
+   0.02 at 2.9 LSB and 0.41 at 2.5 — inside the ±0.5 LSB the integer
+   `m` reading can resolve. M5 had already shown that below ~10 LSB the
+   link is quantisation-limited rather than noise-limited; the cliff being
+   this steep (a factor of 3 in resistance from clean to dead) is that
+   finding seen from the resistance axis.
+2. **M5's finding 6 did not reproduce.** With the ≥100 kΩ source on this
+   bench the 100 kΩ point read 6 LSB at *both* carriers, which is the
+   divider arithmetic (3.3 V × 220/100 220 = 7.2 mV, × 2/π, ÷ 0.806 mV/LSB
+   = 5.7), and 200 kΩ and 300 kΩ read 2.9 and 1.9 predicted against 2–3
+   and 1–2 measured. The 0.6× at 200 kHz and 0.07× at 40 kHz M5 saw was
+   that afternoon's breadboard contact, not the ADC pin. Nothing to
+   re-check at M7.
+3. **`linktest`'s BER column is always zero at the knee, and the FER is the
+   figure.** Bit errors are counted only in frames whose CRC passed, since a
+   failed frame's payload is not trusted; the CRC caught every corrupted
+   frame, so the column reads 0 while FER reads 0.13. A lower bound is one
+   flipped bit per CRC failure, ≥ 2 × 10⁻⁴ at 200 kΩ. Counting payload
+   bits in bad-CRC frames against the sequence the header carries would
+   give the real BER; not done, because FER is what the budget needs.
+4. **The 220 Ω shunt is what makes the sweep possible on a bare pin.** M5
+   found the ADC cannot be fed from more than ~160 kΩ, but that is the
+   source impedance the sample capacitor sees, and with the shunt in place
+   it is ~220 Ω whatever the series leg — the paused-transmitter noise
+   stayed at 0.9–1.3 LSB RMS through the whole sweep, against M4's 0.7–1.0
+   on-die floor. Only the amplitude falls.
+
+Also worth recording: the RX board's noise floor read 0.7 LSB at boot and
+1.0 later in the evening, the same USB-and-rewiring drift M5 saw, so each
+point quotes its own σ; and the TX stall counter M5 added stayed at 0 for
+the 27 000 frames the band sent across the evening.
 
 ### M7 — Analogue front end, characterised alone
 
