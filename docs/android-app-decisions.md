@@ -246,20 +246,31 @@ detail screen's overflow can show it.
 > - **No "Fill from a phone contact".** Five fields is not much typing, and on
 >   a card that already exists it would overwrite what was written.
 > - **Phone is a number plus a label**, the way the phone's Contacts app has
->   it, with *Add another phone* for a second row — two at most. The label
->   menu offers Mobile and Work only, because those are the two typed slots
->   the band carries; Home and Other would need a codec change.
+>   it, with *Add another phone* for the next row.
 >
->   **Wanted, not yet built (wearer, 14 Sep 2026):** the four labels the
->   design board draws — Mobile, Work, Home, Other — and the same label on
->   both rows (two mobiles). This is a wire-format change, not an editor
->   change: `compact.h` has exactly `TAG_TEL_CELL` and `TAG_TEL_WORK`, and
->   the app's own card, the received-contact row (`mobile`/`work` columns),
->   the contact editor, the dedup key and the phone-contacts insert/update
->   are all shaped as one mobile plus one work. Doing it means two new tags
->   (or a label byte on the TEL value) in the firmware codec and its tests,
->   reflashing the band, and number+label pairs end to end in the app.
->   Deferred by the wearer until it can be its own change.
+>   **Built 14 Sep 2026**, as its own change. Up to **three** rows, each
+>   labelled **Mobile, Work, Home, Main** or one the wearer types (*Custom*),
+>   and the same label is allowed twice — two mobiles is a real thing a
+>   person has. The wearer chose Main over the board's Other, so the boards
+>   in `design/your-card/` draw the old set.
+>
+>   It was a wire-format change, not an editor change. The label moved into
+>   the TEL value as one new tag, `TAG_TEL` (firmware architecture §8.2);
+>   `TAG_TEL_CELL` and `TAG_TEL_WORK` are never encoded again and are decoded
+>   forever, so a band flashed before this still reads. `tools/vcf.py` moved
+>   with it and the cross-check covers a card carrying every label. On the
+>   app side the `mobile`/`work` columns became one `phones` column (DB v7,
+>   with a migration that reads the old two as a labelled Mobile and Work);
+>   `OwnCard`, `VCard`, both editors, the detail pages and `Promote` all deal
+>   in `List<Phone>`.
+>
+>   Two things are worth knowing. The **dedup identity is still the first
+>   number** (`phone_key`), not every number on the card, so a later card
+>   carrying only somebody's second number does not match them on phone. And
+>   the **Insert intent cannot carry a custom label** — its extras have a
+>   phone TYPE but no LABEL string — so a number called *Reception* reaches
+>   the system editor as *Other* on first save; the direct provider write
+>   behind *Update phone contact* writes `TYPE_CUSTOM` with the word itself.
 > - **A saved card opens read-only**, the same page a received contact gets:
 >   pen and bin in the app bar, the header, the rows, and one chip under the
 >   name for the fact only this page knows — *On Handoff band 93D1*, *Not on

@@ -130,8 +130,9 @@ fun CardViewScreen(
 
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
-                if (card.mobile.isNotBlank()) DetailRow(HandoffIcons.Phone, card.mobile, "Mobile")
-                if (card.work.isNotBlank()) DetailRow(HandoffIcons.Phone, card.work, "Work")
+                card.phones.filterNot { it.blank }.forEach {
+                    DetailRow(HandoffIcons.Phone, it.number, it.text)
+                }
                 if (card.email.isNotBlank()) DetailRow(HandoffIcons.Mail, card.email, "Email")
 
                 // Room for the caption when the page is short enough not to scroll.

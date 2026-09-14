@@ -37,7 +37,7 @@ void test_vcard(void)
         HF_CHECK(need(&r, TAG_N) != NULL);
         HF_CHECK(need(&r, TAG_ORG) != NULL);
         HF_CHECK(need(&r, TAG_TITLE) != NULL);
-        HF_CHECK(need(&r, TAG_TEL_CELL) != NULL);
+        HF_CHECK(need(&r, TAG_TEL) != NULL);
 
         /* gmail.com collapses to one byte, so "ada@gmail.com" costs 4. */
         f = need(&r, TAG_EMAIL);
@@ -184,7 +184,7 @@ void test_vcard(void)
         compact_rec_t r;
         HF_EQ_INT(vcard_parse(card, strlen(card), &r), COMPACT_OK);
         HF_CHECK(compact_find(&r, TAG_FN) != NULL);
-        HF_CHECK(compact_find(&r, TAG_TEL_CELL) != NULL);
+        HF_CHECK(compact_find(&r, TAG_TEL) != NULL);
     }
 
     hf_begin("vcard: folded lines are unfolded");
@@ -235,5 +235,70 @@ void test_vcard(void)
         size_t n = 0;
         vcard_parse(k_card, strlen(k_card), &r);
         HF_EQ_INT(vcard_render(&r, out, sizeof out, &n), COMPACT_ERR_TOO_LONG);
+    }
+    /* ---- phone labels ---- */
+
+    hf_begin("vcard: the four labels and a custom one survive a round trip");
+    {
+        static const char card[] =
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Bjorn\r\n"
+            "TEL;TYPE=CELL:+354 555 1234\r\n"
+            "TEL;TYPE=WORK:+354 555 8000\r\n"
+            "TEL;TYPE=HOME:+354 555 1543\r\n"
+            "TEL;TYPE=MAIN:+354 555 2020\r\n"
+            "TEL;TYPE=X-Reception:+354 555 9000\r\n"
+            "END:VCARD\r\n";
+        compact_rec_t r;
+        char out[512];
+        size_t n = 0;
+
+        HF_EQ_INT(vcard_parse(card, strlen(card), &r), COMPACT_OK);
+        HF_CHECK_MSG(compact_find(&r, TAG_RAW) == NULL, "a label fell through to RAW");
+        HF_EQ_INT(vcard_render(&r, out, sizeof out, &n), COMPACT_OK);
+
+        HF_CHECK(strstr(out, "TEL;TYPE=CELL:+3545551234") != NULL);
+        HF_CHECK(strstr(out, "TEL;TYPE=WORK:+3545558000") != NULL);
+        HF_CHECK(strstr(out, "TEL;TYPE=HOME:+3545551543") != NULL);
+        HF_CHECK(strstr(out, "TEL;TYPE=MAIN:+3545552020") != NULL);
+        HF_CHECK(strstr(out, "TEL;TYPE=X-Reception:+3545559000") != NULL);
+    }
+
+    hf_begin("vcard: the same label twice is two phones, not one");
+    {
+        static const char card[] =
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Bjorn\r\n"
+            "TEL;TYPE=CELL:+354 555 1234\r\n"
+            "TEL;TYPE=CELL:+354 555 1543\r\n"
+            "END:VCARD\r\n";
+        compact_rec_t r;
+        char out[512];
+        size_t n = 0;
+        uint8_t i, tels = 0;
+
+        HF_EQ_INT(vcard_parse(card, strlen(card), &r), COMPACT_OK);
+        for (i = 0; i < r.n; i++) if (r.f[i].tag == TAG_TEL) tels++;
+        HF_EQ_INT(tels, 2);
+
+        HF_EQ_INT(vcard_render(&r, out, sizeof out, &n), COMPACT_OK);
+        HF_CHECK(strstr(out, "TEL;TYPE=CELL:+3545551234") != NULL);
+        HF_CHECK(strstr(out, "TEL;TYPE=CELL:+3545551543") != NULL);
+    }
+
+    hf_begin("vcard: a TEL with no type stays a TEL with no type");
+    {
+        /* Calling it a mobile would print the wrong word under the number. */
+        static const char card[] =
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Bo\r\nTEL:+354 555 1234\r\nEND:VCARD\r\n";
+        compact_rec_t r;
+        char out[256];
+        size_t n = 0;
+        const compact_field_t *f;
+
+        HF_EQ_INT(vcard_parse(card, strlen(card), &r), COMPACT_OK);
+        f = compact_find(&r, TAG_TEL);
+        HF_CHECK(f != NULL);
+        if (f) HF_EQ_INT(f->val[0], TEL_LABEL_NONE);
+        HF_EQ_INT(vcard_render(&r, out, sizeof out, &n), COMPACT_OK);
+        HF_CHECK(strstr(out, "TEL:+3545551234") != NULL);
     }
 }

@@ -7,6 +7,9 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.ContactsContract
 import com.handoff.band.data.Handshake
+import com.handoff.band.data.Phone
+import com.handoff.band.data.PhoneLabel
+import com.handoff.band.data.Phones
 import com.handoff.band.vcard.VCard
 
 /**
@@ -33,8 +36,25 @@ import com.handoff.band.vcard.VCard
  */
 object Promote {
 
+    /**
+     * The label as ContactsContract knows it. [custom] says whether the caller
+     * can carry a LABEL string alongside: the provider write can, the Insert
+     * intent cannot, and TYPE_CUSTOM with no label shows as a blank word.
+     */
+    internal fun contactsType(phone: Phone, custom: Boolean): Int = when (phone.label) {
+        PhoneLabel.MOBILE -> ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE
+        PhoneLabel.WORK -> ContactsContract.CommonDataKinds.Phone.TYPE_WORK
+        PhoneLabel.HOME -> ContactsContract.CommonDataKinds.Phone.TYPE_HOME
+        PhoneLabel.MAIN -> ContactsContract.CommonDataKinds.Phone.TYPE_MAIN
+        PhoneLabel.CUSTOM ->
+            if (custom && phone.custom.isNotBlank())
+                ContactsContract.CommonDataKinds.Phone.TYPE_CUSTOM
+            else ContactsContract.CommonDataKinds.Phone.TYPE_OTHER
+        PhoneLabel.NONE -> ContactsContract.CommonDataKinds.Phone.TYPE_OTHER
+    }
+
     fun intentFor(card: VCard): Intent = intentFor(
-        name = card.displayName, mobile = card.mobile, work = card.work, email = card.email,
+        name = card.displayName, phones = card.phones, email = card.email,
         org = card.org, title = card.title, note = card.note,
     )
 
@@ -44,7 +64,7 @@ object Promote {
      * so a name they have corrected carries exactly as written.
      */
     fun intentFor(h: Handshake): Intent = intentFor(
-        name = h.displayName, mobile = h.mobile, work = h.work, email = h.email,
+        name = h.displayName, phones = h.phones, email = h.email,
         org = h.org, title = h.title, note = h.note,
     )
 
@@ -56,10 +76,19 @@ object Promote {
     fun editIntentFor(h: Handshake): Intent? =
         h.contactUri?.let { Intent(Intent.ACTION_EDIT, Uri.parse(it)) }
 
+    /**
+     * The three phone slots the Insert intent has are exactly [Phones.MAX], so
+     * every number on a card reaches the editor.
+     *
+     * ONE THING DOES NOT SURVIVE THIS PATH: a custom label. The Insert extras
+     * carry a phone TYPE but no LABEL string, so a number the wearer called
+     * "Reception" arrives in the editor as Other. [update] — the direct
+     * provider write behind "Update phone contact" — writes TYPE_CUSTOM with
+     * the label itself, so the word comes back the first time that runs.
+     */
     fun intentFor(
         name: String,
-        mobile: String? = null,
-        work: String? = null,
+        phones: List<Phone> = emptyList(),
         email: String? = null,
         org: String? = null,
         title: String? = null,
@@ -68,15 +97,19 @@ object Promote {
         type = ContactsContract.RawContacts.CONTENT_TYPE
 
         putExtra(ContactsContract.Intents.Insert.NAME, name)
-        mobile?.takeIf { it.isNotBlank() }?.let {
-            putExtra(ContactsContract.Intents.Insert.PHONE, it)
-            putExtra(ContactsContract.Intents.Insert.PHONE_TYPE,
-                ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
-        }
-        work?.takeIf { it.isNotBlank() }?.let {
-            putExtra(ContactsContract.Intents.Insert.SECONDARY_PHONE, it)
-            putExtra(ContactsContract.Intents.Insert.SECONDARY_PHONE_TYPE,
-                ContactsContract.CommonDataKinds.Phone.TYPE_WORK)
+
+        val slots = listOf(
+            ContactsContract.Intents.Insert.PHONE to
+                ContactsContract.Intents.Insert.PHONE_TYPE,
+            ContactsContract.Intents.Insert.SECONDARY_PHONE to
+                ContactsContract.Intents.Insert.SECONDARY_PHONE_TYPE,
+            ContactsContract.Intents.Insert.TERTIARY_PHONE to
+                ContactsContract.Intents.Insert.TERTIARY_PHONE_TYPE,
+        )
+        phones.filterNot { it.blank }.take(slots.size).forEachIndexed { i, phone ->
+            val (number, type) = slots[i]
+            putExtra(number, phone.number)
+            putExtra(type, contactsType(phone, custom = false))
         }
         email?.takeIf { it.isNotBlank() }?.let {
             putExtra(ContactsContract.Intents.Insert.EMAIL, it)
@@ -157,15 +190,17 @@ object Promote {
         // the same way the editor does for Insert.NAME.
         row(ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE,
             ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME to h.displayName)
-        h.mobile?.takeIf { it.isNotBlank() }?.let {
-            row(ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE,
-                ContactsContract.CommonDataKinds.Phone.NUMBER to it,
-                ContactsContract.CommonDataKinds.Phone.TYPE to ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
-        }
-        h.work?.takeIf { it.isNotBlank() }?.let {
-            row(ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE,
-                ContactsContract.CommonDataKinds.Phone.NUMBER to it,
-                ContactsContract.CommonDataKinds.Phone.TYPE to ContactsContract.CommonDataKinds.Phone.TYPE_WORK)
+        // One row per number, each with its own label. A custom one is
+        // TYPE_CUSTOM plus the word itself, which is how the phone's own
+        // Contacts app stores a label somebody typed.
+        h.phones.filterNot { it.blank }.forEach { phone ->
+            val fields = mutableListOf<Pair<String, Any>>(
+                ContactsContract.CommonDataKinds.Phone.NUMBER to phone.number,
+                ContactsContract.CommonDataKinds.Phone.TYPE to contactsType(phone, custom = true),
+            )
+            if (phone.label == PhoneLabel.CUSTOM && phone.custom.isNotBlank())
+                fields += ContactsContract.CommonDataKinds.Phone.LABEL to phone.custom.trim()
+            row(ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE, *fields.toTypedArray())
         }
         h.email?.takeIf { it.isNotBlank() }?.let {
             row(ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE,
@@ -221,7 +256,7 @@ object Promote {
                             value.equals(h.displayName, ignoreCase = true)
                         ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE ->
                             digits(value).isNotEmpty() &&
-                                (digits(value) == digits(h.mobile) || digits(value) == digits(h.work))
+                                h.phones.any { digits(value) == digits(it.number) }
                         ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE ->
                             value.equals(h.email, ignoreCase = true)
                         else -> false
@@ -273,23 +308,20 @@ object ContactReader {
     data class Fields(
         val displayName: String,
         val structuredName: String?,
-        val mobile: String?,
-        val work: String?,
+        val phones: List<Phone>,
         val email: String?,
         val org: String?,
         val title: String?,
     ) {
         fun toVCard(
-            includeMobile: Boolean = true,
-            includeWork: Boolean = true,
+            includePhones: Boolean = true,
             includeEmail: Boolean = true,
             includeOrg: Boolean = true,
             includeTitle: Boolean = true,
         ): String = VCard.build(
             fullName = displayName,
             structuredName = structuredName,
-            mobile = mobile.takeIf { includeMobile },
-            work = work.takeIf { includeWork },
+            phones = if (includePhones) phones else emptyList(),
             email = email.takeIf { includeEmail },
             org = org.takeIf { includeOrg },
             title = title.takeIf { includeTitle },
@@ -307,8 +339,7 @@ object ContactReader {
 
         var displayName = ""
         var structured: String? = null
-        var mobile: String? = null
-        var work: String? = null
+        val phones = mutableListOf<Phone>()
         var email: String? = null
         var org: String? = null
         var title: String? = null
@@ -333,12 +364,19 @@ object ContactReader {
 
                     ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE -> {
                         val number = c.str(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                        when (c.getInt(c.getColumnIndexOrThrow(
+                        val custom = c.str(ContactsContract.CommonDataKinds.Phone.LABEL).orEmpty()
+                        val label = when (c.getInt(c.getColumnIndexOrThrow(
                             ContactsContract.CommonDataKinds.Phone.TYPE))) {
-                            ContactsContract.CommonDataKinds.Phone.TYPE_WORK ->
-                                work = work ?: number
-                            else -> mobile = mobile ?: number
+                            ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE -> PhoneLabel.MOBILE
+                            ContactsContract.CommonDataKinds.Phone.TYPE_WORK -> PhoneLabel.WORK
+                            ContactsContract.CommonDataKinds.Phone.TYPE_HOME -> PhoneLabel.HOME
+                            ContactsContract.CommonDataKinds.Phone.TYPE_MAIN -> PhoneLabel.MAIN
+                            ContactsContract.CommonDataKinds.Phone.TYPE_CUSTOM ->
+                                if (custom.isNotBlank()) PhoneLabel.CUSTOM else PhoneLabel.NONE
+                            else -> PhoneLabel.NONE
                         }
+                        if (!number.isNullOrBlank() && phones.size < Phones.MAX)
+                            phones += Phone(number, label, custom)
                     }
 
                     ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE ->
@@ -354,7 +392,7 @@ object ContactReader {
         }
 
         if (displayName.isBlank()) return null
-        return Fields(displayName, structured, mobile, work, email, org, title)
+        return Fields(displayName, structured, phones, email, org, title)
     }
 
     private fun Cursor.str(column: String): String? {

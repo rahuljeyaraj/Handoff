@@ -16,7 +16,7 @@ typedef struct { const char *name; uint8_t tag; } prop_map_t;
 static const prop_map_t k_props[] = {
     { "FN",    TAG_FN },
     { "N",     TAG_N },
-    { "TEL",   TAG_TEL_CELL },   /* refined by its parameters, below */
+    { "TEL",   TAG_TEL },       /* its label comes from the parameters, below */
     { "EMAIL", TAG_EMAIL },
     { "ORG",   TAG_ORG },
     { "TITLE", TAG_TITLE },
@@ -28,6 +28,11 @@ static const prop_map_t k_props[] = {
 static const char *const k_tag_names[] = {
     NULL, "FN", "N", "TEL;TYPE=CELL", "TEL;TYPE=WORK", "EMAIL",
     "ORG", "TITLE", "URL", "ADR", "NOTE"
+};
+
+/* Indexed by the TEL_LABEL_* byte. CUSTOM and NONE are written by hand. */
+static const char *const k_tel_types[] = {
+    NULL, "CELL", "WORK", "HOME", "MAIN"
 };
 
 static bool ieq(const char *a, const char *b, size_t n)
@@ -75,16 +80,56 @@ static uint8_t map_property(const char *name, size_t len)
         const size_t pl = strlen(k_props[i].name);
         if (base != pl || !ieq(name, k_props[i].name, pl)) continue;
 
-        if (k_props[i].tag == TAG_TEL_CELL) {
-            const char *params = name + base;
-            const size_t plen = len - base;
-            if (has_param(params, plen, "WORK")) return TAG_TEL_WORK;
-            /* CELL, MOBILE, or no type at all: a bare TEL is a mobile now. */
-            return TAG_TEL_CELL;
-        }
         return k_props[i].tag;
     }
     return TAG_RAW;
+}
+
+/*
+ * TEL parameters -> a label byte, and the text of it when it is a custom one.
+ *
+ * The four named labels are the ones the editor offers. Anything else that
+ * looks like a type — Android writes a custom label as TYPE=X-Reception — is
+ * kept verbatim as CUSTOM, because a label the wearer typed is a label they
+ * meant. A TEL with no type at all stays NONE: it is not a mobile, it is a
+ * phone number whose owner never said what it was for, and guessing wrong
+ * prints the wrong word under somebody's number.
+ */
+static uint8_t tel_label(const char *name, size_t len, char *custom, size_t custom_max)
+{
+    size_t base = 0, i = 0;
+    const char *params;
+    size_t plen;
+
+    if (custom_max) custom[0] = '\0';
+
+    /* [name] is the whole property as written, "TEL;TYPE=HOME"; the parameters
+     * start at the first ';', exactly as map_property finds them. */
+    while (base < len && name[base] != ';') base++;
+    params = name + base;
+    plen = len - base;
+
+    if (has_param(params, plen, "CELL") || has_param(params, plen, "MOBILE"))
+        return TEL_LABEL_MOBILE;
+    if (has_param(params, plen, "WORK")) return TEL_LABEL_WORK;
+    if (has_param(params, plen, "HOME")) return TEL_LABEL_HOME;
+    if (has_param(params, plen, "MAIN") || has_param(params, plen, "PREF"))
+        return TEL_LABEL_MAIN;
+
+    /* ";TYPE=X-Reception" or ";X-Reception": take what follows the X-. */
+    while (i + 2u < plen) {
+        if ((params[i] == 'X' || params[i] == 'x') && params[i + 1] == '-') {
+            size_t o = 0;
+            i += 2;
+            while (i < plen && params[i] != ';' && params[i] != ',' && o + 1u < custom_max)
+                custom[o++] = params[i++];
+            if (custom_max) custom[o] = '\0';
+            return o ? TEL_LABEL_CUSTOM : TEL_LABEL_NONE;
+        }
+        i++;
+    }
+
+    return TEL_LABEL_NONE;
 }
 
 /*
@@ -203,13 +248,16 @@ compact_err_t vcard_parse(const char *text, size_t len, compact_rec_t *out)
 
         tag = map_property(line, name_len);
 
-        if (tag == TAG_TEL_CELL || tag == TAG_TEL_WORK) {
+        if (tag == TAG_TEL) {
             char tmp[64];
+            char custom[COMPACT_TEL_LABEL_MAX + 1];
+            uint8_t label;
             size_t pn;
             if (vlen >= sizeof tmp) return COMPACT_ERR_TOO_LONG;
             memcpy(tmp, value, vlen);
             tmp[vlen] = '\0';
-            pn = compact_phone_pack(tmp, buf, sizeof buf);
+            label = tel_label(line, name_len, custom, sizeof custom);
+            pn = compact_tel_pack(label, custom, tmp, buf, sizeof buf);
             if (pn) {
                 e = compact_add(out, tag, buf, pn);
                 if (e != COMPACT_OK) return e;
@@ -293,11 +341,18 @@ compact_err_t vcard_render(const compact_rec_t *r, char *out, size_t max, size_t
         if (f->tag == TAG_RAW) {
             wr(&w, (const char *)f->val, f->len);
             wrs(&w, "\r\n");
-        } else if (f->tag == TAG_TEL_CELL || f->tag == TAG_TEL_WORK) {
+        } else if (f->tag == TAG_TEL || f->tag == TAG_TEL_CELL || f->tag == TAG_TEL_WORK) {
             char tmp[64];
-            const size_t tn = compact_phone_unpack(f->val, f->len, tmp, sizeof tmp);
+            char custom[COMPACT_TEL_LABEL_MAX + 1];
+            uint8_t label = TEL_LABEL_NONE;
+            const size_t tn = compact_tel_unpack(f->tag, f->val, f->len, &label,
+                                                 custom, sizeof custom, tmp, sizeof tmp);
             if (!tn) continue;
-            wrs(&w, k_tag_names[f->tag]);
+            wrs(&w, "TEL");
+            /* A custom label goes out the way Android writes one, as an X-
+             * type, which is also how tel_label reads it back. */
+            if (label == TEL_LABEL_CUSTOM) { wrs(&w, ";TYPE=X-"); wrs(&w, custom); }
+            else if (label != TEL_LABEL_NONE) { wrs(&w, ";TYPE="); wrs(&w, k_tel_types[label]); }
             wrs(&w, ":");
             wr(&w, tmp, tn);
             wrs(&w, "\r\n");

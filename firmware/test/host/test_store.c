@@ -284,7 +284,7 @@ static void what_is_stored_is_the_compact_form_not_the_text(void)
      * alone is a usable contact. */
     HF_EQ_INT(compact_decode(blob, len, &rec), COMPACT_OK);
     HF_CHECK(compact_find(&rec, TAG_FN) != NULL);
-    HF_CHECK(compact_find(&rec, TAG_TEL_CELL) != NULL);
+    HF_CHECK(compact_find(&rec, TAG_TEL) != NULL);
     HF_EQ_INT(rec.f[0].tag, TAG_FN);
     HF_EQ_INT(vcard_render(&rec, back, sizeof back, &back_len), COMPACT_OK);
     HF_CHECK(strstr(back, "FN:Ada Lovelace") != NULL);

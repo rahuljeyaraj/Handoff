@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -39,6 +41,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.handoff.band.contacts.PhoneFormat
 import com.handoff.band.data.Handshake
+import com.handoff.band.data.Phone
+import com.handoff.band.data.PhoneLabel
+import com.handoff.band.data.Phones
 import com.handoff.band.vcard.VCard
 
 /**
@@ -61,8 +66,9 @@ fun ContactEditScreen(
 ) {
     val context = LocalContext.current
     var name by rememberSaveable { mutableStateOf(contact?.displayName.orEmpty()) }
-    var mobile by rememberSaveable { mutableStateOf(contact?.mobile.orEmpty()) }
-    var work by rememberSaveable { mutableStateOf(contact?.work.orEmpty()) }
+    var phones by rememberSaveable(stateSaver = PhoneRowsSaver) {
+        mutableStateOf(phoneRows(contact?.phones))
+    }
     var email by rememberSaveable { mutableStateOf(contact?.email.orEmpty()) }
     var org by rememberSaveable { mutableStateOf(contact?.org.orEmpty()) }
     var title by rememberSaveable { mutableStateOf(contact?.title.orEmpty()) }
@@ -73,12 +79,15 @@ fun ContactEditScreen(
 
     fun save() {
         val displayName = name.trim()
-        val formattedMobile = mobile.orNull()?.let { PhoneFormat.format(context, it) }
-        val formattedWork = work.orNull()?.let { PhoneFormat.format(context, it) }
+        val formatted = phones
+            .filterNot { it.blank }
+            .map {
+                it.copy(number = PhoneFormat.format(context, it.number), custom = it.custom.trim())
+            }
         val base = contact ?: Handshake(
             receivedAt = System.currentTimeMillis(),
             vcard = VCard.build(
-                fullName = displayName, mobile = formattedMobile, work = formattedWork,
+                fullName = displayName, phones = formatted,
                 email = email.orNull(), org = org.orNull(), title = title.orNull(),
                 note = note.orNull(),
             ),
@@ -87,8 +96,7 @@ fun ContactEditScreen(
         )
         val next = base.copy(
             displayName = displayName,
-            mobile = formattedMobile,
-            work = formattedWork,
+            phones = formatted,
             email = email.orNull(),
             org = org.orNull(),
             title = title.orNull(),
@@ -122,8 +130,29 @@ fun ContactEditScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Field("Name", name) { name = it }
-            Field("Mobile", mobile, KeyboardType.Phone) { mobile = it }
-            Field("Work phone", work, KeyboardType.Phone) { work = it }
+
+            // The same rows as the card editor: a received number keeps the
+            // label it arrived with, and gains one the wearer chooses.
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                phones.forEachIndexed { i, row ->
+                    PhoneField(row) { updated ->
+                        phones = phones.mapIndexed { j, r -> if (j == i) updated else r }
+                    }
+                }
+            }
+            if (phones.size < Phones.MAX) {
+                TextButton(
+                    onClick = {
+                        val free = LABELS.firstOrNull { l -> phones.none { it.label == l } }
+                        phones = phones + Phone("", free ?: PhoneLabel.MOBILE)
+                    },
+                    modifier = Modifier.offset(x = (-12).dp),
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add another phone")
+                }
+            }
             Field("Email", email, KeyboardType.Email) { email = it }
             Field("Organisation", org) { org = it }
             Field("Title", title) { title = it }

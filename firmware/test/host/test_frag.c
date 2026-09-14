@@ -107,7 +107,7 @@ void test_frag(void)
         HF_CHECK(!frag_rx_complete(&rx));
         HF_EQ_INT(compact_decode(t.data, t.len[0], &r), COMPACT_OK);
         HF_CHECK_MSG(compact_find(&r, TAG_FN) != NULL, "no name in fragment 0");
-        HF_CHECK_MSG(compact_find(&r, TAG_TEL_CELL) != NULL, "no mobile in fragment 0");
+        HF_CHECK_MSG(compact_find(&r, TAG_TEL) != NULL, "no mobile in fragment 0");
 
         HF_EQ_INT(vcard_render(&r, card, sizeof card, &n), COMPACT_OK);
         HF_CHECK(strstr(card, "FN:Ada Lovelace") != NULL);

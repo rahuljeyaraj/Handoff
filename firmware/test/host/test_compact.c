@@ -239,4 +239,124 @@ void test_compact(void)
         HF_CHECK_MSG(compact_domain_count() < 0x20u,
                      "the dictionary has outgrown the email encoding");
     }
+    /* ---- phone labels (architecture 8.2) ---- */
+
+    hf_begin("compact: every named label round trips with its number");
+    {
+        static const uint8_t labels[] = {
+            TEL_LABEL_NONE, TEL_LABEL_MOBILE, TEL_LABEL_WORK,
+            TEL_LABEL_HOME, TEL_LABEL_MAIN
+        };
+        size_t i;
+        for (i = 0; i < sizeof labels / sizeof labels[0]; i++) {
+            uint8_t packed[COMPACT_MAX_VALUE];
+            char number[32], custom[COMPACT_TEL_LABEL_MAX + 1];
+            uint8_t got = 0xAAu;
+            const size_t n = compact_tel_pack(labels[i], NULL, "+44 7700 900123",
+                                              packed, sizeof packed);
+            HF_CHECK(n > 0);
+            HF_CHECK(compact_tel_unpack(TAG_TEL, packed, n, &got, custom, sizeof custom,
+                                        number, sizeof number) > 0);
+            HF_EQ_INT(got, labels[i]);
+            HF_EQ_STR(number, "+447700900123");
+            HF_EQ_STR(custom, "");
+        }
+    }
+
+    hf_begin("compact: a custom label travels with the number it belongs to");
+    {
+        uint8_t packed[COMPACT_MAX_VALUE];
+        char number[32], custom[COMPACT_TEL_LABEL_MAX + 1];
+        uint8_t label = 0;
+        const size_t n = compact_tel_pack(TEL_LABEL_CUSTOM, "Reception", "+3545551234",
+                                          packed, sizeof packed);
+        HF_CHECK(n > 0);
+        /* One TLV: label, its text, then the number. frag.c can only place or
+         * drop the whole thing, so a number never wears the wrong label. */
+        HF_EQ_INT(packed[0], TEL_LABEL_CUSTOM);
+        HF_EQ_INT(packed[1], 9);
+        HF_CHECK(compact_tel_unpack(TAG_TEL, packed, n, &label, custom, sizeof custom,
+                                    number, sizeof number) > 0);
+        HF_EQ_INT(label, TEL_LABEL_CUSTOM);
+        HF_EQ_STR(custom, "Reception");
+        HF_EQ_STR(number, "+3545551234");
+    }
+
+    hf_begin("compact: a custom label with nothing in it is not a label");
+    {
+        uint8_t packed[COMPACT_MAX_VALUE];
+        char number[32], custom[COMPACT_TEL_LABEL_MAX + 1];
+        uint8_t label = 0;
+        const size_t n = compact_tel_pack(TEL_LABEL_CUSTOM, "", "+3545551234",
+                                          packed, sizeof packed);
+        HF_CHECK(n > 0);
+        HF_CHECK(compact_tel_unpack(TAG_TEL, packed, n, &label, custom, sizeof custom,
+                                    number, sizeof number) > 0);
+        HF_EQ_INT(label, TEL_LABEL_NONE);
+        HF_EQ_STR(number, "+3545551234");
+    }
+
+    hf_begin("compact: a band flashed before the labels still decodes");
+    {
+        /* TAG_TEL_CELL and TAG_TEL_WORK carried the label in the tag and only
+         * the packed number in the value. Both are decoded forever. */
+        uint8_t packed[COMPACT_MAX_VALUE];
+        char number[32], custom[COMPACT_TEL_LABEL_MAX + 1];
+        uint8_t label = 0;
+        const size_t n = compact_phone_pack("+3545551234", packed, sizeof packed);
+        HF_CHECK(n > 0);
+
+        HF_CHECK(compact_tel_unpack(TAG_TEL_CELL, packed, n, &label, custom, sizeof custom,
+                                    number, sizeof number) > 0);
+        HF_EQ_INT(label, TEL_LABEL_MOBILE);
+        HF_EQ_STR(number, "+3545551234");
+
+        HF_CHECK(compact_tel_unpack(TAG_TEL_WORK, packed, n, &label, custom, sizeof custom,
+                                    number, sizeof number) > 0);
+        HF_EQ_INT(label, TEL_LABEL_WORK);
+    }
+
+    hf_begin("compact: a truncated custom label is refused, not half read");
+    {
+        uint8_t blob[4];
+        char number[32], custom[COMPACT_TEL_LABEL_MAX + 1];
+        uint8_t label = 0;
+        blob[0] = TEL_LABEL_CUSTOM;
+        blob[1] = 12;                 /* claims 12 bytes of label */
+        blob[2] = 0x52u;
+        blob[3] = 0x65u;
+        HF_EQ_INT((int)compact_tel_unpack(TAG_TEL, blob, sizeof blob, &label, custom,
+                                          sizeof custom, number, sizeof number), 0);
+    }
+
+    hf_begin("compact: only the first phone takes fragment 0 slot");
+    {
+        /* Three phones would otherwise all claim priority 1 and push EMAIL out
+         * of fragment 0, which is the opposite of what 8.4 asks for. */
+        compact_rec_t r;
+        uint8_t p[COMPACT_MAX_VALUE];
+        size_t n;
+        compact_rec_init(&r);
+
+        HF_EQ_INT(compact_add(&r, TAG_EMAIL, (const uint8_t *)"a", 1), COMPACT_OK);
+        n = compact_tel_pack(TEL_LABEL_MOBILE, NULL, "+3545551234", p, sizeof p);
+        HF_EQ_INT(compact_add(&r, TAG_TEL, p, n), COMPACT_OK);
+        n = compact_tel_pack(TEL_LABEL_WORK, NULL, "+3545558000", p, sizeof p);
+        HF_EQ_INT(compact_add(&r, TAG_TEL, p, n), COMPACT_OK);
+        n = compact_tel_pack(TEL_LABEL_HOME, NULL, "+3545551543", p, sizeof p);
+        HF_EQ_INT(compact_add(&r, TAG_TEL, p, n), COMPACT_OK);
+        HF_EQ_INT(compact_add(&r, TAG_FN, (const uint8_t *)"Bjorn", 5), COMPACT_OK);
+
+        compact_sort_priority(&r);
+
+        HF_EQ_INT(r.f[0].tag, TAG_FN);
+        HF_EQ_INT(r.f[1].tag, TAG_TEL);          /* the first phone, and only it */
+        HF_EQ_INT(r.f[2].tag, TAG_EMAIL);
+        HF_EQ_INT(r.f[3].tag, TAG_TEL);
+        HF_EQ_INT(r.f[4].tag, TAG_TEL);
+        /* The card own order decides which phone is which. */
+        HF_EQ_INT(r.f[1].val[0], TEL_LABEL_MOBILE);
+        HF_EQ_INT(r.f[3].val[0], TEL_LABEL_WORK);
+        HF_EQ_INT(r.f[4].val[0], TEL_LABEL_HOME);
+    }
 }

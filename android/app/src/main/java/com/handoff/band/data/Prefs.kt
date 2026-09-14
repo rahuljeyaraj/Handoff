@@ -67,7 +67,22 @@ class Prefs private constructor(context: Context) {
 
     private fun readOwnCard(): OwnCard? {
         if (!sp.getBoolean(KEY_OWN_CARD, false)) return null
-        return OwnCard.fromList(CARD_STRINGS.map { sp.getString(KEY_OWN_CARD + it, "") ?: "" })
+        val card = OwnCard.fromList(CARD_STRINGS.map { sp.getString(KEY_OWN_CARD + it, "") ?: "" })
+
+        // A card written before phones had labels (design decisions §4a) is
+        // still in here as two keys. Read it once, in the shape it was left,
+        // so the update does not blank the wearer's own numbers; the next save
+        // writes it back as a labelled list.
+        if (card != null && card.phones.isEmpty()) {
+            val legacy = listOfNotNull(
+                sp.getString(KEY_OWN_CARD + ".mobile", "")?.takeIf { it.isNotBlank() }
+                    ?.let { Phone(it, PhoneLabel.MOBILE) },
+                sp.getString(KEY_OWN_CARD + ".work", "")?.takeIf { it.isNotBlank() }
+                    ?.let { Phone(it, PhoneLabel.WORK) },
+            )
+            if (legacy.isNotEmpty()) return card.copy(phones = legacy)
+        }
+        return card
     }
 
     /**
@@ -101,7 +116,7 @@ class Prefs private constructor(context: Context) {
         private const val KEY_BAND_OFF = "band_off"
         private const val KEY_OWN_CARD = "own_card"
         private const val KEY_PUSHED = "pushed_card"
-        private val CARD_STRINGS = listOf(".name", ".mobile", ".work", ".email", ".org", ".title")
+        private val CARD_STRINGS = listOf(".name", ".phones", ".email", ".org", ".title")
 
         @Volatile private var instance: Prefs? = null
 

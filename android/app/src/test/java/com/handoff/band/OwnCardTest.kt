@@ -1,6 +1,8 @@
 package com.handoff.band
 
 import com.handoff.band.data.OwnCard
+import com.handoff.band.data.Phone
+import com.handoff.band.data.PhoneLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -14,19 +16,19 @@ class OwnCardTest {
     fun nameOnlyIsNotComplete() {
         assertFalse(OwnCard(name = "Rohan Iyer").complete)
         assertFalse(OwnCard(name = "Rohan Iyer", org = "Handoff", title = "Hardware lead").complete)
-        assertFalse(OwnCard(name = "", mobile = "+91 98860 41225").complete)
+        assertFalse(OwnCard(name = "", phones = listOf(Phone("+91 98860 41225"))).complete)
     }
 
     @Test
     fun oneWayToBeReachedIsEnough() {
-        assertTrue(OwnCard(name = "Rohan Iyer", mobile = "+91 98860 41225").complete)
-        assertTrue(OwnCard(name = "Rohan Iyer", work = "+91 80 4718 2200").complete)
+        assertTrue(OwnCard(name = "Rohan Iyer", phones = listOf(Phone("+91 98860 41225"))).complete)
+        assertTrue(OwnCard(name = "Rohan Iyer", phones = listOf(Phone("+91 80 4718 2200", PhoneLabel.WORK))).complete)
         assertTrue(OwnCard(name = "Rohan Iyer", email = "rohan@handoff.dev").complete)
     }
 
     @Test
     fun emptyFieldsAreNotWritten() {
-        val v = OwnCard(name = "Rohan Iyer", mobile = "+919886041225",
+        val v = OwnCard(name = "Rohan Iyer", phones = listOf(Phone("+919886041225")),
                         email = "rohan@handoff.dev", org = "Handoff").vcard()
         assertTrue(v.contains("FN:Rohan Iyer\r\n"))
         assertTrue(v.contains("N:Iyer;Rohan;;;\r\n"))
@@ -39,14 +41,14 @@ class OwnCardTest {
 
     @Test
     fun hashFollowsTheBytes() {
-        val a = OwnCard(name = "Rohan Iyer", mobile = "+919886041225")
+        val a = OwnCard(name = "Rohan Iyer", phones = listOf(Phone("+919886041225")))
         assertEquals(a.hash, a.copy().hash)
-        assertNotEquals(a.hash, a.copy(mobile = "+919886041226").hash)
+        assertNotEquals(a.hash, a.copy(phones = listOf(Phone("+919886041226"))).hash)
     }
 
     @Test
     fun listRoundTrips() {
-        val c = OwnCard(name = "A B", mobile = "1", work = "2", email = "a@b", org = "o", title = "t")
+        val c = OwnCard(name = "A B", phones = listOf(Phone("1", PhoneLabel.MOBILE), Phone("2", PhoneLabel.WORK)), email = "a@b", org = "o", title = "t")
         assertEquals(c, OwnCard.fromList(c.toList()))
     }
 }

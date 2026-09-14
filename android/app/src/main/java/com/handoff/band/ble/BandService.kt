@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.handoff.band.data.HandoffDb
 import com.handoff.band.data.Handshake
 import com.handoff.band.data.Merge
+import com.handoff.band.data.Phones
 import com.handoff.band.data.Prefs
 import com.handoff.band.ui.MainActivity
 import com.handoff.band.vcard.VCard
@@ -241,8 +242,7 @@ class BandService : LifecycleService(), BandClient.Listener {
             receivedAt = System.currentTimeMillis(),
             vcard = vcardText,
             displayName = card.displayName,
-            mobile = card.mobile,
-            work = card.work,
+            phones = card.phones.take(Phones.MAX),
             email = card.email,
             org = card.org,
             title = card.title,
@@ -265,8 +265,10 @@ class BandService : LifecycleService(), BandClient.Listener {
             val dao = HandoffDb.get(this@BandService).handshakes()
             // Match on phone or email, never on name (design decisions §3).
             // On a match, fill blanks and bump received_at; the user's own
-            // edits are non-blank and so are never touched.
-            val existing = dao.matching(incoming.phoneKey, incoming.emailKey)
+            // edits are non-blank and so are never touched. A card whose
+            // number contradicts the row it shares an email with is a new
+            // contact, not a merge — see Merge.pick.
+            val existing = Merge.pick(dao.candidates(incoming.phoneKey, incoming.emailKey), incoming)
             if (existing != null) dao.update(Merge.merge(into = existing, from = incoming))
             else dao.insert(incoming)
         }

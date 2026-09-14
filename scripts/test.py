@@ -129,6 +129,20 @@ CODEC_CARDS = [
     ("one-word-name", _card(
         "FN:Prince",
         "TEL;TYPE=CELL:+1 555 0199")),
+
+    # Every phone label, the same label twice, and one the wearer typed. The
+    # label byte and its text are part of the wire format, so C and Python have
+    # to agree on them as exactly as they agree on the packed digits.
+    ("phone-labels", _card(
+        "FN:Björn Smári",
+        "TEL;TYPE=CELL:+354 555 1234",
+        "TEL;TYPE=WORK:+354 555 8000",
+        "TEL;TYPE=HOME:+354 555 1543",
+        "TEL;TYPE=MAIN:+354 555 2020",
+        "TEL;TYPE=X-Reception:+354 555 9000",
+        "TEL;TYPE=CELL:+354 555 7777",
+        "TEL:+354 555 6000",
+        "EMAIL;TYPE=INTERNET:bjorn@gmail.com")),
 ]
 
 EXE = ".exe" if os.name == "nt" else ""

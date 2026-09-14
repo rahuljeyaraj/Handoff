@@ -122,7 +122,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     // The phone's scanner, not the band (Pairing's class comment). The only
     // remedy is the wearer's, so it is named.
     val cannotScan =
-        "Bluetooth on this phone isn't finding anything.\nTurn it off and on, then try again."
+        "Bluetooth on this phone isn't finding anything. Turn it off and on, then try again."
 
     // The CompanionDeviceManager chooser. RESULT_OK carries one band, which
     // is remembered and connected to; anything else is the wearer dismissing

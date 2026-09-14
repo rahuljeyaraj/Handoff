@@ -78,6 +78,7 @@ uint8_t compact_tag_priority(uint8_t tag)
 {
     switch (tag) {
     case TAG_FN:       return 0;
+    case TAG_TEL:      return 1;
     case TAG_TEL_CELL: return 1;
     case TAG_EMAIL:    return 2;
     case TAG_N:        return 3;
@@ -91,20 +92,51 @@ uint8_t compact_tag_priority(uint8_t tag)
     }
 }
 
+/*
+ * Every phone is TAG_TEL now, so every phone would claim priority 1 and three
+ * numbers would push EMAIL out of fragment 0 — the opposite of what §8.4 asks
+ * for. Only the FIRST phone is worth that slot: the rest take the place the
+ * work number used to hold, in the order the card lists them, which is the
+ * order the wearer put them in on the editor.
+ */
+static uint8_t tel_rank(const compact_rec_t *r, uint8_t i)
+{
+    const uint8_t p = compact_tag_priority(r->f[i].tag);
+    uint8_t seen = 0, j;
+
+    if (r->f[i].tag != TAG_TEL) return p;
+
+    for (j = 0; j < i; j++)
+        if (r->f[j].tag == TAG_TEL) seen++;
+
+    /* The first stays at 1; the second lands on the old TEL_WORK slot and each
+     * further one after it. Ties with URL or ADR are broken by a stable sort,
+     * so a phone the wearer listed still goes before an address they did not. */
+    return seen ? (uint8_t)(compact_tag_priority(TAG_TEL_WORK) + seen - 1u) : p;
+}
+
 void compact_sort_priority(compact_rec_t *r)
 {
     /* Insertion sort: n <= 16, and it is stable, so two RAW lines keep the
-     * order they appeared in the source card. */
+     * order they appeared in the source card. Priorities are taken BEFORE the
+     * sort, because tel_rank counts the phones in front of a field and the
+     * sort is busy moving those. */
+    uint8_t pri[COMPACT_MAX_FIELDS];
     uint8_t i, j;
+
+    for (i = 0; i < r->n; i++) pri[i] = tel_rank(r, i);
+
     for (i = 1; i < r->n; i++) {
         compact_field_t key = r->f[i];
-        const uint8_t kp = compact_tag_priority(key.tag);
+        const uint8_t kp = pri[i];
         j = i;
-        while (j > 0 && compact_tag_priority(r->f[j - 1].tag) > kp) {
+        while (j > 0 && pri[j - 1] > kp) {
             r->f[j] = r->f[j - 1];
+            pri[j] = pri[j - 1];
             j--;
         }
         r->f[j] = key;
+        pri[j] = kp;
     }
 }
 
@@ -287,4 +319,66 @@ size_t compact_phone_unpack(const uint8_t *in, size_t len, char *out, size_t max
 
     out[o] = '\0';
     return o;
+}
+
+size_t compact_tel_pack(uint8_t label, const char *custom, const char *number,
+                        uint8_t *out, size_t max)
+{
+    size_t o = 0, cl = 0, pn;
+
+    if (!out || max < 4) return 0;
+
+    if (label == TEL_LABEL_CUSTOM) {
+        while (custom && custom[cl] && cl < COMPACT_TEL_LABEL_MAX) cl++;
+        /* A custom label with nothing in it is not a label. */
+        if (cl == 0) label = TEL_LABEL_NONE;
+    }
+
+    out[o++] = label;
+    if (label == TEL_LABEL_CUSTOM) {
+        if (o + 1u + cl >= max) return 0;
+        out[o++] = (uint8_t)cl;
+        memcpy(out + o, custom, cl);
+        o += cl;
+    }
+
+    pn = compact_phone_pack(number, out + o, max - o);
+    if (!pn) return 0;
+    return o + pn;
+}
+
+size_t compact_tel_unpack(uint8_t tag, const uint8_t *in, size_t len,
+                          uint8_t *label, char *custom, size_t custom_max,
+                          char *number, size_t number_max)
+{
+    size_t o = 0, cl = 0;
+    uint8_t lb;
+
+    if (!in || !label || !number) return 0;
+    if (custom_max) custom[0] = '\0';
+
+    /* The two retired tags carried the label in the tag itself and nothing but
+     * the packed number in the value. */
+    if (tag == TAG_TEL_CELL || tag == TAG_TEL_WORK) {
+        *label = (tag == TAG_TEL_WORK) ? TEL_LABEL_WORK : TEL_LABEL_MOBILE;
+        return compact_phone_unpack(in, len, number, number_max);
+    }
+
+    if (len < 1) return 0;
+    lb = in[o++];
+
+    if (lb == TEL_LABEL_CUSTOM) {
+        if (o >= len) return 0;
+        cl = in[o++];
+        if (o + cl > len) return 0;          /* truncated: not a label we can trust */
+        if (custom_max) {
+            const size_t n = cl < custom_max - 1u ? cl : custom_max - 1u;
+            memcpy(custom, in + o, n);
+            custom[n] = '\0';
+        }
+        o += cl;
+    }
+
+    *label = lb;
+    return compact_phone_unpack(in + o, len - o, number, number_max);
 }

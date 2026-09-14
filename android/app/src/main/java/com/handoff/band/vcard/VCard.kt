@@ -1,5 +1,8 @@
 package com.handoff.band.vcard
 
+import com.handoff.band.data.Phone
+import com.handoff.band.data.PhoneLabel
+
 /**
  * vCard 3.0, only as much of it as this app trades in.
  *
@@ -37,12 +40,31 @@ class VCard(val lines: List<VLine>, val raw: String) {
     val url: String? get() = first("URL")
     val email: String? get() = first("EMAIL")
 
-    val mobile: String?
-        get() = lines.firstOrNull { it.property.equals("TEL", true) && it.hasParam("CELL") }?.value
-            ?: lines.firstOrNull { it.property.equals("TEL", true) }?.value
-
-    val work: String?
-        get() = lines.firstOrNull { it.property.equals("TEL", true) && it.hasParam("WORK") }?.value
+    /**
+     * Every TEL on the card, in the order it was written, each with the label
+     * its parameters name. The band sends the label alongside the number
+     * (`TAG_TEL` in `compact.h`), so two mobiles stay two mobiles and a label
+     * the sender typed arrives as they typed it.
+     *
+     * A TEL with no recognisable type is [PhoneLabel.NONE], not a mobile.
+     */
+    val phones: List<Phone>
+        get() = lines.filter { it.property.equals("TEL", true) }.map { line ->
+            val custom = line.params
+                .map { it.substringAfter('=', it) }
+                .firstOrNull { it.startsWith("X-", ignoreCase = true) }
+                ?.substring(2)
+                .orEmpty()
+            val label = when {
+                line.hasParam("CELL") || line.hasParam("MOBILE") -> PhoneLabel.MOBILE
+                line.hasParam("WORK") -> PhoneLabel.WORK
+                line.hasParam("HOME") -> PhoneLabel.HOME
+                line.hasParam("MAIN") || line.hasParam("PREF") -> PhoneLabel.MAIN
+                custom.isNotEmpty() -> PhoneLabel.CUSTOM
+                else -> PhoneLabel.NONE
+            }
+            Phone(number = line.value, label = label, custom = custom)
+        }
 
     /** Family;Given;… as vCard stores it, or null when only FN survived. */
     val structuredName: String? get() = first("N")
@@ -100,8 +122,7 @@ class VCard(val lines: List<VLine>, val raw: String) {
         fun build(
             fullName: String,
             structuredName: String? = null,
-            mobile: String? = null,
-            work: String? = null,
+            phones: List<Phone> = emptyList(),
             email: String? = null,
             org: String? = null,
             title: String? = null,
@@ -116,8 +137,10 @@ class VCard(val lines: List<VLine>, val raw: String) {
             line("FN:$fullName")
             org?.takeIf { it.isNotBlank() }?.let { line("ORG:$it") }
             title?.takeIf { it.isNotBlank() }?.let { line("TITLE:$it") }
-            mobile?.takeIf { it.isNotBlank() }?.let { line("TEL;TYPE=CELL:$it") }
-            work?.takeIf { it.isNotBlank() }?.let { line("TEL;TYPE=WORK:$it") }
+            phones.filterNot { it.blank }.forEach { phone ->
+                val type = phone.vcardType?.let { ";TYPE=$it" }.orEmpty()
+                line("TEL$type:${phone.number}")
+            }
             email?.takeIf { it.isNotBlank() }?.let { line("EMAIL;TYPE=INTERNET:$it") }
             url?.takeIf { it.isNotBlank() }?.let { line("URL:$it") }
             note?.takeIf { it.isNotBlank() }?.let { line("NOTE:$it") }

@@ -424,7 +424,7 @@ private fun highlighted(text: String, query: String): AnnotatedString {
 
 /** "Org · reach-them-by", the two facts a list line has room for. */
 fun secondaryLine(h: Handshake): String =
-    listOfNotNull(h.org, h.mobile ?: h.email).joinToString(" · ")
+    listOfNotNull(h.org, h.phones.firstOrNull()?.number ?: h.email).joinToString(" · ")
 
 // No "set your card" nudge here: the status line's red slashed card is
 // the whole signal, and the Band page is where the card gets set.

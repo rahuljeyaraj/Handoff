@@ -12,26 +12,28 @@ import com.handoff.band.vcard.VCard
  * per-field switches. A card is only worth putting on a band if it gives
  * the recipient a way to reach somebody, so [complete] demands a phone or
  * an email.
+ *
+ * Up to [Phones.MAX] numbers, each with its own label, the same label allowed
+ * twice. What used to be a mobile slot and a work slot is now a list, because
+ * the label travels with the number on the wire (`TAG_TEL` in `compact.h`).
  */
 data class OwnCard(
     val name: String = "",
-    val mobile: String = "",
-    val work: String = "",
+    val phones: List<Phone> = emptyList(),
     val email: String = "",
     val org: String = "",
     val title: String = "",
 ) {
     /** Name plus at least one way to be reached. */
     val complete: Boolean
-        get() = name.isNotBlank() && (mobile.isNotBlank() || work.isNotBlank() || email.isNotBlank())
+        get() = name.isNotBlank() && (phones.any { !it.blank } || email.isNotBlank())
 
     /** The exact bytes that go to `my_vcard`. */
     fun vcard(): String = VCard.build(
         fullName = name.trim(),
         structuredName = name.trim().split(' ').takeIf { it.size >= 2 }
             ?.let { "${it.last()};${it.dropLast(1).joinToString(" ")};;;" },
-        mobile = mobile,
-        work = work,
+        phones = phones,
         email = email,
         org = org,
         title = title,
@@ -44,14 +46,15 @@ data class OwnCard(
      */
     val hash: String get() = vcard().hashCode().toString(16)
 
-    /** A flat form for storage and for surviving rotation: six strings. */
-    fun toList(): List<String> = listOf(name, mobile, work, email, org, title)
+    /** A flat form for storage and for surviving rotation: five strings. */
+    fun toList(): List<String> =
+        listOf(name, Phones.encode(phones).orEmpty(), email, org, title)
 
     companion object {
         fun fromList(l: List<Any?>): OwnCard? = runCatching {
             OwnCard(
-                name = l[0] as String, mobile = l[1] as String, work = l[2] as String,
-                email = l[3] as String, org = l[4] as String, title = l[5] as String,
+                name = l[0] as String, phones = Phones.decode(l[1] as String),
+                email = l[2] as String, org = l[3] as String, title = l[4] as String,
             )
         }.getOrNull()
     }

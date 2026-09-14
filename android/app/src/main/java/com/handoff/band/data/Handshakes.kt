@@ -12,6 +12,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -50,8 +52,15 @@ data class Handshake(
     @ColumnInfo(name = "vcard") val vcard: String,
 
     @ColumnInfo(name = "display_name") val displayName: String,
-    @ColumnInfo(name = "mobile") val mobile: String? = null,
-    @ColumnInfo(name = "work") val work: String? = null,
+
+    /**
+     * Every number on the card, each with its label, in the order the sender
+     * wrote them (design decisions §4a). One column rather than a child table:
+     * see [Phones]. The FIRST is the dedup identity and the one a list row
+     * shows, which is why order is worth keeping.
+     */
+    @ColumnInfo(name = "phones") val phones: List<Phone> = emptyList(),
+
     @ColumnInfo(name = "email") val email: String? = null,
     @ColumnInfo(name = "org") val org: String? = null,
     @ColumnInfo(name = "title") val title: String? = null,
@@ -59,7 +68,7 @@ data class Handshake(
     /** The wearer's own words about this person. Never from the band. */
     @ColumnInfo(name = "note") val note: String? = null,
 
-    @ColumnInfo(name = "phone_key") val phoneKey: String? = Keys.phone(mobile),
+    @ColumnInfo(name = "phone_key") val phoneKey: String? = Keys.phone(phones.firstOrNull()?.number),
     @ColumnInfo(name = "email_key") val emailKey: String? = Keys.email(email),
 
     /** How many properties survived — the completeness badge (§8.4). */
@@ -95,8 +104,12 @@ data class Handshake(
      */
     @ColumnInfo(name = "edited_since_promote") val editedSincePromote: Boolean = false,
 ) {
-    /** Recompute the keys from the current mobile and email. Call after any edit. */
-    fun rekeyed(): Handshake = copy(phoneKey = Keys.phone(mobile), emailKey = Keys.email(email))
+    /** The number this row is known by: the first one on the card. */
+    val mobile: String? get() = phones.firstOrNull()?.number
+
+    /** Recompute the keys from the current first number and email. Call after any edit. */
+    fun rekeyed(): Handshake =
+        copy(phoneKey = Keys.phone(mobile), emailKey = Keys.email(email))
 
     /** After a change to the fields: the phone's copy, if there is one, is now stale. */
     fun edited(): Handshake = if (promoted) copy(editedSincePromote = true) else this
@@ -113,12 +126,19 @@ interface HandshakeDao {
     @Query("SELECT * FROM handshakes WHERE id = :id")
     fun observe(id: Long): Flow<Handshake?>
 
-    /** The first row sharing either key. Callers pass null for a key they lack. */
+    /**
+     * Every row sharing either key, newest first. Callers pass null for a
+     * key they lack.
+     *
+     * Which of these — if any — the incoming card actually belongs to is
+     * [Merge.pick]'s decision, not SQL's: sharing a key makes a row a
+     * candidate, and a contradicting phone number can still rule it out.
+     */
     @Query(
         "SELECT * FROM handshakes WHERE (:phoneKey IS NOT NULL AND phone_key = :phoneKey) " +
-            "OR (:emailKey IS NOT NULL AND email_key = :emailKey) ORDER BY received_at DESC LIMIT 1"
+            "OR (:emailKey IS NOT NULL AND email_key = :emailKey) ORDER BY received_at DESC"
     )
-    suspend fun matching(phoneKey: String?, emailKey: String?): Handshake?
+    suspend fun candidates(phoneKey: String?, emailKey: String?): List<Handshake>
 
     /** Other rows that share a key with [id] — the possible-duplicate banner. */
     @Query(
@@ -148,7 +168,8 @@ interface HandshakeDao {
     suspend fun deleteMany(ids: Collection<Long>)
 }
 
-@Database(entities = [Handshake::class], version = 6, exportSchema = false)
+@Database(entities = [Handshake::class], version = 7, exportSchema = false)
+@TypeConverters(PhoneConverters::class)
 abstract class HandoffDb : RoomDatabase() {
     abstract fun handshakes(): HandshakeDao
 
@@ -158,7 +179,8 @@ abstract class HandoffDb : RoomDatabase() {
         fun get(context: Context): HandoffDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, HandoffDb::class.java, "handoff.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                            MIGRATION_5_6, MIGRATION_6_7)
                 .build().also { instance = it }
         }
 
@@ -237,5 +259,73 @@ abstract class HandoffDb : RoomDatabase() {
                 db.execSQL("ALTER TABLE handshakes ADD COLUMN raw_contact_id INTEGER")
             }
         }
+
+        /**
+         * Version 7 gives every number a label (design decisions §4a): the
+         * `mobile` and `work` columns become one `phones` column, where the
+         * label travels with the number it belongs to.
+         *
+         * The backfill runs in Kotlin rather than in SQL because the encoding
+         * is [Phones]'s to know, not this migration's — the rows already on a
+         * bench phone come back as a labelled Mobile and a labelled Work,
+         * which is exactly what those two columns always meant.
+         *
+         * Then the table is rebuilt, because Room compares the whole column
+         * set and two columns the entity no longer has would fail validation.
+         * SQLite before 3.35 has no DROP COLUMN, and the floor here is API 26.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE handshakes ADD COLUMN phones TEXT")
+
+                db.query("SELECT id, mobile, work FROM handshakes").use { c ->
+                    while (c.moveToNext()) {
+                        val phones = listOfNotNull(
+                            c.getString(1)?.takeIf { it.isNotBlank() }
+                                ?.let { Phone(it, PhoneLabel.MOBILE) },
+                            c.getString(2)?.takeIf { it.isNotBlank() }
+                                ?.let { Phone(it, PhoneLabel.WORK) },
+                        )
+                        val values = ContentValues().apply {
+                            put("phones", Phones.encode(phones).orEmpty())
+                        }
+                        db.update("handshakes", android.database.sqlite.SQLiteDatabase.CONFLICT_NONE,
+                                  values, "id = ?", arrayOf(c.getLong(0)))
+                    }
+                }
+
+                db.execSQL(
+                    "CREATE TABLE handshakes_new (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`received_at` INTEGER NOT NULL, `vcard` TEXT NOT NULL, " +
+                        "`display_name` TEXT NOT NULL, `phones` TEXT NOT NULL, `email` TEXT, " +
+                        "`org` TEXT, `title` TEXT, `note` TEXT, `phone_key` TEXT, " +
+                        "`email_key` TEXT, `field_count` INTEGER NOT NULL, " +
+                        "`promoted` INTEGER NOT NULL, `contact_uri` TEXT, " +
+                        "`raw_contact_id` INTEGER, " +
+                        "`added_by_hand` INTEGER NOT NULL DEFAULT 0, " +
+                        "`edited_since_promote` INTEGER NOT NULL DEFAULT 0)"
+                )
+                db.execSQL(
+                    "INSERT INTO handshakes_new SELECT id, received_at, vcard, display_name, " +
+                        "IFNULL(phones, ''), email, org, title, note, phone_key, email_key, field_count, " +
+                        "promoted, contact_uri, raw_contact_id, added_by_hand, " +
+                        "edited_since_promote FROM handshakes"
+                )
+                db.execSQL("DROP TABLE handshakes")
+                db.execSQL("ALTER TABLE handshakes_new RENAME TO handshakes")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_handshakes_phone_key ON handshakes(phone_key)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_handshakes_email_key ON handshakes(email_key)")
+            }
+        }
     }
+}
+
+/**
+ * The [Phone] list as one column. The encoding is [Phones]; this only tells
+ * Room where to find it.
+ */
+class PhoneConverters {
+    @TypeConverter fun fromPhones(phones: List<Phone>): String = Phones.encode(phones).orEmpty()
+    @TypeConverter fun toPhones(stored: String): List<Phone> = Phones.decode(stored)
 }

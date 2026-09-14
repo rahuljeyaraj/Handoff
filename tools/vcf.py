@@ -19,6 +19,7 @@ Cross-checking against the C is scripts/test.py's job (see --check-codec).
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -29,15 +30,39 @@ from pathlib import Path
 TAG_NOP = 0x00
 TAG_FN = 0x01
 TAG_N = 0x02
-TAG_TEL_CELL = 0x03
-TAG_TEL_WORK = 0x04
+TAG_TEL_CELL = 0x03   # deprecated, decode only: see TAG_TEL
+TAG_TEL_WORK = 0x04   # deprecated, decode only
 TAG_EMAIL = 0x05
 TAG_ORG = 0x06
 TAG_TITLE = 0x07
 TAG_URL = 0x08
 TAG_ADR = 0x09
 TAG_NOTE = 0x0A
+TAG_TEL = 0x0B
 TAG_CONT = 0xFE
+
+# A phone is a number and what it is for. The label lives in the value, so one
+# tag covers every phone a card has, including two with the same label and one
+# the wearer named themselves:
+#
+#   label(1) | [ len(1) | UTF-8 label text ]  <- the bracket only when CUSTOM
+#            | u16 country code BE | packed BCD
+#
+# TAG_TEL_CELL and TAG_TEL_WORK are what bands flashed before this change send.
+# Both decode forever, as MOBILE and WORK; neither is ever encoded.
+TEL_LABEL_NONE = 0x00
+TEL_LABEL_MOBILE = 0x01
+TEL_LABEL_WORK = 0x02
+TEL_LABEL_HOME = 0x03
+TEL_LABEL_MAIN = 0x04
+TEL_LABEL_CUSTOM = 0xFF
+
+TEL_LABEL_MAX = 32
+
+TEL_TYPES = {
+    TEL_LABEL_MOBILE: "CELL", TEL_LABEL_WORK: "WORK",
+    TEL_LABEL_HOME: "HOME", TEL_LABEL_MAIN: "MAIN",
+}
 TAG_RAW = 0xFF
 
 DOMAIN_LITERAL = 0xFF
@@ -52,7 +77,7 @@ DOMAINS = [
 
 # Lower sorts first. Fragment 0 must be a usable contact on its own.
 PRIORITY = {
-    TAG_FN: 0, TAG_TEL_CELL: 1, TAG_EMAIL: 2, TAG_N: 3, TAG_ORG: 4,
+    TAG_FN: 0, TAG_TEL: 1, TAG_TEL_CELL: 1, TAG_EMAIL: 2, TAG_N: 3, TAG_ORG: 4,
     TAG_TITLE: 5, TAG_TEL_WORK: 6, TAG_URL: 7, TAG_ADR: 8, TAG_NOTE: 9,
 }
 
@@ -63,7 +88,7 @@ TAG_NAMES = {
 }
 
 PROPS = {
-    "FN": TAG_FN, "N": TAG_N, "TEL": TAG_TEL_CELL, "EMAIL": TAG_EMAIL,
+    "FN": TAG_FN, "N": TAG_N, "TEL": TAG_TEL, "EMAIL": TAG_EMAIL,
     "ORG": TAG_ORG, "TITLE": TAG_TITLE, "URL": TAG_URL, "ADR": TAG_ADR,
     "NOTE": TAG_NOTE,
 }
@@ -124,6 +149,59 @@ def phone_unpack(blob: bytes) -> str:
 # email
 # --------------------------------------------------------------------------
 
+def tel_label(params: str) -> tuple[int, str]:
+    """TEL parameters -> (label byte, custom text).
+
+    A TEL with no type at all stays NONE. It is not a mobile: it is a number
+    whose owner never said what it was for, and guessing prints the wrong word
+    under somebody's number.
+    """
+    up = params.upper()
+    if "CELL" in up or "MOBILE" in up:
+        return TEL_LABEL_MOBILE, ""
+    if "WORK" in up:
+        return TEL_LABEL_WORK, ""
+    if "HOME" in up:
+        return TEL_LABEL_HOME, ""
+    if "MAIN" in up or "PREF" in up:
+        return TEL_LABEL_MAIN, ""
+    m = re.search(r"[Xx]-([^;,]*)", params)
+    if m and m.group(1):
+        return TEL_LABEL_CUSTOM, m.group(1)[:TEL_LABEL_MAX]
+    return TEL_LABEL_NONE, ""
+
+
+def tel_pack(label: int, custom: str, number: str) -> bytes:
+    text = (custom or "").encode("utf-8")[:TEL_LABEL_MAX]
+    if label == TEL_LABEL_CUSTOM and not text:
+        label = TEL_LABEL_NONE          # a custom label with nothing in it
+    packed = phone_pack(number)
+    if not packed:
+        return b""
+    out = bytes([label])
+    if label == TEL_LABEL_CUSTOM:
+        out += bytes([len(text)]) + text
+    return out + packed
+
+
+def tel_unpack(tag: int, blob: bytes) -> tuple[int, str, str]:
+    if tag in (TAG_TEL_CELL, TAG_TEL_WORK):
+        label = TEL_LABEL_WORK if tag == TAG_TEL_WORK else TEL_LABEL_MOBILE
+        return label, "", phone_unpack(blob)
+    if not blob:
+        return TEL_LABEL_NONE, "", ""
+    label, o, custom = blob[0], 1, ""
+    if label == TEL_LABEL_CUSTOM:
+        if len(blob) < 2:
+            return TEL_LABEL_NONE, "", ""
+        n = blob[1]
+        o = 2 + n
+        if o > len(blob):
+            return TEL_LABEL_NONE, "", ""
+        custom = blob[2:2 + n].decode("utf-8", "replace")
+    return label, custom, phone_unpack(blob[o:])
+
+
 def email_pack(value: str) -> bytes:
     if "@" not in value:
         return b""
@@ -164,6 +242,22 @@ def unfold(text: str) -> list[str]:
     return [l for l in lines if l]
 
 
+def _rank(fields: list[tuple[int, bytes]], i: int) -> int:
+    """Sort priority of one field, mirroring tel_rank() in compact.c.
+
+    Every phone is TAG_TEL now, so every phone would claim priority 1 and three
+    numbers would push EMAIL out of fragment 0. Only the first is worth that
+    slot; the rest take the place the work number used to hold, in the order
+    the card lists them.
+    """
+    tag = fields[i][0]
+    p = PRIORITY.get(tag, 10)
+    if tag != TAG_TEL:
+        return p
+    seen = sum(1 for j in range(i) if fields[j][0] == TAG_TEL)
+    return p if seen == 0 else PRIORITY[TAG_TEL_WORK] + seen - 1
+
+
 def parse(text: str) -> list[tuple[int, bytes]]:
     fields: list[tuple[int, bytes]] = []
 
@@ -172,7 +266,7 @@ def parse(text: str) -> list[tuple[int, bytes]]:
             continue
         name, value = line.split(":", 1)
         base = name.split(";", 1)[0].upper()
-        params = name[len(base):].upper()
+        params = name[len(base):]
 
         if base in ("BEGIN", "END", "VERSION"):
             continue
@@ -180,11 +274,10 @@ def parse(text: str) -> list[tuple[int, bytes]]:
             raise PhotoRejected(line[:40])
 
         tag = PROPS.get(base, TAG_RAW)
-        if tag == TAG_TEL_CELL and "WORK" in params:
-            tag = TAG_TEL_WORK
 
-        if tag in (TAG_TEL_CELL, TAG_TEL_WORK):
-            packed = phone_pack(value)
+        if tag == TAG_TEL:
+            label, custom = tel_label(params)
+            packed = tel_pack(label, custom, value)
             if packed:
                 fields.append((tag, packed))
                 continue
@@ -202,7 +295,9 @@ def parse(text: str) -> list[tuple[int, bytes]]:
             fields.append((tag, value.encode("utf-8")))
 
     # Stable, so two raw lines keep the order they appeared in.
-    fields.sort(key=lambda f: PRIORITY.get(f[0], 10))
+    ranks = [_rank(fields, i) for i in range(len(fields))]
+    order = sorted(range(len(fields)), key=lambda i: (ranks[i], i))
+    fields[:] = [fields[i] for i in order]
     return fields
 
 
@@ -221,8 +316,16 @@ def render(fields: list[tuple[int, bytes]]) -> str:
     for tag, value in fields:
         if tag == TAG_RAW:
             out.append(value.decode("utf-8", "replace"))
-        elif tag in (TAG_TEL_CELL, TAG_TEL_WORK):
-            out.append("%s:%s" % (TAG_NAMES[tag], phone_unpack(value)))
+        elif tag in (TAG_TEL, TAG_TEL_CELL, TAG_TEL_WORK):
+            label, custom, number = tel_unpack(tag, value)
+            if not number:
+                continue
+            if label == TEL_LABEL_CUSTOM:
+                out.append("TEL;TYPE=X-%s:%s" % (custom, number))
+            elif label in TEL_TYPES:
+                out.append("TEL;TYPE=%s:%s" % (TEL_TYPES[label], number))
+            else:
+                out.append("TEL:%s" % number)
         elif tag == TAG_EMAIL:
             addr = email_unpack(value)
             if addr:

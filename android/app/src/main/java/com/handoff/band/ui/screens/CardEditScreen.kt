@@ -47,23 +47,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.handoff.band.contacts.PhoneFormat
 import com.handoff.band.data.OwnCard
+import com.handoff.band.data.Phone
+import com.handoff.band.data.PhoneLabel
+import com.handoff.band.data.Phones
 
 /** The two phone labels the band carries (`TEL;TYPE=CELL` and `TYPE=WORK`). */
-enum class PhoneLabel(val label: String) { MOBILE("Mobile"), WORK("Work") }
-
-private data class PhoneRow(val number: String, val label: PhoneLabel)
 
 /**
  * Your contact card, design decisions §4a: fields only. A field left empty
  * is a field not shared, so there are no switches and nothing to explain.
- * Phone is a number plus a label, the way the phone's Contacts app has it,
- * and "Add another phone" gives the second row — two at most, which is what
- * the band carries. Save wants a name and a phone or email; below that it
- * is simply disabled.
+ * Phone is a number plus a label, the way the phone's Contacts app has it:
+ * Mobile, Work, Home, Main, or one the wearer types themselves. "Add another
+ * phone" gives the next row, up to [Phones.MAX], and the same label twice is
+ * allowed — two mobiles is a real thing a person has. Save wants a name and a
+ * phone or email; below that it is simply disabled.
  *
  * [initial] null is the first-time page, reached from the Band screen or
  * setup step 2: titled like the page it stands in for, and with the same
@@ -83,34 +85,25 @@ fun CardEditScreen(
     var org by rememberSaveable { mutableStateOf(initial?.org.orEmpty()) }
     var title by rememberSaveable { mutableStateOf(initial?.title.orEmpty()) }
     var phones by rememberSaveable(stateSaver = PhoneRowsSaver) {
-        mutableStateOf(phoneRows(initial))
+        mutableStateOf(phoneRows(initial?.phones))
     }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    fun number(label: PhoneLabel) = phones.firstOrNull { it.label == label }?.number.orEmpty()
     val complete = name.isNotBlank() &&
         (phones.any { it.number.isNotBlank() } || email.isNotBlank())
 
     fun save() = onSave(OwnCard(
         name = name.trim(),
-        mobile = PhoneFormat.format(context, number(PhoneLabel.MOBILE)),
-        work = PhoneFormat.format(context, number(PhoneLabel.WORK)),
+        phones = phones
+            .filterNot { it.blank }
+            .map { it.copy(number = PhoneFormat.format(context, it.number), custom = it.custom.trim()) },
         email = email.trim(),
         org = org.trim(),
         title = title.trim(),
     ))
 
-    // Two rows, two labels: picking the other row's label swaps them, so the
-    // number you just typed keeps the label you just chose.
-    fun relabel(index: Int, label: PhoneLabel) {
-        val other = if (label == PhoneLabel.MOBILE) PhoneLabel.WORK else PhoneLabel.MOBILE
-        phones = phones.mapIndexed { i, row ->
-            when {
-                i == index -> row.copy(label = label)
-                row.label == label -> row.copy(label = other)
-                else -> row
-            }
-        }
+    fun edit(index: Int, change: (Phone) -> Phone) {
+        phones = phones.mapIndexed { i, row -> if (i == index) change(row) else row }
     }
 
     Scaffold(
@@ -153,22 +146,20 @@ fun CardEditScreen(
             // each other, its plus on the field edge.
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 phones.forEachIndexed { i, row ->
-                    PhoneField(
-                        row = row,
-                        onNumber = { n -> phones = phones.mapIndexed { j, r -> if (j == i) r.copy(number = n) else r } },
-                        onLabel = { relabel(i, it) },
-                    )
+                    PhoneField(row) { updated -> edit(i) { updated } }
                 }
             }
-            if (phones.size < 2) {
+            if (phones.size < Phones.MAX) {
                 // A 24 dp slot; the 40 dp button overflows it, centred, so it
                 // keeps its ripple and touch target without opening a gap.
                 Box(Modifier.height(24.dp)) {
                     TextButton(
                         onClick = {
-                            val taken = phones.map { it.label }
-                            val free = PhoneLabel.entries.first { it !in taken }
-                            phones = phones + PhoneRow("", free)
+                            // The first label not already used, so the common
+                            // case needs no second tap; the same label twice
+                            // is still a choice the menu allows.
+                            val free = LABELS.firstOrNull { l -> phones.none { it.label == l } }
+                            phones = phones + Phone("", free ?: PhoneLabel.MOBILE)
                         },
                         modifier = Modifier.requiredHeight(40.dp).offset(x = (-12).dp),
                     ) {
@@ -228,49 +219,3 @@ private fun Field(
         modifier = Modifier.fillMaxWidth(),
     )
 }
-
-/** The number, and beside it the label as a dropdown. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PhoneField(row: PhoneRow, onNumber: (String) -> Unit, onLabel: (PhoneLabel) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
-            row.number, onNumber, label = { Text("Phone") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            modifier = Modifier.weight(1f),
-        )
-        ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
-            OutlinedTextField(
-                row.label.label, {}, readOnly = true, singleLine = true,
-                label = { Text("Label") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
-                modifier = Modifier.width(132.dp).menuAnchor(MenuAnchorType.PrimaryNotEditable),
-            )
-            ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                PhoneLabel.entries.forEach { l ->
-                    DropdownMenuItem(
-                        text = { Text(l.label) },
-                        onClick = { open = false; onLabel(l) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** The rows a saved card opens with; a fresh card starts with one Mobile row. */
-private fun phoneRows(card: OwnCard?): List<PhoneRow> {
-    val rows = listOfNotNull(
-        card?.mobile?.takeIf { it.isNotBlank() }?.let { PhoneRow(it, PhoneLabel.MOBILE) },
-        card?.work?.takeIf { it.isNotBlank() }?.let { PhoneRow(it, PhoneLabel.WORK) },
-    )
-    return rows.ifEmpty { listOf(PhoneRow("", PhoneLabel.MOBILE)) }
-}
-
-/** Survives rotation as number, label, number, label. */
-private val PhoneRowsSaver = listSaver<List<PhoneRow>, String>(
-    save = { rows -> rows.flatMap { listOf(it.number, it.label.name) } },
-    restore = { l -> l.chunked(2).map { (n, label) -> PhoneRow(n, PhoneLabel.valueOf(label)) } },
-)

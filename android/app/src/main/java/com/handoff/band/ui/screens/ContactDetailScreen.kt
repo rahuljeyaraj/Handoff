@@ -122,8 +122,9 @@ fun ContactDetailScreen(
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
             // Organisation is in the header's role line, so no row for it.
-            contact.mobile?.let { DetailRow(HandoffIcons.Phone, PhoneFormat.format(context, it), "Mobile") }
-            contact.work?.let { DetailRow(HandoffIcons.Phone, PhoneFormat.format(context, it), "Work") }
+            contact.phones.filterNot { it.blank }.forEach {
+                DetailRow(HandoffIcons.Phone, PhoneFormat.format(context, it.number), it.text)
+            }
             contact.email?.let { DetailRow(HandoffIcons.Mail, it, "Email") }
 
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -186,7 +187,7 @@ fun phoneButton(h: Handshake): PhoneButton = when {
 @Composable
 private fun DuplicateBanner(h: Handshake, other: Handshake, onMerge: () -> Unit) {
     val shared = when {
-        h.phoneKey != null && h.phoneKey == other.phoneKey -> "mobile number"
+        h.phoneKey != null && h.phoneKey == other.phoneKey -> "phone number"
         else -> "email address"
     }
     Row(

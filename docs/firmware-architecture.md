@@ -442,7 +442,7 @@ simulator, but expect to land on 25.
 | Trick | Saves | How |
 |---|---|---|
 | Drop boilerplate | ~37 B | `BEGIN`/`VERSION`/`END` are implied by the tag set |
-| Property names → tags | ~35 B | `TEL;TYPE=CELL:` → `0x03` |
+| Property names → tags | ~35 B | `TEL;TYPE=CELL:` → `0x0B 0x01` |
 | Domain dictionary | ~10 B | `gmail.com`, `outlook.com`, `icloud.com`… → 1 byte |
 | Phone as packed BCD | ~6 B | 12 digits → 6 bytes + country code |
 
@@ -452,15 +452,48 @@ Tag registry:
 |---|---|---|
 | `0x01` | `FN` | UTF-8 |
 | `0x02` | `N` | UTF-8, `;` separated |
-| `0x03` | `TEL;CELL` | u16 country + packed BCD |
-| `0x04` | `TEL;WORK` | u16 country + packed BCD |
+| `0x03` | `TEL;CELL` | u16 country + packed BCD — **retired, decoded forever** |
+| `0x04` | `TEL;WORK` | u16 country + packed BCD — **retired, decoded forever** |
 | `0x05` | `EMAIL` | UTF-8 local part + 1-byte domain id (`0xFF` = literal) |
 | `0x06` | `ORG` | UTF-8 |
 | `0x07` | `TITLE` | UTF-8 |
 | `0x08` | `URL` | UTF-8 |
 | `0x09` | `ADR` | UTF-8, `;` separated |
 | `0x0A` | `NOTE` | UTF-8 |
+| `0x0B` | `TEL` | label byte + u16 country + packed BCD |
 | `0xFF` | **raw vCard line** | UTF-8, verbatim |
+
+A phone is a number AND what it is for, so `0x0B` carries the label in the
+value rather than in the tag:
+
+```
+label(1) | [ len(1) | UTF-8 label text ]   <- the bracket only when CUSTOM
+         | u16 country code BE | packed BCD
+```
+
+| Label | Byte | vCard |
+|---|---|---|
+| Mobile | `0x01` | `TEL;TYPE=CELL` |
+| Work | `0x02` | `TEL;TYPE=WORK` |
+| Home | `0x03` | `TEL;TYPE=HOME` |
+| Main | `0x04` | `TEL;TYPE=MAIN` |
+| Custom | `0xFF` | `TEL;TYPE=X-<label>` |
+| None | `0x00` | bare `TEL` |
+
+One tag per phone rather than one tag per label is what lets a card carry the
+same label twice — two mobiles is a real thing a person has — and a label the
+wearer typed themselves. The whole phone is ONE TLV, so `frag.c` either places
+all of it in a fragment or none of it, and a number can never arrive wearing
+the wrong label. `TEL_LABEL_NONE` is a real state, not a default: a `TEL` that
+named no type is not a mobile, and saying it is prints a word under somebody's
+number that nobody ever said.
+
+Every phone would otherwise claim priority 1 and three numbers would push
+`EMAIL` out of fragment 0, so only the FIRST takes that slot (`tel_rank` in
+`compact.c`); the rest take the place `TEL;WORK` used to hold, in the order the
+card lists them. `0x03` and `0x04` are never encoded again, and are decoded
+forever — as Mobile and Work, which is what they always meant — because bands
+flashed before this change still send them.
 
 `0xFF` is the escape hatch and it is what makes the claim "we send a full vCard"
 literally true: any property not in the registry crosses verbatim, at full cost.
