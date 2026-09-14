@@ -63,7 +63,30 @@ uint32_t pio_carrier_count_end(void);
 /* Pad bits per chip — 2 * (carrier / chip rate). What txgen counts against. */
 uint32_t pio_carrier_bits_per_chip(void);
 
+/* The most chips one send() will take at the current carrier; a longer send
+ * is refused rather than truncated. 655 at 200 kHz, 3276 at 40 kHz. */
+size_t   pio_carrier_max_chips(void);
+
 /* Whether the pad is currently driven, for the §6.3 high-Z check. */
 bool pio_carrier_is_driving(void);
+
+/*
+ * Transmit-path state, for a stall diagnostic. One transmit in ~1700 at M5
+ * stayed busy forever; this is what hal_pico prints when that happens, and
+ * pio_carrier_reset() is how it recovers: abort the DMA, restart the state
+ * machine at its first instruction, FIFOs cleared.
+ */
+typedef struct {
+    bool     dma_busy;
+    uint32_t dma_remaining;   /* transfers left, TRANS_COUNT               */
+    uint32_t dma_ctrl;
+    uint8_t  fifo_level;
+    uint8_t  pc;
+    bool     sm_enabled;
+    bool     exec_stalled;
+} pio_carrier_state_t;
+
+void pio_carrier_state(pio_carrier_state_t *st);
+void pio_carrier_reset(void);
 
 #endif /* HANDOFF_PIO_CARRIER_H */

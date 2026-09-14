@@ -249,5 +249,24 @@ uint32_t pio_carrier_measure_hz(uint32_t gate_us)
 
 /* ---------------------------------------------------------------------- */
 
+void pio_carrier_state(pio_carrier_state_t *st)
+{
+    dma_channel_hw_t *ch = dma_channel_hw_addr((uint)s_dma);
+
+    st->dma_busy      = s_dma >= 0 && dma_channel_is_busy((uint)s_dma);
+    st->dma_remaining = ch->transfer_count;
+    st->dma_ctrl      = ch->ctrl_trig;
+    st->fifo_level    = (uint8_t)pio_sm_get_tx_fifo_level(s_pio, s_sm_out);
+    st->pc            = pio_sm_get_pc(s_pio, s_sm_out);
+    st->sm_enabled    = (s_pio->ctrl & (1u << s_sm_out)) != 0;
+    st->exec_stalled  = pio_sm_is_exec_stalled(s_pio, s_sm_out);
+}
+
+void pio_carrier_reset(void) { tx_abort(); }
+
 uint32_t pio_carrier_bits_per_chip(void) { return s_bits_per_chip; }
+size_t   pio_carrier_max_chips(void)
+{
+    return s_bits_per_chip ? (CARRIER_TX_WORDS * 32u) / s_bits_per_chip : 0;
+}
 bool     pio_carrier_is_driving(void)    { return s_driving; }

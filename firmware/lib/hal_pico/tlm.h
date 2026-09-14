@@ -29,7 +29,15 @@
 
 #include "hal.h"
 
-#define TLM_RAW_BURST_MS 100
+/*
+ * Long enough to hold a whole frame with room either side: a frame is 156 ms
+ * of airtime and a replay of a burst shorter than that can never decode.
+ * 200 ms is 200 kB of the 520 kB on RP2350; M4 said 100 ms, which was sized
+ * before anyone tried to replay one. Overridable per app.
+ */
+#ifndef TLM_RAW_BURST_MS
+#define TLM_RAW_BURST_MS 200
+#endif
 
 /* Continuous, cheap. Decimation of 1 sends every score. */
 void tlm_usb_init(uint16_t decimate);
@@ -39,6 +47,11 @@ void tlm_usb_event(const char *text);
 /* Triggered burst. Capture then dump; never both at once. */
 void tlm_usb_raw_trigger(void);
 bool tlm_usb_raw_busy(void);
+void tlm_usb_raw_dump(void);
+
+/* The captured burst, once raw_busy() has cleared. NULL while capturing.
+ * For a bench that wants a number (an RMS, a mean) rather than a dump. */
+const int16_t *tlm_usb_raw_samples(size_t *n);
 
 /* The only legal path out of a wristband someone is holding (design §13).
  * decimate 0 disables the stream, and is the state a wristband boots in. */

@@ -62,6 +62,7 @@ target_link_libraries(handoff_lib
     hardware_pio
     hardware_flash
     pico_multicore
+    pico_rand         # hal_iface_t.random, the election backoff draw
 )
 
 # The phone half, M2. Three files out of lib/hal_pico that share one

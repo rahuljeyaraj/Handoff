@@ -65,6 +65,7 @@ void chan_default(chan_cfg_t *c)
     c->dropout_prob   = 0.0;
     c->dropout_chips  = 0;
     c->tail_chips     = CHAN_TAIL_CHIPS;
+    c->lead_samples   = 0;
     c->seed           = 1;
 }
 
@@ -81,16 +82,29 @@ double chan_snr_db(const chan_cfg_t *c)
     return 20.0 * log10(carrier_rms / c->noise_rms);
 }
 
+static size_t lead_for(const chan_cfg_t *c)
+{
+    rng_t rng;
+
+    if (c->lead_samples >= 0) return (size_t)c->lead_samples;
+
+    /* Drawn from the seed, but from a different stream than the noise so a
+     * point with and without the lead sees the same noise samples. */
+    rng_seed(&rng, c->seed ^ 0x5EED1EADull);
+    return (size_t)(rng_u32(&rng) % (uint32_t)CHAN_SAMPLES_PER_CHIP);
+}
+
 size_t chan_samples_for(const chan_cfg_t *c, size_t nchips)
 {
     const double spc = (double)CHAN_SAMPLES_PER_CHIP * (1.0 + c->clock_ppm * 1e-6);
-    return (size_t)((double)(nchips + (size_t)c->tail_chips) * spc + 0.5);
+    return (size_t)((double)(nchips + (size_t)c->tail_chips) * spc + 0.5) + lead_for(c);
 }
 
 size_t chan_render(const chan_cfg_t *c, const uint8_t *chips, size_t nchips,
                    int16_t *out, size_t max)
 {
     const size_t n = chan_samples_for(c, nchips);
+    const size_t lead = lead_for(c);
     const double fs = (double)HANDOFF_ADC_FS_HZ;
     const double fc = (double)HANDOFF_CARRIER_HZ * (1.0 + c->carrier_ppm * 1e-6);
     const double spc = (double)CHAN_SAMPLES_PER_CHIP * (1.0 + c->clock_ppm * 1e-6);
@@ -105,7 +119,8 @@ size_t chan_render(const chan_cfg_t *c, const uint8_t *chips, size_t nchips,
 
     for (i = 0; i < n; i++) {
         const double t = (double)i / fs;
-        const size_t ci = (size_t)((double)i / spc);
+        /* Samples inside the lead belong to no chip: silence. */
+        const size_t ci = i < lead ? nchips : (size_t)((double)(i - lead) / spc);
         double a, v;
 
         /*

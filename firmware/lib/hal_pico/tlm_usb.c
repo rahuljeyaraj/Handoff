@@ -88,6 +88,13 @@ void tlm_usb_raw_dump(void)
     printf("r end\n");
 }
 
+const int16_t *tlm_usb_raw_samples(size_t *n)
+{
+    if (s_raw_arming) { if (n) *n = 0; return 0; }
+    if (n) *n = s_raw_n;
+    return s_raw;
+}
+
 /* ---------------------------------------------------------------------- */
 
 void tlm_sink(void *ctx, hal_tlm_kind_t kind, const void *data, size_t len)

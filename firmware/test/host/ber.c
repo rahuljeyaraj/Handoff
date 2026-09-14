@@ -9,6 +9,20 @@
  *   handoff_ber --frames 200    more frames per point, tighter numbers
  *   handoff_ber --csv           machine-readable, for tools/plot.py
  *   handoff_ber --impairment ramp|offset|hum|dropout|drift
+ *   handoff_ber --snr 7.3        one point, at the SNR the bench reported
+ *   handoff_ber --random-phase   frames start anywhere inside a chip, as
+ *                                they do on a free-running ADC
+ *   handoff_ber --dc 6           the ADC code the signal rides on. 2048 is
+ *                                the product (VREF, design 6.2); an unbiased
+ *                                bench loop sits at the bottom rail and the
+ *                                converter clips half the noise there
+ *   handoff_ber --amplitude 2.35 --noise 0.9
+ *                                the point in LSB rather than dB, as the
+ *                                bench measures it
+ *
+ * The last two are M5's: apps/loopback prints the SNR of the bench in this
+ * program's terms, and the comparison of its FER/BER with the point printed
+ * here is the milestone's deliverable.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -97,13 +111,13 @@ static void run_frame(const chan_cfg_t *cfg, uint8_t seq, point_t *p)
     if (!decoded) p->no_sync++;
 }
 
-static point_t sweep_point(chan_cfg_t cfg, double snr_db, uint32_t frames)
+static point_t sweep_point(chan_cfg_t cfg, double snr_db, uint32_t frames, int keep_lsb)
 {
     point_t p;
     uint32_t i;
 
     memset(&p, 0, sizeof p);
-    chan_set_snr_db(&cfg, snr_db);
+    if (!keep_lsb) chan_set_snr_db(&cfg, snr_db);
 
     for (i = 0; i < frames; i++) {
         cfg.seed = 0x1000u + i * 7919u;
@@ -128,16 +142,26 @@ int main(int argc, char **argv)
     chan_cfg_t cfg;
     uint32_t frames = 60;
     const char *impairment = "none";
-    int csv = 0, i;
-    double snr;
+    int csv = 0, i, random_phase = 0, single = 0, by_lsb = 0;
+    double snr, snr_lo = -6.0, snr_hi = 24.001, snr_step = 2.0;
+    double dc = -1.0, amplitude = -1.0, noise = -1.0;
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--csv") == 0) csv = 1;
+        else if (strcmp(argv[i], "--random-phase") == 0) random_phase = 1;
         else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) frames = (uint32_t)atoi(argv[++i]);
         else if (strcmp(argv[i], "--impairment") == 0 && i + 1 < argc) impairment = argv[++i];
+        else if (strcmp(argv[i], "--snr") == 0 && i + 1 < argc) {
+            snr_lo = snr_hi = atof(argv[++i]);
+            single = 1;
+        } else if (strcmp(argv[i], "--dc") == 0 && i + 1 < argc) dc = atof(argv[++i]);
+        else if (strcmp(argv[i], "--amplitude") == 0 && i + 1 < argc) amplitude = atof(argv[++i]);
+        else if (strcmp(argv[i], "--noise") == 0 && i + 1 < argc) noise = atof(argv[++i]);
         else {
             fprintf(stderr,
-                    "usage: %s [--frames N] [--csv] [--impairment ramp|offset|hum|drift|dropout]\n",
+                    "usage: %s [--frames N] [--csv] [--snr dB] [--random-phase] "
+                    "[--dc code] [--amplitude lsb --noise lsb] "
+                    "[--impairment ramp|offset|hum|drift|dropout]\n",
                     argv[0]);
             return 2;
         }
@@ -145,20 +169,34 @@ int main(int argc, char **argv)
 
     chan_default(&cfg);
     apply_impairment(&cfg, impairment);
+    if (random_phase) cfg.lead_samples = CHAN_LEAD_RANDOM;
+    if (dc >= 0.0) cfg.dc = dc;
+    if (amplitude > 0.0 && noise > 0.0) {
+        /* A bench point: amplitude and sigma in LSB. The SNR column then just
+         * reports what that pair is, and sweep_point's set_snr is a no-op. */
+        cfg.amplitude = amplitude;
+        cfg.noise_rms = noise;
+        snr_lo = snr_hi = chan_snr_db(&cfg);
+        single = 1;
+        by_lsb = 1;
+    }
 
     if (csv) {
         printf("snr_db,frames,good,bad_crc,no_sync,fer,ber\n");
     } else {
-        printf("Handoff BER sweep — GZ_N %d, %d chips/s, %d bps, impairment %s\n",
-               HANDOFF_GZ_N, HANDOFF_CHIP_RATE_HZ, HANDOFF_BIT_RATE_BPS, impairment);
+        printf("Handoff BER %s — GZ_N %d, %d chips/s, %d bps, impairment %s, %s chip phase, "
+               "amplitude %.2f LSB on code %.0f\n",
+               single ? "point" : "sweep",
+               HANDOFF_GZ_N, HANDOFF_CHIP_RATE_HZ, HANDOFF_BIT_RATE_BPS, impairment,
+               random_phase ? "random" : "aligned", cfg.amplitude, cfg.dc);
         printf("frame is %d chips, %u us of airtime, %u frames per point\n\n",
                FRAME_TOTAL_CHIPS, (unsigned)FRAME_AIRTIME_US, (unsigned)frames);
         printf("  SNR   good  crc  lost      FER        BER\n");
         printf("  ---------------------------------------------\n");
     }
 
-    for (snr = -6.0; snr <= 24.001; snr += 2.0) {
-        const point_t p = sweep_point(cfg, snr, frames);
+    for (snr = snr_lo; snr <= snr_hi; snr += snr_step) {
+        const point_t p = sweep_point(cfg, snr, frames, by_lsb);
         const double fer = p.frames ? 1.0 - (double)p.good / (double)p.frames : 1.0;
         const double ber = p.bits ? (double)p.bit_errors / (double)p.bits : 0.5;
 

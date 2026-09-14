@@ -33,7 +33,7 @@
  * anything a crystal can do.
  */
 #define CHAN_TAIL_CHIPS 4
-#define CHAN_MAX_SAMPLES(nchips)     (((nchips) + CHAN_TAIL_CHIPS) * CHAN_SAMPLES_PER_CHIP + (nchips) + 64)
+#define CHAN_MAX_SAMPLES(nchips)     (((nchips) + CHAN_TAIL_CHIPS + 1) * CHAN_SAMPLES_PER_CHIP + (nchips) + 64)
 
 /* ---- deterministic randomness ----------------------------------------- */
 
@@ -69,8 +69,19 @@ typedef struct {
      * lost to an artefact of the model rather than of the link.
      */
     int    tail_chips;
+
+    /*
+     * Silent samples BEFORE the burst. Zero renders chip 0 at sample 0, which
+     * puts every chip boundary exactly on a Goertzel window boundary -- the
+     * kindest case, and the one the bench never sees: there the ADC free-runs
+     * and a frame starts wherever it starts. Negative draws the lead from the
+     * seed, anywhere inside one chip, so a sweep sees every window phase.
+     */
+    int    lead_samples;
     uint64_t seed;
 } chan_cfg_t;
+
+#define CHAN_LEAD_RANDOM (-1)
 
 /* Link-budget nominal: design §5 puts ~160 mV at the ADC, which is ~200 LSB. */
 void   chan_default(chan_cfg_t *c);

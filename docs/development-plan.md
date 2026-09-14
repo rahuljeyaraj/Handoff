@@ -429,7 +429,7 @@ independent clocks are for.
 4. **The 60 s check printed 3 015 times.** `if (secs == RATE_SECONDS)` was
    true for a whole second of loop iterations. A flag, now.
 
-### M5 — Loopback inside one board
+### M5 — Loopback inside one board — **verified 14 Sep 2026, all four criteria**
 
 **Hardware: one jumper wire. Then two resistors.**
 
@@ -465,6 +465,94 @@ Cannot prove — and these matter:
   shared misreading of the spec cancels out. This is exactly why M1's
   independently generated vectors exist. Run them here too.
 - Amplifier saturation and recovery, real noise, real interference.
+
+**Verified, with `apps/loopback`, one wire and then two resistors.** The
+attenuator was 10 kΩ over 2 × 270 Ω = 540 Ω rather than 680 Ω, which lands
+169 mV — closer to §5's 160 mV than the plan's own figure. The harsher
+points used 100 kΩ and 160 kΩ on top over 220 Ω, because with a 0.7 LSB
+noise floor the cliff is at about 2 LSB of received fundamental and a 10 kΩ
+divider cannot get within 30 dB of it.
+
+| Criterion | Measured |
+|---|---|
+| Frame passes CRC at both carriers | Phase A and Phase B, 200 kHz and 40 kHz, 0 bit errors, 158 ms |
+| 1000 consecutive frames at Phase B | **1000/1000**, 0 DMA overruns, 0 false syncs, 132 LSB, margin 132 |
+| BER curve agrees with the simulator | bench cliff within ~2 dB of the model's, three points, table below |
+| GP2 high-Z at the M4 floor | 0.0 LSB chip energy, raw 0.7 LSB RMS about code 6 — identical to driven-low |
+
+The received amplitude is a free sanity check of the whole chain: a 0–3.3 V
+square has a fundamental of 2·4095/π = 2607 LSB and the Goertzel read 2604 at
+40 kHz; at Phase B, 2/π × 210 = 134 predicted, 132 read.
+
+The curve, at 200 kHz. *A* is the received fundamental in LSB (float, from a
+raw capture; the board's integer score reads ~0.4 lower), σ the raw-sample
+RMS in silence. The simulator column is `handoff_ber --random-phase
+--amplitude A --noise σ`, 1000 frames.
+
+| Divider | A | σ | bench FER | simulator FER |
+|---|---|---|---|---|
+| 10 kΩ / 540 Ω | 132 | 0.7 | 0 / 1000 | 0 |
+| 100 kΩ / 220 Ω | 3.5 | 1.1 | 0 / 200 | 0.17 |
+| 160 kΩ / 220 Ω | 2.0 | 1.0 | 0.97 | 0.70 (1.00 at 1.5) |
+
+**What running it found.** Six things, two of them bugs.
+
+1. **The preamble slicer froze after a loud transient, and the receiver was
+   deaf until re-initialised.** The board lost 200/200 frames at 3.9 LSB
+   while `handoff_decode` decoded the identical capture; the difference was
+   history. `frame.c`'s slicer decayed `hi` by `(hi - lo) >> 6`, which is
+   zero once the gap is under 64, so after the wire was moved with the board
+   live, `hi` sat at `lo + 63` and every 3 LSB chip sliced as a space. The
+   simulator never saw it because ber.c re-initialises per frame; the
+   design amplitude never saw it because 63 LSB is nothing under a 200 LSB
+   signal. A wristband is a continuously listening receiver at whatever
+   amplitude the grip gives, so it would have seen it — a firm grip followed
+   by a light one. Every slicer step is now at least one LSB; `test_frame`
+   pins it, and the capture is `captures/m5-100k-3lsb-slicer.s16`. With the
+   fix the same point went 200/200.
+2. **Below ~10 LSB the link is quantisation-limited, and SNR is the wrong
+   axis.** At the same SNR the simulator gives FER 0 with a 200 LSB carrier
+   and FER 0.6 with a 2.35 LSB one: `isqrt(mag2)·2/N` has one LSB of
+   amplitude resolution and the window average truncates again. The M1
+   sweep, at §5's nominal 200 LSB, could not have shown this. `handoff_ber`
+   now takes `--amplitude` and `--noise` in LSB, and that is how the table
+   above was made. The product's AFE puts the nominal signal at ~200 LSB
+   where none of this matters, but weak coupling will live down here; if
+   M12's budget needs the margin, the score's resolution is where to find it
+   (keep more bits, or threshold in the magnitude-squared domain — the same
+   place M4's finding 3 pointed).
+3. **The simulator rendered every chip boundary on a Goertzel window
+   boundary.** Chip 0 at sample 0, always — the kindest case, and one a
+   free-running ADC never produces. `--random-phase` draws the lead from
+   the seed; it costs about 2 dB at the cliff and is on for every figure
+   above. Without it the bench would have "disagreed" by that much.
+4. **M4's 100 ms raw burst could never hold a frame.** A frame is 156 ms;
+   a replay of a shorter burst cannot decode by construction. It is 200 ms
+   now, and `tools/replay.py` finally does what its docstring promised:
+   `handoff_decode` runs the firmware's pipeline over a file, and
+   `test_vectors` replays every entry of `captures/index.json` from raw
+   samples on every run. Two bench captures are adopted.
+5. **One transmit in ~2 700 stayed busy forever.** After 48 good frames at
+   the 160 kΩ point every later frame was refused; a 1000-frame run after
+   did not reproduce it. Not explained. `hal_pico` now detects a transmit
+   busy 20 ms past its airtime, records the DMA and state-machine state
+   for the console, counts it (`hal_pico_tx_stalls`) and resets the path.
+   The one place a running state machine is poked from core 0 is
+   `pio_sm_set_consecutive_pindirs` in `pio_carrier_drive`, twice a frame,
+   which rewrites PINCTRL and force-executes an instruction; that is the
+   first suspect when it recurs.
+6. **With a ≥100 kΩ source the received amplitude at 200 kHz is 0.6× the
+   divider arithmetic, and at 40 kHz about 0.07×;** at 10 kΩ both carriers
+   read within 2 % of it. Consistent with a few pF in series — a breadboard
+   contact — rather than anything in the ADC, and irrelevant to the
+   product, where R1 feeds an amplifier input. Re-check at M7 with the AFE
+   in place.
+
+Also worth recording: the ADC's low state sits at code 6, not 0, so 0.7 LSB
+of noise survives at the bottom rail and the plan's fear that a rail clips
+it entirely did not materialise for this loop — `--dc 6` in the simulator
+changes nothing. And the bench noise floor drifted from 0.7 to 1.4 LSB RMS
+across an afternoon of USB and rewiring; the table quotes each point's own.
 
 ### M6 — Two boards over a wire
 

@@ -1,8 +1,8 @@
 /*
  * Handoff — the RP2350 binding of hal.h. architecture §4, §12.
  *
- * STUB UNTIL M5. This is the file that first ties the whole HAL together, and
- * the development plan is deliberate about not doing that until the pieces it
+ * M5. This is the file that first ties the whole HAL together, and the
+ * development plan is deliberate about not doing that until the pieces it
  * binds have each been proven alone:
  *
  *   M3  pio_carrier.c   carrier generation, self-measured
@@ -16,6 +16,7 @@
 #define HANDOFF_HAL_PICO_H
 
 #include "hal.h"
+#include "pio_carrier.h"
 
 /*
  * Pins, from design §6 and §10.2. Collected here rather than scattered through
@@ -26,10 +27,19 @@
 #define HANDOFF_PIN_ADC     26   /* GP26 = ADC0,       design §10.2 */
 #define HANDOFF_ADC_CHANNEL 0
 
-/* Fills in the interface and starts core 1. Returns NULL until M5. */
+/*
+ * Fills in the interface and starts core 1. Idempotent: a second call returns
+ * the same interface and starts nothing.
+ *
+ * Boot order matters and is fixed here: the ring is started, the bare-ADC
+ * noise floor is taken with nothing else consuming it (M4's reference figure,
+ * see hal_pico_noise_floor), the ring is restarted from zero, the carrier is
+ * brought up and released to high-Z, and only then is core 1 launched.
+ */
 const hal_iface_t *hal_pico_init(void);
 
-/* Core-1 loop headroom as a percentage. M4 exit criterion. */
+/* Core-1 busy time as a percentage of wall time since core 1 started.
+ * Headroom is 100 minus this. M4 exit criterion. */
 uint8_t hal_pico_core1_load(void);
 
 /*
@@ -38,5 +48,29 @@ uint8_t hal_pico_core1_load(void);
  * or sends the analogue mixer back into the design.
  */
 uint32_t hal_pico_overruns(void);
+
+/* Bare-ADC noise floor in tenths of an LSB RMS, taken at init on the on-die
+ * temperature sensor. *mean_code gets the raw 12-bit mean. This is M4's
+ * reference figure and the one M5's leakage criterion is compared against. */
+uint32_t hal_pico_noise_floor(int32_t *mean_code);
+
+/*
+ * Bring-up only: move both ends of the link to another carrier at run time.
+ * The PIO divider changes on core 0 and core 1 re-tunes its Goertzel bin, so
+ * one image can walk 40 kHz and 200 kHz the way txgen does. Returns false and
+ * changes nothing if hz is not an exact PIO divider on a Goertzel bin centre.
+ * Blocks until core 1 has re-tuned; chips in flight across the change are
+ * meaningless and the caller should reset its frame receiver.
+ */
+bool hal_pico_set_carrier(uint32_t hz);
+uint32_t hal_pico_carrier_hz(void);
+
+/* Transmits that stayed busy past their airtime and were reset, with the
+ * hardware state captured at the last one. Should be zero; see hal_pico.c. */
+uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last);
+
+/* Chips produced by core 1 since start, and Goertzel windows scored. */
+uint32_t hal_pico_chips(void);
+uint32_t hal_pico_windows(void);
 
 #endif /* HANDOFF_HAL_PICO_H */
