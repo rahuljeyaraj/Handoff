@@ -60,13 +60,15 @@ firmware/test/vectors/generated/
 # forever, and the bug is not fixed until it is a regression test. They are
 # also irreplaceable — you cannot re-record the moment a link failed on a real
 # body — so the blanket rules below must not swallow them.
-!firmware/test/vectors/captures/
-!firmware/test/vectors/captures/**
-
 # Ad-hoc dumps from the bench, before they are adopted by tools/replay.py.
+# The blanket rule comes FIRST: gitignore takes the last matching rule, so the
+# un-ignore below only works written after it (found at M5, when the first two
+# adopted captures did not show up in git status).
 captures/
 *.npy
 *.raw
+!firmware/test/vectors/captures/
+!firmware/test/vectors/captures/**
 
 # ---- OS -----------------------------------------------------------------
 Thumbs.db

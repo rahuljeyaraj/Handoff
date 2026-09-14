@@ -53,6 +53,20 @@ static size_t load_samples(const char *name)
     return n;
 }
 
+static size_t load_capture(const char *file)
+{
+    char path[512];
+    FILE *f;
+    size_t n;
+
+    snprintf(path, sizeof path, "%s/%s", HANDOFF_CAPTURE_DIR, file);
+    f = fopen(path, "rb");
+    if (!f) return 0;
+    n = fread(g_samples, sizeof g_samples[0], MAX_SAMPLES, f);
+    fclose(f);
+    return n;
+}
+
 /* Push chips through the framer at ideal energies. */
 static frame_rx_result_t decode_chips(frame_rx_t *r, const uint8_t *chips, size_t n)
 {
@@ -208,6 +222,75 @@ void test_vectors(void)
             if (res == FRAME_RX_GOOD)
                 HF_EQ_MEM(frame_rx_payload(&r), want, sizeof want);
         }
+    }
+
+    /*
+     * Development plan §1: every hardware failure becomes a host test. The
+     * captures tools/replay.py adopts are listed in captures/index.json and
+     * each one is decoded here, from raw ADC samples, on every run. The
+     * index is our own JSON, so the scan below is all the parser it needs:
+     * a "file" and, when the payload is loopback's pattern, a "seq".
+     */
+    hf_begin("captures: every adopted hardware capture still decodes");
+    {
+        char path[512];
+        FILE *f;
+        long len;
+        char *json = NULL;
+        const char *p;
+        int replayed = 0;
+
+        snprintf(path, sizeof path, "%s/index.json", HANDOFF_CAPTURE_DIR);
+        f = fopen(path, "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            len = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            json = (char *)calloc((size_t)len + 1u, 1u);
+            if (json && fread(json, 1, (size_t)len, f) != (size_t)len) { free(json); json = NULL; }
+            fclose(f);
+        }
+
+        for (p = json; p && (p = strstr(p, "\"file\"")) != NULL; ) {
+            char file[128];
+            const char *q, *e, *s;
+            long seq = -1;
+            size_t nsamples;
+            frame_rx_t r;
+            frame_rx_result_t res;
+
+            q = strchr(p + 6, '"');
+            e = q ? strchr(q + 1, '"') : NULL;
+            if (!q || !e || (size_t)(e - q - 1) >= sizeof file) break;
+            memcpy(file, q + 1, (size_t)(e - q - 1));
+            file[e - q - 1] = 0;
+            p = e + 1;
+
+            /* The seq, if any, sits inside this entry: before the next '}'. */
+            s = strstr(e, "\"seq\"");
+            if (s && (strchr(e, '}') == NULL || s < strchr(e, '}')))
+                seq = strtol(strchr(s, ':') + 1, NULL, 10);
+
+            nsamples = load_capture(file);
+            HF_CHECK_MSG(nsamples > 0, "capture %s missing or empty", file);
+            if (!nsamples) continue;
+
+            frame_rx_init(&r);
+            res = decode_samples(&r, g_samples, nsamples);
+            HF_CHECK_MSG(res == FRAME_RX_GOOD,
+                         "capture %s no longer decodes (result %d)", file, (int)res);
+            replayed++;
+
+            if (res == FRAME_RX_GOOD && seq >= 0) {
+                uint8_t want[HANDOFF_FRAG_PAYLOAD];
+                size_t i;
+                for (i = 0; i < sizeof want; i++)
+                    want[i] = (uint8_t)((i * 31u + (size_t)seq * 17u) & 0xFFu);
+                HF_EQ_MEM(frame_rx_payload(&r), want, sizeof want);
+            }
+        }
+        free(json);
+        HF_CHECK_MSG(replayed > 0, "no captures replayed; index.json missing or empty");
     }
 
     /*

@@ -99,15 +99,30 @@ static unsigned alt_count(const frame_rx_t *r)
  * hunt — once locked, every decision is Manchester's relative comparison and
  * no threshold is involved at all (design §9.2). hi tracks fast up and decays
  * slow; lo mirrors it. The midpoint slices.
+ *
+ * Every step is at least one LSB. Found on the bench at M5: with the decay
+ * written as a plain shift, (hi - lo) >> 6 is zero once the gap is under 64,
+ * so after one loud transient hi froze at lo + 63 and a 3 LSB frame could
+ * never slice high again. The receiver was deaf until re-initialised — and a
+ * wristband receiver is never re-initialised between a firm grip and a light
+ * one. test_frame pins it.
  */
+static inline int32_t step_toward(int32_t gap, int shift)
+{
+    const int32_t s = gap >> shift;
+    return s > 0 ? s : (gap > 0 ? 1 : 0);
+}
+
 static bool slice(frame_rx_t *r, uint16_t e)
 {
     const int32_t x = (int32_t)e;
 
     if (!r->primed) { r->hi = x; r->lo = x; r->primed = true; }
 
-    if (x > r->hi) r->hi += (x - r->hi) >> 1; else r->hi -= (r->hi - r->lo) >> 6;
-    if (x < r->lo) r->lo -= (r->lo - x) >> 1; else r->lo += (r->hi - r->lo) >> 6;
+    if (x > r->hi) r->hi += step_toward(x - r->hi, 1);
+    else           r->hi -= step_toward(r->hi - r->lo, 6);
+    if (x < r->lo) r->lo -= step_toward(r->lo - x, 1);
+    else           r->lo += step_toward(r->hi - r->lo, 6);
     if (r->hi < r->lo) { const int32_t t = r->hi; r->hi = r->lo; r->lo = t; }
 
     return x * 2 > (r->hi + r->lo);

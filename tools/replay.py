@@ -10,11 +10,12 @@ compounds:
     CI forever. THE BUG IS NOT FIXED UNTIL IT IS A REGRESSION TEST.
 
 So this is the bridge. It takes an int16 capture off the board, runs it through
-the same handoff_tests binary the suite uses, and -- with --adopt -- files it
-into firmware/test/vectors/captures/ where it is replayed on every push.
+handoff_decode -- the firmware's own pipeline, built by scripts/test.py
+--decode -- and, with --adopt, files it into firmware/test/vectors/captures/
+where test_vectors.c replays every entry of index.json on every run.
 
     python tools/replay.py capture.s16
-    python tools/replay.py capture.s16 --expect deadbeef...
+    python tools/replay.py capture.s16 --from-log bench.log --seq 0
     python tools/replay.py capture.s16 --adopt m5-attenuator-fail --note "..."
     python tools/replay.py --list
 
@@ -69,10 +70,10 @@ def cmd_list() -> int:
 
 
 def decoder() -> Path:
-    """The replay decoder is the test binary itself, deliberately."""
-    exe = BUILD / ("handoff_tests" + (".exe" if sys.platform == "win32" else ""))
+    """firmware/test/host/decode.c: the firmware's own pipeline over a file."""
+    exe = BUILD / ("handoff_decode" + (".exe" if sys.platform == "win32" else ""))
     if not exe.exists():
-        print("build the host tests first: python scripts/test.py", file=sys.stderr)
+        print("build it first: python scripts/test.py --decode", file=sys.stderr)
         raise SystemExit(2)
     return exe
 
@@ -100,7 +101,31 @@ def describe(path: Path) -> dict:
     }
 
 
+def extract_dump(log: Path, out: Path) -> int:
+    """Pull tlm_usb_raw_dump()'s text burst out of a console log, into .s16."""
+    import re
+    data = array.array("h")
+    armed = False
+    for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = re.match(r"(?:\[\s*[\d.]+\]\s*)?(.*)$", line)
+        t = m.group(1).strip() if m else line.strip()
+        if t.startswith("r end"):
+            break
+        if re.match(r"r \d+$", t):
+            armed = True
+            continue
+        if armed and re.match(r"-?\d+$", t):
+            data.append(int(t))
+    if sys.byteorder == "big":
+        data.byteswap()
+    out.write_bytes(data.tobytes())
+    return len(data)
+
+
 def cmd_replay(args) -> int:
+    if args.from_log:
+        n = extract_dump(args.from_log, args.capture)
+        print("extracted %d samples from %s" % (n, args.from_log.name))
     info = describe(args.capture)
     if not info["samples"]:
         print("%s is empty" % args.capture, file=sys.stderr)
@@ -112,11 +137,12 @@ def cmd_replay(args) -> int:
     if info["clipped"]:
         print("  WARNING: %d samples clipped — see design 15.2" % info["clipped"])
 
-    # The vectors suite is what actually replays files; point it at a directory
-    # holding this capture and let the same code path do the decoding.
     exe = decoder()
+    cmd = [str(exe), str(args.capture), "--carrier", str(args.carrier)]
+    if args.seq is not None:
+        cmd += ["--seq", str(args.seq)]
     print("\nreplaying through %s" % exe.name)
-    res = subprocess.run([str(exe), "vectors"], cwd=str(REPO_ROOT))
+    res = subprocess.run(cmd, cwd=str(REPO_ROOT))
 
     if args.adopt:
         CAPTURES.mkdir(parents=True, exist_ok=True)
@@ -126,7 +152,9 @@ def cmd_replay(args) -> int:
         entries = [e for e in load_index() if e["name"] != args.adopt]
         entry = {"name": args.adopt, "milestone": args.milestone,
                  "date": date.today().isoformat(), "note": args.note or "",
-                 "file": dest.name}
+                 "file": dest.name, "carrier": args.carrier}
+        if args.seq is not None:
+            entry["seq"] = args.seq
         entry.update(info)
         entries.append(entry)
         entries.sort(key=lambda e: e["name"])
@@ -149,13 +177,17 @@ def main() -> int:
     ap.add_argument("--milestone", default="?", help="which milestone it came from")
     ap.add_argument("--note", help="what broke, in one line")
     ap.add_argument("--expect", help="payload the capture should decode to, as hex")
+    ap.add_argument("--carrier", type=int, default=200000, help="carrier the capture was made at")
+    ap.add_argument("--seq", type=int, help="loopback frame sequence number, for a BER")
+    ap.add_argument("--from-log", metavar="LOG", type=Path,
+                    help="extract the `r <n>` ... `r end` dump from a console log into CAPTURE first")
     args = ap.parse_args()
 
     if args.list:
         return cmd_list()
     if not args.capture:
         ap.error("give a capture file, or --list")
-    if not args.capture.exists():
+    if not args.capture.exists() and not args.from_log:
         print("no such file: %s" % args.capture, file=sys.stderr)
         return 2
 

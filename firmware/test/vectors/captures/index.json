@@ -1,0 +1,30 @@
+[
+  {
+    "name": "m5-100k-3lsb-slicer",
+    "milestone": "M5",
+    "date": "2026-09-14",
+    "note": "100k/220 divider, 3.9 LSB: the board lost this frame after a loud transient froze the slicer; the host decoded it and found the bug",
+    "file": "m5-100k-3lsb-slicer.s16",
+    "carrier": 200000,
+    "seq": 0,
+    "samples": 100000,
+    "seconds": 0.2,
+    "mean_lsb": -2041.77,
+    "peak_lsb": 2048,
+    "clipped": 806
+  },
+  {
+    "name": "m5-160k-2lsb",
+    "milestone": "M5",
+    "date": "2026-09-14",
+    "note": "160k/220 divider, 2.35 LSB fundamental, sigma 0.9: the weakest frame decoded on the bench, margin 1",
+    "file": "m5-160k-2lsb.s16",
+    "carrier": 200000,
+    "seq": 0,
+    "samples": 100000,
+    "seconds": 0.2,
+    "mean_lsb": -2042.0,
+    "peak_lsb": 2048,
+    "clipped": 313
+  }
+]

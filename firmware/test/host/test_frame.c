@@ -244,6 +244,45 @@ void test_frame(void)
         HF_CHECK_MSG(good == 0, "%d frames decoded from noise", good);
     }
 
+    /*
+     * M5, from the bench, 14 Sep 2026. The board lost every frame at 3 LSB of
+     * chip energy while the host decoded the identical capture, and the
+     * difference was history: the board had seen a loud transient (the wire
+     * being moved) and the slicer's decay, (hi - lo) >> 6, is zero once the
+     * gap is under 64. hi froze at lo + 63, the threshold at ~32, and every
+     * quiet chip sliced as a space until frame_rx_init(). On a wrist that is
+     * a firm grip followed by a light one. The decay has to reach lo.
+     */
+    hf_begin("frame: a quiet frame after a loud one still decodes");
+    {
+        frame_rx_t r;
+        uint8_t chips[FRAME_TOTAL_CHIPS];
+        frame_hdr_t h = { 3, 8, 21, 0 };
+        uint8_t payload[HANDOFF_FRAG_PAYLOAD];
+        size_t n, i;
+        int good = 0, pass;
+        const uint16_t loud_on = 2000u, quiet_on = 3u;
+
+        for (i = 0; i < sizeof payload; i++) payload[i] = (uint8_t)(i * 7u);
+        n = frame_encode(&h, payload, sizeof payload, chips, sizeof chips);
+        HF_CHECK(n == FRAME_TOTAL_CHIPS);
+
+        frame_rx_init(&r);
+
+        /*
+         * Loud, then quiet twice, with 125 ms of silence between frames.
+         * That gap is what the slicer's 64-chip time constant needs to come
+         * down 56 dB; the bug was that it never came down at all.
+         */
+        for (pass = 0; pass < 3; pass++) {
+            const uint16_t on = pass == 0 ? loud_on : quiet_on;
+            for (i = 0; i < n; i++)
+                if (frame_rx_push(&r, chips[i] ? on : 0u) == FRAME_RX_GOOD) good++;
+            for (i = 0; i < 500; i++) frame_rx_push(&r, 0u);
+        }
+        HF_CHECK_MSG(good == 3, "%d of 3 frames decoded; the slicer froze", good);
+    }
+
     hf_begin("frame: airtime matches the configured rate");
     {
         /* A sanity net over config.h: if someone changes GZ_N and the derived
