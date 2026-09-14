@@ -310,7 +310,7 @@ is not implemented: it is the only thing that would need `WRITE_CONTACTS`, and
 the app does not declare that permission at all until somebody asks for the
 setting. Promotion goes through the system contact editor, which needs nothing.
 
-### M3 — Carrier generation
+### M3 — Carrier generation — **verified 11 Sep 2026, all four criteria**
 
 **Hardware: none.**
 
@@ -331,9 +331,25 @@ Exit criteria:
 
 Cannot prove: signal amplitude, or anything about the receive side.
 
-### M4 — ADC and the real-time budget
+**Verified, with `apps/txgen` and nothing on the board.**
 
-**Hardware: none** (input left at ground or 3V3).
+| Criterion | Measured |
+|---|---|
+| Carrier within 0.1 % | 200 005 Hz and 39 995 Hz — 25 ppm and 125 ppm |
+| Chip jitter under 1 µs | 250 000 ns chips, no measurable jitter |
+| Gating chip-aligned | edge counts per chip window exactly as expected |
+| GP2 high-Z on demand | the pad follows an internal pull, so nothing else is driving it |
+
+**What running it found.** RP2350-E9 is real and §6's guess about it was
+wrong. Once a high-impedance bank-0 pad has been taken high it latches, and
+the internal pull-down — far stronger than R1's 1 MΩ — cannot bring it back.
+A latched pad is driving the electrode that §6.3 requires it to stop loading.
+Toggling the pad's input buffer clears it, confirmed both ways, and that is
+what `pio_carrier_drive(false)` does on the way into receive.
+
+### M4 — ADC and the real-time budget — **verified 14 Sep 2026, all four criteria**
+
+**Hardware: none** (GP26 unconnected — see finding 2 for why not a rail).
 
 Free-running ADC0 at `adc_set_clkdiv(0)` → 48 MHz / 96 = 500.000 ksps exactly,
 DMA into a ring buffer, Goertzel loop on core 1, score stream out over USB.
@@ -364,6 +380,54 @@ Resolution:
   decimated it fits over BLE for the body tests where USB is forbidden.
 - **Raw ADC** is a *triggered burst*: capture 100 ms into RAM (100 kB), then dump
   at leisure. Never continuous.
+
+**Verified, with `apps/adcbench`, GP26 unconnected.**
+
+| Criterion | Measured |
+|---|---|
+| Rate within 0.01 % | 499 999 sps over the 600 s soak (2 ppm); 499 984 at 60 s, where one 2048-sample block is 68 ppm of quantisation |
+| Zero dropped DMA blocks in 10 min | 0, from the counter in the DMA interrupt; 0 chips dropped between the cores; 11 999 969 windows scored |
+| Core-1 headroom | **68.3 %** at `-Og` (the default Debug build), **75.1 %** at `-O3` (Release); zero drops in both |
+| Bare-ADC noise floor | **0.6–1.0 LSB RMS** across runs (12-bit, one 2048-sample block, mean code 870, on-die temperature sensor as the source) |
+
+The rate figure is honest but limited: the ADC clock and the timer both come
+off the same 12 MHz crystal, so this measurement can only catch a wrong
+divider or lost samples, never absolute accuracy. That is what M6's
+independent clocks are for.
+
+**What running it found.**
+
+1. **The image that was left on the board on 11 Sep was hanging inside the
+   DMA restart, and it was an RP2350 difference.** `adc_ring_stop()` aborts a
+   channel mid-block and `adc_ring_start()` restarted it without touching its
+   write address. On RP2040 the residual count would have ended at the block
+   boundary. On RP2350 `TRANS_COUNT` is a *reload* value, so the aborted
+   channel restarted with a full 2048-sample count from a pointer partway
+   through its block and DMA'd up to 4 kB of samples past the end of the ring
+   — over the flags and `s_dma[]` itself. With the channel numbers corrupted
+   the interrupt handler cleared the wrong bit, DMA_IRQ_0 stormed, the
+   low-priority USB worker never ran again, and the board sat enumerated,
+   silent, and unreachable by `picotool -f`. Found by a phased heartbeat that
+   died with no core 1 and no DSP running, which left only the ring. Every
+   channel is now re-armed from the top of its block in `start()`.
+2. **The noise floor cannot be taken at a rail.** This section said "input
+   left at ground or 3V3", and at ground the ADC returns 0 for every sample:
+   one side of the noise is clipped and the RMS reads 0.0. Enabling the pad's
+   pull-up and pull-down together does not give mid-scale either — on RP2
+   that is a bus keeper, and it held the pin at the ground it had last seen
+   (code 64). The on-die temperature sensor is a quiet ~0.7 V diode on the
+   same converter, needs no parts, and is what the figure above is taken on.
+3. **Core 1 is 32 % busy at `-Og` and 25 % at `-O3`, not the 2–5 % this section predicted.** The
+   arithmetic was for the Goertzel recurrence alone. What actually runs per
+   window is `gz_isqrt64` — Newton iterations with a 64-bit division each —
+   plus the 64-bit normalisation divide, and per sample the DC-centring copy.
+   Comfortable, but it is the number M12 has to budget symbol sync and
+   carrier detection against, and it says where to look first if that
+   budget gets tight: the square root is only there to make scores linear
+   in amplitude, and thresholds could as easily live in the magnitude-squared
+   domain.
+4. **The 60 s check printed 3 015 times.** `if (secs == RATE_SECONDS)` was
+   true for a whole second of loop iterations. A flag, now.
 
 ### M5 — Loopback inside one board
 
@@ -584,12 +648,12 @@ Carried from design §17, plus what this plan adds:
 | Fragment payload size | **M1 — kept at 32 B** | swept; 40 B gives a marginally shorter full pass but a longer frame to lose. Re-measure at M5 against real frame loss |
 | Carousel weighting | **M1 — settled: 0, not 1** | **the sweep contradicted [architecture §8.4](firmware-architecture.md).** Round robin beats `0,1,0,2` at every contact duration — a full card in 54 % of one-second contacts against 0 %. At 156 ms per frame there is no airtime to spend on repetition; the *priority ordering* is what delivers a usable contact from a brief touch |
 | Chip guard windows | **M1 — kept at 1** | no measurable cost at any SNR tested. It buys timing tolerance that only starts to matter at M6, which is where to re-measure it |
-| 500 ksps + DMA + Goertzel on core 1 | M4 | budget looks like 2–5 % core load; the risk is overrun handling, not maths |
+| 500 ksps + DMA + Goertzel on core 1 | **M4 — done** | 499 999 sps, zero dropped blocks in 10 min, 68 % headroom at `-Og`. The risk *was* overrun handling: the restart path corrupted the ring on RP2350's reload-semantics `TRANS_COUNT`. Core load is 32 %, not 2–5 % — the square root per window, see M4 |
 | Preamp input capacitance in situ | M7 | decides whether 200 kHz survives |
-| USB instrumentation vs §13 safety | M4 | resolved: continuous score stream, triggered raw bursts, BLE during body tests |
+| USB instrumentation vs §13 safety | **M4 — done** | continuous score stream, triggered raw bursts, BLE during body tests: `tlm_usb.c` and `tlm_ble.c` |
 | Role election implementation | **removed** | There is no election. `lib/proto/elect.c` and its 0–5 ms backoff were deleted and replaced by the contact trigger, which decides the sender by timing geometry rather than by a draw — see firmware-architecture §7.6 and §13.3, and `docs/simple-trigger-spec.md` |
 | Contact trigger implementation | **M1 done (logic)** / M14 (hardware) | `lib/proto/beacon.c`. Swept across all 112 relative phase offsets: every one rendezvous, worst case 108 ms, and every one produces exactly one sender. Forced simultaneous starts over 400 seeds: 398 resolve within two shout rounds, worst case three. Power is deliberately not optimised for v1 — the band listens continuously |
-| RP2350-E9 vs the GP2 high-Z requirement | M3 | §6.3 requires GP2 high-Z while receiving, and the erratum affects high-Z bank-0 pads. Through R1's 1 MΩ it should be harmless — **confirm by measurement**, do not assume |
+| RP2350-E9 vs the GP2 high-Z requirement | **M3 — measured, and it is not harmless** | a high-Z pad taken high latches, and the internal pull-down cannot clear it, so 1 MΩ certainly cannot. Toggling the input buffer does; `pio_carrier_drive(false)` does that |
 | Enclosure and strap | not scheduled | not on the critical path |
 
 ### Rejected orderings

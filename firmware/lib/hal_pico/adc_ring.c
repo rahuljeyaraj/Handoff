@@ -102,7 +102,20 @@ void adc_ring_start(void)
 {
     uint i;
 
-    for (i = 0; i < ADC_RING_BLOCKS; i++) s_full[i] = false;
+    /*
+     * Re-arm every channel from the top of its block, whatever state stop()
+     * left it in. This is not optional on RP2350: TRANS_COUNT there is a
+     * reload value, so a channel aborted mid-block restarts with a FULL count
+     * from a write pointer partway through its block and DMAs past the end
+     * of s_raw -- over s_out, the flags, and s_dma[] itself, after which the
+     * IRQ handler clears the wrong bit and storms. That was M4's silent USB.
+     */
+    for (i = 0; i < ADC_RING_BLOCKS; i++) {
+        dma_channel_set_write_addr((uint)s_dma[i], s_raw[i], false);
+        dma_channel_set_trans_count((uint)s_dma[i], ADC_RING_BLOCK, false);
+        dma_hw->ints0 = 1u << s_dma[i];
+        s_full[i] = false;
+    }
     s_overruns = 0;
     s_blocks   = 0;
     s_next_irq = 0;
@@ -121,8 +134,10 @@ void adc_ring_stop(void)
     uint i;
 
     adc_run(false);
-    for (i = 0; i < ADC_RING_BLOCKS; i++)
-        if (dma_channel_is_busy((uint)s_dma[i])) dma_channel_abort((uint)s_dma[i]);
+    for (i = 0; i < ADC_RING_BLOCKS; i++) {
+        dma_channel_abort((uint)s_dma[i]);
+        dma_hw->ints0 = 1u << s_dma[i];   /* an abort can leave one pending */
+    }
     s_running = false;
     adc_fifo_drain();
 }
@@ -165,12 +180,21 @@ uint32_t adc_ring_measured_sps(void)
 uint32_t adc_ring_overruns(void) { return s_overruns; }
 
 /*
- * RMS deviation of a bare block, in LSB. Blocking, and deliberately so: it is
- * a bench measurement taken with nothing else running, and every later
- * amplitude figure — M7's amplifier noise, M8's link budget — is quoted
- * against it.
+ * RMS deviation of a bare block, in tenths of an LSB. Blocking, and
+ * deliberately so: it is a bench measurement taken with nothing else running,
+ * and every later amplitude figure -- M7's amplifier noise, M8's link budget
+ * -- is quoted against it.
+ *
+ * The input is the on-die temperature sensor (ADC channel 4): about 0.71 V,
+ * code ~880, a quiet diode, and no external parts. The plan originally said
+ * "leave GP26 at ground or 3V3", and that measures nothing: at a rail the
+ * ADC clips one side of the noise and reports 0 LSB RMS. Enabling both of
+ * the pad's pulls does not help either -- on RP2 that is a bus keeper, not a
+ * divider. The ADC core is the same whichever channel is selected, so the
+ * figure is the converter's own. Channel 0 is reselected before this
+ * returns.
  */
-uint32_t adc_ring_noise_floor_lsb(void)
+uint32_t adc_ring_noise_floor(int32_t *mean_code)
 {
     const int16_t *blk;
     size_t n = 0, i;
@@ -178,19 +202,37 @@ uint32_t adc_ring_noise_floor_lsb(void)
     uint64_t sq = 0;
     int32_t mean;
     uint32_t deadline = 1000000u;
+    uint32_t rms_tenths = 0;
 
+    adc_set_temp_sensor_enabled(true);
+    adc_select_input(ADC_TEMPERATURE_CHANNEL_NUM);
+    sleep_ms(10);                               /* let the sensor settle */
+
+    /* Discard whatever was in flight while the input changed, then take the
+     * first whole block after it. */
     while ((blk = adc_ring_next_block(&n)) == 0 && deadline--)
         tight_loop_contents();
-    if (blk == 0 || n == 0) return 0;
+    deadline = 1000000u;
+    while ((blk = adc_ring_next_block(&n)) == 0 && deadline--)
+        tight_loop_contents();
 
-    for (i = 0; i < n; i++) sum += blk[i];
-    mean = (int32_t)(sum / (int64_t)n);
+    if (blk != 0 && n != 0) {
+        for (i = 0; i < n; i++) sum += blk[i];
+        mean = (int32_t)(sum / (int64_t)n);
 
-    for (i = 0; i < n; i++) {
-        int32_t d = blk[i] - mean;
-        sq += (uint64_t)((int64_t)d * d);
+        for (i = 0; i < n; i++) {
+            int32_t d = blk[i] - mean;
+            sq += (uint64_t)((int64_t)d * d);
+        }
+
+        /* sqrt(100 * sq / n) is 10 * RMS: tenths of an LSB. */
+        rms_tenths = gz_isqrt64((sq * 100u + n / 2u) / n);
+        if (mean_code) *mean_code = mean + ADC_MIDPOINT;
+    } else if (mean_code) {
+        *mean_code = -1;
     }
 
-    /* Round to the nearest LSB; the figure is quoted to one place at most. */
-    return gz_isqrt64((sq + n / 2u) / n);
+    adc_select_input(ADC_INPUT);
+    adc_set_temp_sensor_enabled(false);
+    return rms_tenths;
 }

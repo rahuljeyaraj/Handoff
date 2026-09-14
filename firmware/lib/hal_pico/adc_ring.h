@@ -35,8 +35,12 @@ const int16_t *adc_ring_next_block(size_t *count);
 uint32_t adc_ring_measured_sps(void);
 uint32_t adc_ring_overruns(void);
 
-/* Bare-ADC noise floor in LSB RMS. Every later amplitude measurement — M7's
- * amplifier noise, M8's link-budget check — is compared against this one. */
-uint32_t adc_ring_noise_floor_lsb(void);
+/* Bare-ADC noise floor in tenths of an LSB RMS, taken on the on-die
+ * temperature sensor (a rail clips the noise and reads 0; ~0.71 V does not).
+ * *mean_code gets the raw 12-bit mean, so the log shows the input really was
+ * away from the rails. Every
+ * later amplitude measurement — M7's amplifier noise, M8's link-budget check
+ * — is compared against this one. */
+uint32_t adc_ring_noise_floor(int32_t *mean_code);
 
 #endif /* HANDOFF_ADC_RING_H */

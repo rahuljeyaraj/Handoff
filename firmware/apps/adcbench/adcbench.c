@@ -1,7 +1,8 @@
 /*
  * Handoff — ADC at 500 ksps and the real-time budget. M4.
  *
- * Hardware: NONE. Leave GP26 at ground or 3V3.
+ * Hardware: NONE. Leave GP26 unconnected: the noise floor is taken on the
+ * on-die temperature sensor, because a pin at a rail clips the noise.
  *
  * This closes design §17's second open item. The arithmetic says it will hold:
  * 500 k samples/s against a 150 MHz core is 300 cycles per sample and a
@@ -110,7 +111,9 @@ int main(void)
 {
     uint64_t t_start;
     uint32_t noise, sps, err, hr;
+    int32_t  mean_code = -1;
     uint32_t last = 0;
+    bool rate_done = false;
 
     stdio_init_all();
     sleep_ms(2000);
@@ -128,9 +131,10 @@ int main(void)
 
     /* Noise floor first, with core 1 not yet running and nothing else
      * touching the ring — a bare-ADC figure has to be taken bare. */
-    noise = adc_ring_noise_floor_lsb();
-    printf("\n  noise floor: %lu LSB RMS (12-bit, input at rail)\n",
-           (unsigned long)noise);
+    noise = adc_ring_noise_floor(&mean_code);
+    printf("\n  noise floor: %lu.%lu LSB RMS (12-bit, mean code %ld, on-die temperature sensor)\n",
+           (unsigned long)(noise / 10u), (unsigned long)(noise % 10u),
+           (long)mean_code);
 
     /* Restart so the rate measurement counts from a known zero. */
     adc_ring_stop();
@@ -160,14 +164,16 @@ int main(void)
                    (unsigned long)(hr / 10u), (unsigned long)(hr % 10u));
         }
 
-        if (secs == RATE_SECONDS) {
+        if (secs >= RATE_SECONDS && !rate_done) {
+            rate_done = true;
             sps = adc_ring_measured_sps();
             err = ppm_err(sps, (uint32_t)HANDOFF_ADC_FS_HZ);
             printf("\n  --- %lus rate ---\n", (unsigned long)RATE_SECONDS);
             printf("    measured %lu sps, nominal %d sps, error %lu ppm\n",
                    (unsigned long)sps, HANDOFF_ADC_FS_HZ, (unsigned long)err);
             check(err <= 100u, "sample rate within 0.01% of 500 ksps");
-            check(noise > 0u, "bare-ADC noise floor recorded in LSB RMS");
+            check(noise > 0u && mean_code > 256 && mean_code < 3840,
+                  "bare-ADC noise floor recorded away from the rails");
         }
 
         if (secs >= SOAK_SECONDS) break;
@@ -175,7 +181,12 @@ int main(void)
 
     hr = headroom_tenths(s_busy_us, time_us_64() - t_start);
 
+    /* Quoted again here: one 2048-sample block is 68 ppm at 60 s and 7 ppm
+     * over the soak, so this is the figure to record. */
+    sps = adc_ring_measured_sps();
     printf("\n  --- %lu minute soak ---\n", (unsigned long)(SOAK_SECONDS / 60u));
+    printf("    sample rate:        %lu sps (%lu ppm)\n", (unsigned long)sps,
+           (unsigned long)ppm_err(sps, (uint32_t)HANDOFF_ADC_FS_HZ));
     printf("    dropped DMA blocks: %lu\n", (unsigned long)adc_ring_overruns());
     printf("    dropped ipc chips:  %lu\n", (unsigned long)ipc_dropped());
     printf("    windows scored:     %lu\n", (unsigned long)s_windows);

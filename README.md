@@ -136,8 +136,9 @@ firmware/
     record/               vCard codec, compact TLV, fragmentation, store
     proto/                link state machine, role election, carousel
     hal/                  the seam — interface and config only, no code
-    hal_pico/             the RP2350 binding (BLE and flash done at M2;
-                          PIO, ADC and IPC still stubs until M3-M5)
+    hal_pico/             the RP2350 binding (BLE and flash at M2, PIO at
+                          M3, ADC ring, IPC and USB telemetry at M4; the
+                          hal.h binding itself is still a stub until M5)
   test/
     host/                 unit tests, channel simulator, two-node protocol sim
     vectors/generated/    from tools/gen_vectors.py — derived, git-ignored
@@ -207,8 +208,8 @@ hardware already on the desk. One new variable at a time.
 - [x] **M0** — board, toolchain and USB console alive (`firmware/apps/blink`)
 - [x] **M1** — DSP + protocol library, host tested — *no hardware*
 - [x] **M2** — BLE → phone → contact in the address book — *Pico + phone*
-- [ ] **M3** — carrier generation, self-measured — *no hardware*
-- [ ] **M4** — ADC at 500 ksps + Goertzel real-time budget — *no hardware*
+- [x] **M3** — carrier generation, self-measured — *no hardware*
+- [x] **M4** — ADC at 500 ksps + Goertzel real-time budget — *no hardware*
 - [ ] **M5** — full link inside one board — *one jumper wire*
 - [ ] **M6** — two boards over a wire (first independent-clock test)
 - [ ] **M7** — analogue front end characterised on the bench
