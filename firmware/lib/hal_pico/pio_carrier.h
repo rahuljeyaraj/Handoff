@@ -51,6 +51,25 @@ uint32_t pio_carrier_measure_hz(uint32_t gate_us);
 void pio_carrier_mark_continuous(bool on);
 
 /*
+ * M7 instrumentation: a repeating pattern instead of the carrier. The
+ * generator runs at an EXACT integer divider (no fractional jitter, and a
+ * frequency the sweep can state as a clock ratio rather than a rounded Hz),
+ * and each period of period_bits bits has its first high_bits bits high:
+ *
+ *   f = clk_sys / (sm_div * period_bits)
+ *   fundamental amplitude = (2 V / pi) * sin(pi * high_bits / period_bits)
+ *
+ * so period 2, high 1 is the plain carrier at any divider up to 65535, and
+ * period 32 with high_bits stepped 1..16 is an amplitude sweep with nothing
+ * on the bench changing -- the clipping point is found from the console.
+ * period_bits must be a power of two, at most PIO_CARRIER_TONE_BITS, so the
+ * pattern tiles the DMA ring. Runs until mark_continuous(false) or the next
+ * send(); pio_carrier_init() restores the link's divider.
+ */
+#define PIO_CARRIER_TONE_BITS 2048u
+bool pio_carrier_tone(uint32_t sm_div, uint32_t period_bits, uint32_t high_bits);
+
+/*
  * Open and close a gate on the edge counter.
  *
  * The alignment criterion needs an exact edge count over a burst rather than a

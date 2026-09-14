@@ -350,7 +350,26 @@ static void rx_print_stats(void)
  * in it is that many frames lost. A bad-CRC frame is assumed to be the next
  * one expected: its header is probably right, its payload is not trusted.
  * A jump backwards means the transmitter rebooted; resynchronise silently.
+ *
+ * Bit errors are counted in bad-CRC frames too, against the pattern the
+ * sequence implies -- otherwise the column reads 0 at the knee while FER
+ * reads 0.13, which M6 found and left. The sequence for a failed frame is
+ * the header's ten bits where they agree with the next one expected (or
+ * run a little ahead of it, a lost frame), else the expected one; a wrong
+ * guess costs at most one frame's worth of half-wrong bits.
  */
+static uint16_t failed_frame_seq(const frame_hdr_t *h)
+{
+    uint16_t low  = (uint16_t)(h->frag_index | ((uint16_t)h->record_id << 4));
+    uint16_t seq  = (uint16_t)((s_expect & 0xFC00u) | low);
+    uint16_t gap  = (uint16_t)(seq - s_expect);
+
+    if (!s_synced) return seq;
+    if (gap < 16u) return seq;                       /* header agrees, or ahead */
+    if ((uint16_t)(seq + 0x400u - s_expect) < 16u) return (uint16_t)(seq + 0x400u);
+    return s_expect;
+}
+
 static void rx_frame(frame_rx_result_t res)
 {
     uint32_t now_s = elapsed_s(s_st.since);
@@ -383,14 +402,19 @@ static void rx_frame(frame_rx_result_t res)
                    (unsigned)seq, (unsigned)s_rx.last_margin, (unsigned long)errs);
     } else {
         const frame_hdr_t *h = frame_rx_hdr(&s_rx);
+        uint16_t seq  = failed_frame_seq(h);
+        uint32_t errs = count_bit_errors(frame_rx_payload(&s_rx), seq);
+
         s_st.bad_crc++;
         s_st.last_fail_s = now_s;
         s_st.margin_sum += s_rx.last_margin;
+        s_st.bit_errors += errs;
+        s_st.bits       += HANDOFF_FRAG_PAYLOAD * 8u;
         if (s_synced) s_expect++;
         if (s_verbose)
-            printf("    seq %5u?: CRC BAD  margin %u  hdr %u/%u rec %u\n",
-                   (unsigned)(s_expect - 1u), (unsigned)s_rx.last_margin,
-                   h->frag_index, h->frag_count, h->record_id);
+            printf("    seq %5u?: CRC BAD  margin %u  hdr %u/%u rec %u  %lu bit errors\n",
+                   (unsigned)seq, (unsigned)s_rx.last_margin,
+                   h->frag_index, h->frag_count, h->record_id, (unsigned long)errs);
     }
 
     if (s_st.seen % PROGRESS_EVERY == 0u) rx_print_stats();

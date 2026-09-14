@@ -537,10 +537,13 @@ RMS in silence. The simulator column is `handoff_ber --random-phase
    did not reproduce it. Not explained. `hal_pico` now detects a transmit
    busy 20 ms past its airtime, records the DMA and state-machine state
    for the console, counts it (`hal_pico_tx_stalls`) and resets the path.
-   The one place a running state machine is poked from core 0 is
+   The one place a running state machine is poked from core 0 was
    `pio_sm_set_consecutive_pindirs` in `pio_carrier_drive`, twice a frame,
-   which rewrites PINCTRL and force-executes an instruction; that is the
-   first suspect when it recurs.
+   which rewrites PINCTRL and force-executes an instruction; that was the
+   first suspect. Removed on 14 Sep 2026: `drive()` now switches the pad's
+   function select between PIO0 and SIO-as-input and never touches the
+   state machine (txgen's M3 suite and a loopback run re-passed). If the
+   stall recurs, it was never this.
 6. **With a ≥100 kΩ source the received amplitude at 200 kHz is 0.6× the
    divider arithmetic, and at 40 kHz about 0.07×;** at 10 kΩ both carriers
    read within 2 % of it. Consistent with a few pF in series — a breadboard
@@ -642,7 +645,9 @@ amplifier, which is M8.
    frame, so the column reads 0 while FER reads 0.13. A lower bound is one
    flipped bit per CRC failure, ≥ 2 × 10⁻⁴ at 200 kΩ. Counting payload
    bits in bad-CRC frames against the sequence the header carries would
-   give the real BER; not done, because FER is what the budget needs.
+   give the real BER; not done then, because FER is what the budget needs.
+   Done on 14 Sep 2026 during M7's software session (`failed_frame_seq` in
+   linktest): the table above predates it, so its BER column stays 0.
 4. **The 220 Ω shunt is what makes the sweep possible on a bare pin.** M5
    found the ADC cannot be fed from more than ~160 kΩ, but that is the
    source impedance the sample capacitor sees, and with the shunt in place
@@ -676,6 +681,40 @@ Exit criteria:
 - Every adjacent MSOP pin pair continuity-tested before power (§12.1).
 
 Cannot prove: coupling. This is a bench measurement of a two-stage amplifier.
+
+**Software half done 14 Sep 2026, hardware not yet built.** `apps/afe_sweep`
+measures each criterion from its own console (`v s c n a x`, one letter
+per criterion; the header comment maps them) and was bench-checked against
+the passive 10 kΩ / 540 Ω divider on the COM8 board, GP2 → GP26, one board:
+
+- 131 LSB ±0.3 from 20 kHz to 950 kHz (M5/M6 read 132–134 through the
+  same divider), gain 0.98 against the divider arithmetic; noise 0.90 LSB
+  RMS against 0.9 on-die in the same minute; the amplitude staircase
+  linear from 13 to 131 LSB; the capacitance fit reports "no rolloff,
+  C < 0.9 pF" on a channel that has none; the corner search reports
+  "within 3 dB to 1.53 MHz" on a channel with no corner.
+- The generator is `pio_carrier_tone()`: an exact integer PIO divider and
+  a bit pattern, so every point is a clock ratio and the DFT (Hann, float,
+  16 384 samples, 30 Hz bins) is evaluated at the exact frequency; a
+  32-bit pattern with *h* bits high steps the fundamental by sin(πh/32),
+  which is how the clipping point is found without touching the bench.
+- **The corner is measured through the alias, deliberately.** A tone above
+  250 kHz folds to |f − k·500 kHz| with the amplitude of the analogue
+  response at f, which is the response at the ADC pin and therefore the
+  one the link sees; the bare divider reading flat to 950 kHz is the
+  check. Tones at multiples of 250 kHz are unusable (DC, or π/2 high from
+  two samples per period) and the search steps a divider past them.
+- **The link's own 200 kHz is a coherent-sampling trap on a square wave:**
+  200/500 = 2/5, the ADC meets the square at the same five phases forever,
+  and harmonics 9, 11, 19, 21 … fold onto the fundamental. On the bare
+  divider the reading moves ±2 % with the phase the tone started at — the
+  132–134 LSB spread M5 and M6 recorded is that, not the channel. Every
+  row flags a folding harmonic (`!9`); behind R9/C2 they are gone.
+- Two things the design does not say and the AFE bench needs: the source
+  must be AC-coupled into R2 (DC-coupled, R2 against R3 biases stage 1 at
+  ~0.15 V and pins it on the rail), and gain/corner/clip are injected at
+  the stage-1 input while the capacitance fit is injected at the pad end
+  of R2. Both are drawn in the bench sheet the session produced.
 
 ### M8 — Loopback through the AFE, capacitor as fake body
 

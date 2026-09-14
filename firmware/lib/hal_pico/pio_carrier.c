@@ -37,6 +37,13 @@
 static uint32_t s_mark[8] __attribute__((aligned(32)));
 static uint32_t s_tx[CARRIER_TX_WORDS];
 
+/*
+ * M7's tone: a repeating pattern of up to PIO_CARRIER_TONE_BITS bits, looped
+ * the same way as s_mark. 2048 bits is 256 bytes, so the ring is 8 address
+ * bits and the buffer is aligned to that.
+ */
+static uint32_t s_tone[PIO_CARRIER_TONE_BITS / 32] __attribute__((aligned(256)));
+
 static PIO      s_pio    = pio0;
 static uint     s_sm_out = 0;
 static uint     s_sm_cnt = 1;
@@ -82,6 +89,7 @@ void pio_carrier_init(uint32_t carrier_hz)
 
     /* ---- generator ---- */
     pio_gpio_init(s_pio, CARRIER_PIN);
+    gpio_set_dir(CARRIER_PIN, GPIO_IN);       /* SIO side: input, so SIO = high-Z */
     c = carrier_out_program_get_default_config(s_off_out);
     sm_config_set_out_pins(&c, CARRIER_PIN, 1);
     /* Shift right, autopull at 32: one pad bit per cycle, refilled for free. */
@@ -89,6 +97,9 @@ void pio_carrier_init(uint32_t carrier_hz)
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
     sm_config_set_clkdiv(&c, div);
     pio_sm_init(s_pio, s_sm_out, s_off_out, &c);
+    /* The SM's own pindir, set once while it is stopped; drive() switches the
+     * pad's function select from here on and never touches the SM. */
+    pio_sm_set_consecutive_pindirs(s_pio, s_sm_out, CARRIER_PIN, 1, true);
 
     /* ---- counter ---- */
     c = edge_count_program_get_default_config(s_off_cnt);
@@ -107,14 +118,24 @@ void pio_carrier_init(uint32_t carrier_hz)
 /*
  * design §6.3: the pad must be genuinely high-Z while receiving, not driven
  * low — a driven pad still loads the electrode the far end is listening on.
- * Clearing the PIO pin direction is what does that; the pulls go with it,
- * because a pull is a load too, and because txgen tests the high-Z claim by
- * seeing whether an internal pull can move the pad at all.
+ * The pulls go too, because a pull is a load, and because txgen tests the
+ * high-Z claim by seeing whether an internal pull can move the pad at all.
+ *
+ * The pad's output enable is switched by its FUNCTION SELECT, not by the
+ * state machine's pin direction. The SM's pindir for GP2 is set once, in
+ * init, and never touched again: switching the pad to SIO (whose direction
+ * for GP2 is input, the reset state) makes it high-Z, and switching it back
+ * to PIO0 hands it to the generator again. The alternative,
+ * pio_sm_set_consecutive_pindirs, force-executes a `set pindirs` on the
+ * RUNNING state machine and restores PINCTRL a few system cycles later; it
+ * was M5's first suspect for the one transmit in ~2 700 that stayed busy
+ * forever, and this way there is nothing to suspect. The PIO still reads
+ * the pad for the edge counter whichever function owns it.
  */
 void pio_carrier_drive(bool on)
 {
     s_driving = on;
-    pio_sm_set_consecutive_pindirs(s_pio, s_sm_out, CARRIER_PIN, 1, on);
+    gpio_set_function(CARRIER_PIN, on ? GPIO_FUNC_PIO0 : GPIO_FUNC_SIO);
 
     if (!on) {
         gpio_disable_pulls(CARRIER_PIN);
@@ -147,7 +168,9 @@ static void tx_abort(void)
     pio_sm_set_enabled(s_pio, s_sm_out, true);
 }
 
-static void tx_start(const uint32_t *src, uint32_t words, bool loop)
+/* ring_bits > 0 loops src forever over a 2^ring_bits-byte ring, which src
+ * must be aligned to; 0 sends words once. */
+static void tx_start(const uint32_t *src, uint32_t words, uint ring_bits)
 {
     dma_channel_config c = dma_channel_get_default_config((uint)s_dma);
 
@@ -157,16 +180,41 @@ static void tx_start(const uint32_t *src, uint32_t words, bool loop)
     channel_config_set_read_increment(&c, true);
     channel_config_set_write_increment(&c, false);
     channel_config_set_dreq(&c, pio_get_dreq(s_pio, s_sm_out, true));
-    if (loop) channel_config_set_ring(&c, false, 5);   /* 32 bytes = 8 words */
+    if (ring_bits) channel_config_set_ring(&c, false, ring_bits);
 
     dma_channel_configure((uint)s_dma, &c, &s_pio->txf[s_sm_out], src,
-                          loop ? 0xFFFFFFFFu : words, true);
+                          ring_bits ? 0xFFFFFFFFu : words, true);
 }
 
 void pio_carrier_mark_continuous(bool on)
 {
-    if (on) tx_start(s_mark, count_of(s_mark), true);
+    if (on) tx_start(s_mark, count_of(s_mark), 5);   /* 32 bytes = 8 words */
     else    tx_abort();
+}
+
+bool pio_carrier_tone(uint32_t sm_div, uint32_t period_bits, uint32_t high_bits)
+{
+    uint32_t bits = PIO_CARRIER_TONE_BITS;
+    uint32_t b;
+
+    if (sm_div < 1u || sm_div > 65535u) return false;
+    if (period_bits < 2u || period_bits > bits) return false;
+    if (period_bits & (period_bits - 1u)) return false;   /* must tile the ring */
+    if (high_bits < 1u || high_bits >= period_bits) return false;
+
+    /* Bit b of the stream is bit (b % 32) of word (b / 32), LSB first,
+     * because the OSR shifts right -- the same layout send() uses. The
+     * high bits lead each period so a rising edge starts it. */
+    memset(s_tone, 0, sizeof s_tone);
+    for (b = 0; b < bits; b++)
+        if ((b % period_bits) < high_bits)
+            s_tone[b >> 5] |= 1u << (b & 31u);
+
+    tx_abort();
+    pio_sm_set_clkdiv_int_frac(s_pio, s_sm_out, (uint16_t)sm_div, 0);
+    pio_sm_clkdiv_restart(s_pio, s_sm_out);
+    tx_start(s_tone, count_of(s_tone), 8);          /* 256 bytes = 64 words */
+    return true;
 }
 
 void pio_carrier_send(const uint8_t *chips, size_t n)
@@ -194,7 +242,7 @@ void pio_carrier_send(const uint8_t *chips, size_t n)
         b += s_bits_per_chip;
     }
 
-    tx_start(s_tx, words, false);
+    tx_start(s_tx, words, 0);
 }
 
 bool pio_carrier_busy(void)
