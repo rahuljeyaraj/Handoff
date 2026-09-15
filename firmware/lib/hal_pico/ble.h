@@ -72,7 +72,11 @@ typedef enum {
     BLE_CTRL_FAKE_RX      = 0x05,  /* u8 delay seconds                (M2)  */
     BLE_CTRL_FORGET       = 0x06,  /* erase the provisioned record    (M2)  */
     BLE_CTRL_HAPTIC       = 0x07,  /* u8: 0 = off, 1 = on, persisted (review item 11) */
-    BLE_CTRL_IDENTIFY     = 0x08   /* no args: flash and buzz this band (lib/ui) */
+    BLE_CTRL_IDENTIFY     = 0x08,  /* no args: flash and buzz this band (lib/ui) */
+    BLE_CTRL_RESET        = 0x09   /* no args: reset for a new wearer — bond, card,
+                                      held card, preferences; the band then drops
+                                      the link. The app's "Forget this band"
+                                      (docs/band-ownership-brief.md §3). */
 } ble_ctrl_op_t;
 
 /* ---- status ----------------------------------------------------------- */
@@ -86,7 +90,8 @@ typedef enum {
 #define BLE_ST_USB_POWER   0x10u  /* VBUS present at the Pico (v2). NOT charging: the
                                      charger is off-board on J5 and invisible here */
 #define BLE_ST_HAPTIC_ON   0x20u  /* the motor fires on a shared/received card (review item 11) */
-#define BLE_ST_DEV_MODE    0x40u  /* the button's dev mode is on (lib/ui)      */
+/* 0x40 was the button's dev mode, removed 15 Sep 2026 (band-ownership §5).
+ * Left unused rather than renumbering: the app parses these by value. */
 
 /*
  * 20 bytes, which is exactly one notification at the 23-byte ATT floor
@@ -172,18 +177,32 @@ bool     ble_encrypted(void);
 bool     ble_telemetry_subscribed(void);
 bool     ble_rx_vcard_subscribed(void);
 
-/* ---- the bond ----------------------------------------------------------- */
+/* ---- the bond: one band, one phone ------------------------------------ */
 
-/* Whether any phone's keys are stored. Decides "pairing mode" (advertising
- * with no bond) from "bonded, phone away", which look the same on the air
- * and must not on the LED. */
+/*
+ * A band has no owner or exactly one (docs/band-ownership-brief.md §1).
+ * Both states persist in flash; advertising is open in both, so the owner
+ * can find the band and a bystander can use the bench-only characteristics.
+ * What is gated is PAIRING: with no bond stored any phone may pair; with
+ * one stored only the phone whose identity resolves to it may — that is
+ * the owner re-pairing after a Forget in Bluetooth settings — and anyone
+ * else is declined (SM_EVENT_JUST_WORKS_REQUEST in ble.c). The way out is
+ * ble_forget_bonds(), from the button or from the owner's app.
+ */
+
+/* Whether the band has an owner: a phone's keys are stored. Decides "no
+ * owner" (advertising, blue) from "owned, phone away", which look the same
+ * on the air and must not on the LED. Never more than one bond exists under
+ * the rule above; the function counts anyway rather than trusting it. */
 bool     ble_has_bond(void);
 
 /*
  * Erase every stored bond and drop the connection if there is one. The
- * band then advertises as a fresh device; the phone still holds its half of
- * the keys until the app's Forget, so a reconnect from it is refused rather
- * than re-paired. BTstack context only, like everything else here.
+ * band has no owner afterwards and advertises as a fresh device; a phone
+ * that still holds its half of the keys finds them refused on reconnect,
+ * which is that phone's cue to forget the band. BTstack context only, like
+ * everything else here. The rest of a reset — the card, a held card, the
+ * preferences — is the app's (handoff.c reset_for_new_wearer).
  */
 void     ble_forget_bonds(void);
 

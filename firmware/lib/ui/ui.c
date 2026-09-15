@@ -28,7 +28,6 @@ PAT(k_bg_fault,      250,  { RED, 125 }, { BLUE, 125 });
 PAT(k_bg_rendezvous, 100,  { WHITE, 50 }, { OFF, 50 });
 PAT(k_bg_link,       0,    { WHITE, 0 });                    /* solid, held */
 PAT(k_bg_pairing,    2000, { BLUE, 80 }, { OFF, 80 }, { BLUE, 80 });
-PAT(k_bg_dev,        2000, { PURPLE, 100 });
 PAT(k_bg_critical,   5000, { RED, 100 }, { OFF, 100 }, { RED, 100 }, { OFF, 100 }, { RED, 100 });
 PAT(k_bg_low,        10000, { RED, 100 });
 PAT(k_bg_held,       5000, { AMBER, 100 });
@@ -123,7 +122,6 @@ static const ui_led_pat_t *background(const ui_t *u)
     default: break;
     }
     if (u->pairing)                  return &k_bg_pairing;
-    if (u->dev)                      return &k_bg_dev;
     if (u->batt == UI_BATT_CRITICAL) return &k_bg_critical;
     if (u->batt == UI_BATT_LOW)      return &k_bg_low;
     if (u->held)                     return &k_bg_held;
@@ -246,8 +244,6 @@ void ui_event(ui_t *u, ui_event_t ev, uint32_t now)
         fg(u, &k_fg_bond_clear, now);
         motor(u, &k_motor_buzz, now);
         break;
-    case UI_EV_DEV_ON:       u->dev = true;  break;
-    case UI_EV_DEV_OFF:      u->dev = false; break;
     case UI_EV_IDENTIFY:
         fg(u, &k_fg_identify, now);
         motor(u, &k_motor_triple, now);
@@ -298,7 +294,7 @@ static const char *const k_names[UI_EV_COUNT] = {
     "link-complete", "link-forwarded", "link-held", "link-released",
     "link-abort", "link-no-card",
     "battery-ok", "battery-low", "battery-critical",
-    "fault", "bond-cleared", "dev-on", "dev-off", "identify",
+    "fault", "bond-cleared", "identify",
     "battery-show-good", "battery-show-mid", "battery-show-low", "battery-show-unknown",
     "hold-reached",
 };

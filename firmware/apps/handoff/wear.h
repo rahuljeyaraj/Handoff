@@ -14,12 +14,16 @@
  * the same trade handoff.c's s_rx_ready makes, and for the same reason: an
  * indicator is not a queue.
  *
- * The button. SW2 on GP15, R15 pulling up, active low. Its three lengths:
+ * The button. SW2 on GP15, R15 pulling up, active low. Its two lengths:
  *
  *   short          battery check: one flash by level
- *   hold 2 s       dev mode toggle (a flag in the status notify, purple blip)
- *   hold 6 s       clear the bond — done on the BTstack side, which asks
- *                  wear_take_forget_request() and posts BOND_CLEARED after
+ *   hold 6 s       reset for a new wearer — done on the BTstack side, which
+ *                  asks wear_take_reset_request(), wipes everything the
+ *                  previous wearer left (handoff.c) and posts BOND_CLEARED
+ *
+ * Nothing happens at any shorter hold. A 2 s "dev mode" toggle used to live
+ * between the two and was removed with the ownership model
+ * (docs/band-ownership-brief.md §5).
  *
  * GP15 is also where M14's bench sync pulse lived. The two cannot share a
  * pin — on the product board a press during a driven-high pulse shorts the
@@ -79,11 +83,9 @@ void wear_link(const link_sm_t *sm);
 
 /* ---- outputs ---------------------------------------------------------- */
 
-bool wear_dev_mode(void);
-
-/* True once per 6 s hold: the BTstack side erases the bond and posts
- * UI_EV_BOND_CLEARED. */
-bool wear_take_forget_request(void);
+/* True once per 6 s hold: the BTstack side resets the band for a new wearer
+ * and posts UI_EV_BOND_CLEARED. */
+bool wear_take_reset_request(void);
 
 /* ---- the bench console -------------------------------------------------- */
 

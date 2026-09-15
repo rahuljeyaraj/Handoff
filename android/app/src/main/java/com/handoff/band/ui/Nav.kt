@@ -119,6 +119,9 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
 
     fun couldNotFind(code: BandCode) = PairStep.Failed(
         "Couldn't find ${code.name}.\nIs it switched on and close by?", code)
+    // The band has an owner and this phone is not it (band-ownership brief
+    // §6, the wearer's words). The reset is the only thing the wearer can do.
+    val bandInUse = "Band in use\nHold the button for 6 s to reset."
     // The phone's scanner, not the band (Pairing's class comment). The only
     // remedy is the wearer's, so it is named.
     val cannotScan =
@@ -175,18 +178,29 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     }
 
     // Connecting is the service's to finish: the link comes up and bonds
-    // (ready), or the bond is refused, or nothing answers for 15 s. A band
-    // remembered and then not connected is forgotten again, so that a retry
-    // — or the next visit — starts clean rather than on top of a service
-    // still trying.
+    // (ready), or the band declines (it has an owner), or the wearer
+    // dismisses the dialog, or nothing answers for 15 s. A band remembered
+    // and then not connected is forgotten again, so that a retry — or the
+    // next visit — starts clean rather than on top of a service still
+    // trying. (On a refusal the service has already let go of the band and
+    // kept the reason in its state for this to read; the forget below is
+    // then a no-op.)
+    //
+    // The 15 s silence gets the same two lines as the refusal: a band the
+    // phone cannot find is very often just out of range, but the reset is
+    // the only thing the wearer can *do* about it, so it is offered as a
+    // question rather than a diagnosis.
     val connecting = step as? PairStep.Connecting
     LaunchedEffect(connecting, state?.ready, state?.lastError, state?.notFoundAt) {
         if (connecting == null) return@LaunchedEffect
         val s = state ?: return@LaunchedEffect
         val failed = when {
             s.ready -> { step = PairStep.Connected(connecting.name); return@LaunchedEffect }
-            s.lastError == BandClient.ERR_BOND_REFUSED -> "Pairing was cancelled"
-            s.lastError != null || s.notFoundAt != null -> "Couldn't connect to ${connecting.name}"
+            s.lastError == BandClient.ERR_BOND_REFUSED -> bandInUse
+            s.lastError == BandClient.ERR_BOND_CANCELLED -> "Pairing was cancelled"
+            s.notFoundAt != null ->
+                "Couldn't connect to ${connecting.name}.\nBand in use? Hold the button for 6 s to reset."
+            s.lastError != null -> "Couldn't connect to ${connecting.name}"
             else -> return@LaunchedEffect
         }
         BandService.forget(context)
@@ -398,9 +412,17 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 },
                 // Pops back to the list (review item 12): with the unpaired
                 // Band screen gone, there is nothing left here to show once
-                // the band is forgotten.
+                // the band is forgotten. The service resets the band first
+                // when it can reach it (band-ownership brief §3) and reports
+                // back once the phone side is clean; a service that is not
+                // bound can only do the phone side.
                 onForget = {
-                    if (!BandService.forget(context)) forgetFailedAt = System.currentTimeMillis()
+                    val done = { removed: Boolean ->
+                        if (!removed) forgetFailedAt = System.currentTimeMillis()
+                    }
+                    val service = band.service
+                    if (service != null) service.forgetBand(done)
+                    else done(BandService.forget(context))
                     nav.popBackStack()
                 },
                 onCard = { nav.navigate(Routes.CARD) },

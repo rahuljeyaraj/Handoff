@@ -384,7 +384,11 @@ but nothing calls it, and `BandService` has no stop entry point.
 
 - **Disconnect** — drop the link, keep the pairing.
 - **Forget this band** — `Pairing.forget()` +
-  `CompanionDeviceManager.disassociate()` + stop the service.
+  `CompanionDeviceManager.disassociate()` + stop the service. Since 15 Sep
+  2026 it first sends the band `CTRL_RESET` when the encrypted link is up,
+  so the band is wiped for its next wearer too (`docs/band-ownership-brief.md`
+  §3): both roads — the app's Forget and the band's 6 s hold — end with the
+  band owning nobody.
 
 **Watch out:** the service is `START_STICKY` and `MainActivity.onCreate`
 restarts it from the stored address on every launch. Disconnect therefore needs

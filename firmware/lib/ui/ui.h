@@ -10,7 +10,7 @@
  * The model is two layers over the LED and one over the motor:
  *
  *   background   a repeating pattern chosen from the band's STATE, by
- *                priority: fault > body link active > pairing > dev mode >
+ *                priority: fault > body link active > pairing >
  *                battery critical > battery low > holding a card > off.
  *                Off is the product's steady state — a wristband that is
  *                listening for a touch shows nothing, like a WHOOP, not a
@@ -29,7 +29,7 @@
  *
  *   state / event                    LED                          motor
  *   boot                             white 200 ms                 tap
- *   pairing (advertising, no bond)   blue double-flash / 2 s      -
+ *   no owner (advertising, no bond)  blue double-flash / 2 s      -
  *   bonded, phone away               off                          -
  *   phone connected                  blue solid 2 s               -
  *   phone connected, idle            off                          -
@@ -45,12 +45,11 @@
  *   battery low                      red blip / 10 s              buzz, once
  *   battery critical                 red triple / 5 s             long, once
  *   fault                            red / blue 4 Hz              -
- *   bond cleared (button)            purple x4                    buzz
- *   dev mode (button)                purple blip / 2 s            -
+ *   reset for a new wearer           purple x4                    buzz
  *   identify (from the app)          white x3 fast                3 taps
  *   battery check (button)           green / amber / red 300 ms   -
  *   battery check, level unknown     white 300 ms                 -
- *   hold threshold reached           -                            tap
+ *   hold threshold reached (6 s)     -                            tap
  *
  * (h): masked by the app's vibrate setting. Everything else always plays.
  *
@@ -74,8 +73,8 @@ typedef struct {
 typedef enum {
     UI_EV_BOOT = 0,
     /* the phone link */
-    UI_EV_PAIRING,           /* state: advertising with no bond            */
-    UI_EV_NOT_PAIRING,       /* state: a bond exists, or connected         */
+    UI_EV_PAIRING,           /* state: no owner — advertising, no bond     */
+    UI_EV_NOT_PAIRING,       /* state: owned, or connected                 */
     UI_EV_PHONE_CONNECTED,
     UI_EV_CARD_WRITTEN,
     /* the body link, states */
@@ -96,9 +95,7 @@ typedef enum {
     UI_EV_BATTERY_CRITICAL,
     /* the rest */
     UI_EV_FAULT,             /* state, sticky until reboot                 */
-    UI_EV_BOND_CLEARED,
-    UI_EV_DEV_ON,            /* state */
-    UI_EV_DEV_OFF,
+    UI_EV_BOND_CLEARED,      /* reset for a new wearer: button or app      */
     UI_EV_IDENTIFY,
     UI_EV_BATTERY_SHOW_GOOD, /* the button's answer, by level              */
     UI_EV_BATTERY_SHOW_MID,
@@ -141,7 +138,6 @@ typedef struct {
     /* state the background is derived from */
     bool      fault;
     bool      pairing;
-    bool      dev;
     bool      held;
     ui_link_t link;
     ui_batt_t batt;

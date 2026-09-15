@@ -52,6 +52,8 @@ object Gatt {
     const val CTRL_FAKE_RX = 0x05
     const val CTRL_FORGET = 0x06
     const val CTRL_HAPTIC = 0x07
+    const val CTRL_IDENTIFY = 0x08
+    const val CTRL_RESET = 0x09
 
     /**
      * Ask the band to notify its hardcoded card in [seconds]. M2 only, and the
@@ -62,7 +64,17 @@ object Gatt {
     fun fakeRx(seconds: Int): ByteArray =
         byteArrayOf(CTRL_FAKE_RX.toByte(), seconds.coerceIn(0, 255).toByte())
 
+    /** Erase the card on the band, and only the card (Advanced). */
     fun forget(): ByteArray = byteArrayOf(CTRL_FORGET.toByte())
+
+    /**
+     * Reset the band for a new wearer (band-ownership brief §3): the bond,
+     * the card, a held card, the preferences. The band drops the link once
+     * it has done it, so there is no status to wait for — the write's
+     * acknowledgement, or the disconnect, is the answer. Only the owner's
+     * encrypted link is obeyed; the band ignores it otherwise.
+     */
+    fun reset(): ByteArray = byteArrayOf(CTRL_RESET.toByte())
 
     /** The Settings switch (review item 11). The band persists this itself. */
     fun haptic(on: Boolean): ByteArray =
@@ -129,6 +141,7 @@ data class BandStatus(
         const val TLM_ON = 0x08
         const val USB_POWER = 0x10
         const val HAPTIC_ON = 0x20
+        // 0x40 was the band's dev mode; retired 15 Sep 2026, never decoded here.
 
         /** Above this VSYS is not a cell (design decisions §8). */
         const val USB_VSYS_MV = 4300

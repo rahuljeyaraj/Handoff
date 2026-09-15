@@ -329,7 +329,7 @@ void test_ui(void)
         HF_EQ_INT(on, 250);
     }
 
-    hf_begin("ui: backgrounds by priority — fault > link > pairing > dev > critical > low > held");
+    hf_begin("ui: backgrounds by priority — fault > link > pairing > critical > low > held");
     {
         ui_out_t o;
         ui_init(&u, 0);
@@ -340,9 +340,6 @@ void test_ui(void)
         ui_step(&u, 5000, &o);    HF_CHECK(IS_OFF(o.led));      /* not held's blip */
         ui_event(&u, UI_EV_BATTERY_CRITICAL, 0);
         ui_step(&u, 200, &o);     HF_CHECK(IS_RED(o.led));      /* second of three */
-        ui_event(&u, UI_EV_DEV_ON, 0);
-        ui_step(&u, 200, &o);     HF_CHECK(IS_OFF(o.led));
-        ui_step(&u, 2050, &o);    HF_CHECK(IS_PURPLE(o.led));
         ui_event(&u, UI_EV_PAIRING, 0);
         ui_step(&u, 2050, &o);    HF_CHECK(IS_BLUE(o.led));
         ui_event(&u, UI_EV_LINK_SENDING, 0);
@@ -351,7 +348,6 @@ void test_ui(void)
         ui_step(&u, 2050, &o);    HF_CHECK(IS_RED(o.led));
         ui_step(&u, 2200, &o);    HF_CHECK(IS_BLUE(o.led));
         HF_EQ_INT(led_flashes(&u, 0, 1000), 1);           /* red/blue alternate: never dark */
-        ui_event(&u, UI_EV_DEV_OFF, 0);
         ui_event(&u, UI_EV_LINK_IDLE, 0);
         ui_step(&u, 2050, &o);    HF_CHECK(IS_RED(o.led));      /* fault is sticky */
     }
@@ -359,8 +355,10 @@ void test_ui(void)
     hf_begin("ui: bond cleared is four purple flashes and a buzz; identify three white and three taps");
     {
         uint32_t on; int pulses;
+        ui_out_t o;
         ui_init(&u, 0);
         ui_event(&u, UI_EV_BOND_CLEARED, 0);
+        ui_step(&u, 50, &o);      HF_CHECK(IS_PURPLE(o.led));
         HF_EQ_INT(led_flashes(&u, 0, 2000), 4);
         motor_stats(&u, 0, 2000, &on, &pulses);
         HF_EQ_INT(pulses, 1); HF_EQ_INT(on, 250);

@@ -249,11 +249,14 @@ static void handle_control(const uint8_t *data, uint16_t len)
 
     /*
      * control is not an encrypted characteristic — a bench session should not
-     * need a pairing dance to select a carrier. But two of its opcodes touch
-     * the wearer's identity, so those are gated here rather than by the
-     * attribute permissions.
+     * need a pairing dance to select a carrier. But three of its opcodes
+     * touch the wearer's identity or ownership, so those are gated here
+     * rather than by the attribute permissions: only the owner's phone, on
+     * its encrypted link, can fake a card, erase the card, or reset the
+     * band.
      */
-    if ((op == BLE_CTRL_FAKE_RX || op == BLE_CTRL_FORGET) && !s_encrypted) return;
+    if ((op == BLE_CTRL_FAKE_RX || op == BLE_CTRL_FORGET || op == BLE_CTRL_RESET)
+        && !s_encrypted) return;
 
     if (s_control_fn) s_control_fn(op, data + 1, (size_t)(len - 1), s_control_ctx);
 }
@@ -396,7 +399,7 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel,
     if (packet_type != HCI_EVENT_PACKET) return;
 
     switch (hci_event_packet_get_type(packet)) {
-    case SM_EVENT_JUST_WORKS_REQUEST:
+    case SM_EVENT_JUST_WORKS_REQUEST: {
         /*
          * No display and no keypad, so Just Works is the only pairing method
          * available and it is accepted rather than confirmed. That buys
@@ -404,9 +407,28 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel,
          * middle at the one moment of pairing, which happens once in a
          * device's life with the band in the wearer's own hand. Recorded in
          * architecture §11.2 rather than left as a surprise.
+         *
+         * Who may pair is the ownership rule (ble.h, "one band, one phone"):
+         * anyone when there is no bond; the owner again when there is one;
+         * nobody else. The owner is recognised by identity — BTstack
+         * resolves the peer against the stored IRK on connect, and holds a
+         * pairing request until that lookup has finished (sm.c,
+         * SM_RESPONDER_PH1_PAIRING_REQUEST_RECEIVED_W4_IRK), so the index
+         * is settled by the time this event arrives. A phone that did
+         * Forget in Bluetooth settings keeps its IRK and resolves; a phone
+         * that never owned this band does not, and is declined. The decline
+         * reaches the phone as a pairing failure within a second or two,
+         * which the app turns into "Band in use".
          */
-        sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
+        hci_con_handle_t h = sm_event_just_works_request_get_handle(packet);
+        if (!ble_has_bond() || sm_le_device_index(h) >= 0) {
+            sm_just_works_confirm(h);
+        } else {
+            printf("ble: pairing declined, the band has an owner\n");
+            sm_bonding_decline(h);
+        }
         break;
+    }
 
     case SM_EVENT_PAIRING_COMPLETE:
         s_encrypted = sm_event_pairing_complete_get_status(packet) == ERROR_CODE_SUCCESS;
@@ -506,17 +528,33 @@ bool ble_rx_vcard_subscribed(void) { return s_sub_rx_vcard; }
 
 /* ---- the bond --------------------------------------------------------- */
 
-bool ble_has_bond(void)
+/* MAX_NR_LE_DEVICE_DB_ENTRIES stays at 4 because BTstack wants headroom,
+ * but the pairing rule admits a second phone only by resolving to the
+ * first's entry, which BTstack then updates in place rather than adding to
+ * (sm.c sm_process_bonding_information). So the count here is 0 or 1; a 2
+ * would mean the rule has a hole, and is worth a line on the console. */
+static int bond_count(void)
 {
-    int i, n = le_device_db_max_count();
+    int i, count = 0, n = le_device_db_max_count();
     for (i = 0; i < n; i++) {
         int type = BD_ADDR_TYPE_UNKNOWN;
         bd_addr_t addr;
         sm_key_t irk;
         le_device_db_info(i, &type, addr, irk);
-        if (type != BD_ADDR_TYPE_UNKNOWN) return true;
+        if (type != BD_ADDR_TYPE_UNKNOWN) count++;
     }
-    return false;
+    return count;
+}
+
+bool ble_has_bond(void)
+{
+    static bool warned;
+    int n = bond_count();
+    if (n > 1 && !warned) {
+        warned = true;
+        printf("ble: %d bonds stored, the one-owner rule has a hole\n", n);
+    }
+    return n > 0;
 }
 
 void ble_forget_bonds(void)

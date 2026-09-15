@@ -52,6 +52,8 @@ class BandClient(
         fun onCardReceived(vcardText: String)
         fun onStatus(status: BandStatus)
         fun onProvisioned(ok: Boolean)
+        /** A control write was answered: [op] is its opcode, [ok] the ATT status. */
+        fun onControlWritten(op: Int, ok: Boolean)
         fun onError(message: String)
     }
 
@@ -126,7 +128,20 @@ class BandClient(
                     BluetoothDevice.BOND_BONDED -> { stopBondWatch(); next() }
                     BluetoothDevice.BOND_NONE -> {
                         stopBondWatch()
-                        listener.onError(ERR_BOND_REFUSED)
+                        /*
+                         * The band declines a phone that is not its owner
+                         * (ble.c, SM_EVENT_JUST_WORKS_REQUEST) and the stack
+                         * reports that the same way as the wearer dismissing
+                         * the pairing dialog. The unbond reason tells them
+                         * apart on the stacks that fill it in; a stack that
+                         * does not is read as the band's refusal, since that
+                         * message at least tells the wearer what to do.
+                         */
+                        val reason = i.getIntExtra(EXTRA_UNBOND_REASON, -1)
+                        Log.i(TAG, "bond with ${dev.address} not made, reason $reason")
+                        listener.onError(
+                            if (reason == UNBOND_REASON_AUTH_CANCELED) ERR_BOND_CANCELLED
+                            else ERR_BOND_REFUSED)
                     }
                 }
             }
@@ -199,12 +214,16 @@ class BandClient(
 
     private var provisioningTail = false
 
+    /** The opcode of the control write in flight, for onCharacteristicWrite. */
+    private var controlOp = -1
+
     private fun write(
         ch: BluetoothGattCharacteristic,
         value: ByteArray,
         last: Boolean,
     ): Boolean {
         provisioningTail = last
+        if (ch.uuid == Gatt.CONTROL) controlOp = value.firstOrNull()?.toInt()?.and(0xFF) ?: -1
         val g = gatt ?: return false
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             g.writeCharacteristic(
@@ -304,24 +323,50 @@ class BandClient(
             if (bonded()) subscribeAll() else bondThen(subscribeAll)
         }
 
+        /*
+         * The band no longer holds this phone's key: it was reset for a new
+         * wearer, by the button or by another phone's app. The phone cannot
+         * know that; what it sees is an encrypted operation that the stack
+         * could not make good on with the key it has. Reported as its own
+         * error so the service can forget the band the way it does when the
+         * bond is removed in Bluetooth settings (band-ownership brief §6).
+         * Only while bonded — unbonded, these statuses mean "pair first".
+         */
+        private fun keyRejected(status: Int): Boolean =
+            bonded() && (status == BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION ||
+                         status == BluetoothGatt.GATT_INSUFFICIENT_ENCRYPTION ||
+                         status == GATT_AUTH_FAIL)
+
         override fun onDescriptorWrite(
             g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int,
         ) {
-            if (status != BluetoothGatt.GATT_SUCCESS)
+            if (keyRejected(status)) {
+                pending.clear()
+                listener.onError(ERR_KEY_REJECTED)
+            } else if (status != BluetoothGatt.GATT_SUCCESS) {
                 listener.onError("could not subscribe (status $status)")
+            }
             done()
         }
 
         override fun onCharacteristicWrite(
             g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int,
         ) {
-            if (ch.uuid == Gatt.MY_VCARD) {
+            if (keyRejected(status)) {
+                pending.clear()
+                if (ch.uuid == Gatt.MY_VCARD) listener.onProvisioned(false)
+                listener.onError(ERR_KEY_REJECTED)
+            } else if (ch.uuid == Gatt.MY_VCARD) {
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     pending.clear()
                     listener.onProvisioned(false)
                 } else if (provisioningTail) {
                     listener.onProvisioned(true)
                 }
+            } else if (ch.uuid == Gatt.CONTROL) {
+                val op = controlOp
+                controlOp = -1
+                listener.onControlWritten(op, status == BluetoothGatt.GATT_SUCCESS)
             }
             done()
         }
@@ -375,11 +420,32 @@ class BandClient(
 
     companion object {
         private const val TAG = "BandClient"
+
         /**
-         * The bond went BONDING -> NONE: the wearer dismissed the OS pairing
-         * dialog, or the band refused. Named so the setup page can say
-         * "cancelled" rather than "couldn't connect".
+         * The bond went BONDING -> NONE because the band declined: it has
+         * an owner and this phone is not it (band-ownership brief §4). The
+         * pairing page turns this into "Band in use".
          */
-        const val ERR_BOND_REFUSED = "pairing failed or was refused"
+        const val ERR_BOND_REFUSED = "the band refused to pair"
+
+        /** The bond went BONDING -> NONE because the wearer dismissed the dialog. */
+        const val ERR_BOND_CANCELLED = "pairing was cancelled"
+
+        /**
+         * Bonded, and the band would not honour the key: it has been reset
+         * since. The service forgets the band on this (brief §6).
+         */
+        const val ERR_KEY_REJECTED = "the band no longer accepts this phone"
+
+        /**
+         * BluetoothDevice.EXTRA_REASON and UNBOND_REASON_AUTH_CANCELED are
+         * @hide, so the values are copied; a stack that omits the extra
+         * yields -1, which reads as the band's refusal.
+         */
+        private const val EXTRA_UNBOND_REASON = "android.bluetooth.device.extra.REASON"
+        private const val UNBOND_REASON_AUTH_CANCELED = 3
+
+        /** GATT_AUTH_FAIL (0x89): the stack tried to encrypt for us and could not. */
+        private const val GATT_AUTH_FAIL = 0x89
     }
 }

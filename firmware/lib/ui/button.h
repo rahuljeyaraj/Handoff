@@ -2,20 +2,20 @@
  * Handoff — the push button, classified by how long it is held.
  *
  * SW2 sits inside the enclosure on GP15 with R15 pulling it up (hardware
- * README): a developer's input, not a wearer's. It carries the things the
- * app cannot do when the app cannot reach the band — clear the bond — plus
- * a battery check and a dev-mode toggle. What each press means is decided
- * by its length:
+ * README): a developer's input, not a wearer's. It carries the one thing the
+ * app cannot do when the app cannot reach the band — reset it for a new
+ * wearer — plus a battery check. What a press means is decided by its
+ * length:
  *
- *   short          released before BUTTON_HOLD1_MS         battery check
- *   hold 1         held past BUTTON_HOLD1_MS (2 s)         dev mode toggle
- *   hold 2         held past BUTTON_HOLD2_MS (6 s)         clear the bond
+ *   short          released before BUTTON_HOLD_MS          battery check
+ *   hold           held past BUTTON_HOLD_MS (6 s)          reset for a new wearer
  *
- * The ACTION fires on release, at whichever threshold was last crossed, so
- * holding through 2 s to reach 6 s does not also toggle dev mode. Crossing a
- * threshold while still held fires a REACHED event at that instant: that is
- * the motor's tap telling the finger "you can let go now" — without it there
- * is no way to know when 6 s has passed.
+ * The ACTION fires on release, so a finger that lets go at 5 s has done
+ * nothing but a battery check. Crossing the threshold while still held fires
+ * a REACHED event at that instant: that is the motor's tap telling the
+ * finger "you can let go now" — without it there is no way to know when 6 s
+ * has passed. There is no shorter hold: a 2 s "dev mode" toggle used to live
+ * here and was removed with the ownership model (docs/band-ownership-brief).
  *
  * Debounce is in firmware (no cap on the board): a level has to hold for
  * BUTTON_DEBOUNCE_MS before it counts. Feed the raw level as often as you
@@ -28,16 +28,13 @@
 #include <stdint.h>
 
 #define BUTTON_DEBOUNCE_MS 30u
-#define BUTTON_HOLD1_MS    2000u
-#define BUTTON_HOLD2_MS    6000u
+#define BUTTON_HOLD_MS     6000u
 
 typedef enum {
     BUTTON_NONE = 0,
-    BUTTON_SHORT,           /* released before hold 1                    */
-    BUTTON_HOLD1_REACHED,   /* still held, 2 s crossed                    */
-    BUTTON_HOLD2_REACHED,   /* still held, 6 s crossed                    */
-    BUTTON_HOLD1,           /* released after 2 s and before 6 s          */
-    BUTTON_HOLD2,           /* released after 6 s                         */
+    BUTTON_SHORT,           /* released before the hold                  */
+    BUTTON_HOLD_REACHED,    /* still held, 6 s crossed                    */
+    BUTTON_HOLD,            /* released after 6 s                         */
 } button_event_t;
 
 typedef struct {
@@ -45,7 +42,7 @@ typedef struct {
     uint32_t raw_since;     /* when it last changed                        */
     bool     down;          /* the debounced level                         */
     uint32_t down_at;       /* when the debounced press began              */
-    uint8_t  crossed;       /* 0, 1 or 2: thresholds passed this press     */
+    bool     crossed;       /* the hold threshold passed this press        */
 } button_t;
 
 void           button_init(button_t *b, uint32_t now_ms);

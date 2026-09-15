@@ -51,6 +51,11 @@
  * subscribed) is HELD — the LED says so — and handed over when one
  * subscribes.
  *
+ * ONE BAND, ONE PHONE (docs/band-ownership-brief.md). The band has no owner
+ * or exactly one; ble.c gates pairing on it. reset_for_new_wearer() — the
+ * 6 s hold, or BLE_CTRL_RESET from the owner's app — wipes everything the
+ * previous wearer left and puts the band back to no owner.
+ *
  * CONSOLE (the wristband has none; the bench does):
  *
  *   g         link on / off (on at boot if a card is stored)
@@ -235,7 +240,6 @@ static void report_status(void)
     if (ble_telemetry_subscribed())                 st.flags |= BLE_ST_TLM_ON;
     if (power_on_usb())                             st.flags |= BLE_ST_USB_POWER;
     if (store_haptic_on(&s_store))                  st.flags |= BLE_ST_HAPTIC_ON;
-    if (wear_dev_mode())                            st.flags |= BLE_ST_DEV_MODE;
 
     st.own_blob_len = (uint16_t)len;
     st.chunk_errors = ble_chunk_errors();
@@ -292,6 +296,41 @@ static void on_my_vcard(const char *text, size_t len, void *ctx)
     report_status();
 }
 
+/*
+ * Reset for a new wearer (docs/band-ownership-brief.md §2). From the button
+ * or from the owner's app, and the same either way: everything the previous
+ * wearer left goes — the bond, the card, a received card still being held
+ * for a phone that never came, and the vibrate preference (store_forget
+ * puts the store back to its boot defaults). The band is then in the
+ * no-owner state: bond-cleared pattern, blue background, pairable by any
+ * phone, forever.
+ *
+ * BTstack context: ble_forget_bonds() must be, the flash erase is the same
+ * blackout a provisioning write is (on_my_vcard), and s_rx_pending is this
+ * context's. The held card's text is the main loop's to write, so a
+ * handshake completing in the same instant could re-arm it — the same
+ * trade s_rx_ready makes, and a reset can be repeated.
+ */
+static void reset_for_new_wearer(const char *who)
+{
+    int e = (int)store_forget(&s_store);
+
+    s_rx_ready = false;
+    s_rx_pending = false;
+    s_rx_text_len = 0;
+    memset(s_rx_text, 0, sizeof s_rx_text);
+    s_own_dirty = true;
+
+    wear_set_haptic(store_haptic_on(&s_store));
+    wear_post(UI_EV_LINK_RELEASED);      /* the held background, if it was up */
+    wear_post(UI_EV_BOND_CLEARED);
+
+    /* Last, because it drops the link: the app that asked sees the write
+     * acknowledged and then the disconnect, and treats either as done. */
+    ble_forget_bonds();
+    printf("handoff: reset for a new wearer from %s (store %d)\n", who, e);
+}
+
 static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
 {
     (void)ctx;
@@ -341,6 +380,11 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
     case BLE_CTRL_IDENTIFY:
         wear_post(UI_EV_IDENTIFY);
         printf("handoff: identify\n");
+        break;
+
+    case BLE_CTRL_RESET:
+        /* ble.c has already required the encrypted link: only the owner. */
+        reset_for_new_wearer("the app");
         break;
 
     case BLE_CTRL_CARRIER:
@@ -448,11 +492,7 @@ static void link_tick(btstack_timer_source_t *ts)
 
     /* the wearer's side: what only this context can know */
     wear_set_ble(ble_connected(), ble_has_bond());
-    if (wear_take_forget_request()) {
-        ble_forget_bonds();
-        printf("handoff: bonds cleared from the button\n");
-        wear_post(UI_EV_BOND_CLEARED);
-    }
+    if (wear_take_reset_request()) reset_for_new_wearer("the button");
     /* VSYS on its schedule, and at boot once the HAL is bound (main sets
      * the first due). A tick that finds the link busy tries again at the
      * next one rather than waiting out the minute. */

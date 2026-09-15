@@ -22,21 +22,16 @@ button_event_t button_feed(button_t *b, bool pressed, uint32_t now)
         if (b->down) {
             /* the press began when the level changed, not when we believed it */
             b->down_at = b->raw_since;
-            b->crossed = 0;
+            b->crossed = false;
             return BUTTON_NONE;
         }
-        /* release: the action is the highest threshold crossed */
-        switch (b->crossed) {
-        case 2:  return BUTTON_HOLD2;
-        case 1:  return BUTTON_HOLD1;
-        default: return BUTTON_SHORT;
-        }
+        /* release: the action is whether the threshold was crossed */
+        return b->crossed ? BUTTON_HOLD : BUTTON_SHORT;
     }
 
-    if (b->down) {
-        uint32_t held = now - b->down_at;
-        if (b->crossed < 1 && held >= BUTTON_HOLD1_MS) { b->crossed = 1; return BUTTON_HOLD1_REACHED; }
-        if (b->crossed < 2 && held >= BUTTON_HOLD2_MS) { b->crossed = 2; return BUTTON_HOLD2_REACHED; }
+    if (b->down && !b->crossed && now - b->down_at >= BUTTON_HOLD_MS) {
+        b->crossed = true;
+        return BUTTON_HOLD_REACHED;
     }
     return BUTTON_NONE;
 }
@@ -44,11 +39,9 @@ button_event_t button_feed(button_t *b, bool pressed, uint32_t now)
 const char *button_event_name(button_event_t ev)
 {
     switch (ev) {
-    case BUTTON_SHORT:         return "short";
-    case BUTTON_HOLD1_REACHED: return "hold1-reached";
-    case BUTTON_HOLD2_REACHED: return "hold2-reached";
-    case BUTTON_HOLD1:         return "hold1";
-    case BUTTON_HOLD2:         return "hold2";
-    default:                   return "none";
+    case BUTTON_SHORT:        return "short";
+    case BUTTON_HOLD_REACHED: return "hold-reached";
+    case BUTTON_HOLD:         return "hold";
+    default:                  return "none";
     }
 }

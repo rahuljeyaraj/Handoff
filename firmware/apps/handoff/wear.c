@@ -26,9 +26,8 @@ static volatile uint16_t s_vsys_mv;
 static volatile bool     s_haptic = true, s_haptic_dirty;
 
 /* written here, read in the BTstack context */
-static volatile bool     s_forget;
+static volatile bool     s_reset;
 
-static bool      s_dev;
 static bool      s_pairing, s_connected;
 static ui_batt_t s_batt;
 static ui_link_t s_link;
@@ -143,16 +142,11 @@ static void button(uint32_t now)
     case BUTTON_SHORT:
         event(battery_show(s_vsys_mv, s_on_usb), now);
         break;
-    case BUTTON_HOLD1_REACHED:
-    case BUTTON_HOLD2_REACHED:
+    case BUTTON_HOLD_REACHED:
         event(UI_EV_HOLD_REACHED, now);
         break;
-    case BUTTON_HOLD1:
-        s_dev = !s_dev;
-        event(s_dev ? UI_EV_DEV_ON : UI_EV_DEV_OFF, now);
-        break;
-    case BUTTON_HOLD2:
-        s_forget = true;
+    case BUTTON_HOLD:
+        s_reset = true;
         break;
     default:
         break;
@@ -219,6 +213,7 @@ void wear_poll(uint64_t now_us)
     }
 
     if (s_ble_valid) {
+        /* no owner: blue until someone pairs, forever (band-ownership §1) */
         bool pairing = !s_ble_connected && !s_ble_bonded;
         if (pairing != s_pairing) {
             s_pairing = pairing;
@@ -259,12 +254,10 @@ void wear_poll(uint64_t now_us)
 
 /* ---- outputs ------------------------------------------------------------ */
 
-bool wear_dev_mode(void) { return s_dev; }
-
-bool wear_take_forget_request(void)
+bool wear_take_reset_request(void)
 {
-    if (!s_forget) return false;
-    s_forget = false;
+    if (!s_reset) return false;
+    s_reset = false;
     return true;
 }
 

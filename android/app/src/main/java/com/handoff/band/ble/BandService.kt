@@ -45,6 +45,13 @@ import kotlinx.coroutines.launch
  * the phone is locked when the card arrives. A card with neither a phone nor
  * an email is a failed handshake, not a contact (design decisions §4a): it is
  * reported, kept for diagnostics, and never becomes a list entry.
+ *
+ * ONE BAND, ONE PHONE (docs/band-ownership-brief.md). The band keeps one
+ * bond and pairs with nobody else until it is reset — by its button, or by
+ * this app's *Forget this band* ([forgetBand]). The reverse also holds: when
+ * the band stops honouring this phone's key, because it was reset for a new
+ * wearer, the phone forgets it ([dropBand]) exactly as it does when the bond
+ * is removed in Bluetooth settings, and the app is back on *Pair a band*.
  */
 class BandService : LifecycleService(), BandClient.Listener {
 
@@ -117,7 +124,7 @@ class BandService : LifecycleService(), BandClient.Listener {
             val now = i.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
             if (was == BluetoothDevice.BOND_BONDED && now == BluetoothDevice.BOND_NONE) {
                 Log.i(TAG, "bond for $stored removed outside the app; forgetting it")
-                forget(this@BandService)
+                dropBand(reason = null)
             }
         }
     }
@@ -181,6 +188,47 @@ class BandService : LifecycleService(), BandClient.Listener {
 
     fun control(payload: ByteArray) = client?.control(payload)
 
+    /**
+     * Forget this band, from the Band screen (band-ownership brief §3). If
+     * the band is connected on its encrypted link it is told to reset for a
+     * new wearer first — the same wipe as the 6 s hold — and the phone side
+     * follows once the band has answered: the write's acknowledgement, or
+     * the disconnect the band makes as its last step, whichever lands first,
+     * with a timeout in case neither does. If the band is not reachable the
+     * phone side is cleaned alone and nothing is said about it: the button
+     * will clean the band when it next changes hands.
+     *
+     * [onDone] gets false when the OS bond could not be removed, so the
+     * caller can point the wearer at Bluetooth settings by hand.
+     */
+    fun forgetBand(onDone: (bondRemoved: Boolean) -> Unit) {
+        val c = client
+        val s = _state.value
+        if (c == null || !s.ready || s.status?.encrypted != true) {
+            onDone(dropBand(reason = null))
+            return
+        }
+        if (resetPending != null) return          // one at a time
+        resetPending = onDone
+        Log.i(TAG, "asking ${s.address} to reset for a new wearer")
+        c.control(Gatt.reset())
+        lifecycleScope.launch {
+            delay(RESET_TIMEOUT_MS)
+            if (resetPending != null) {
+                Log.w(TAG, "no answer to the reset in ${RESET_TIMEOUT_MS} ms; forgetting anyway")
+                finishReset()
+            }
+        }
+    }
+
+    private var resetPending: ((Boolean) -> Unit)? = null
+
+    private fun finishReset() {
+        val done = resetPending ?: return
+        resetPending = null
+        done(dropBand(reason = null))
+    }
+
     /** See [BandClient.forceMtuFloor] — an M2 exit criterion, not a debug toy. */
     var forceMtuFloor: Boolean
         get() = client?.forceMtuFloor ?: false
@@ -217,7 +265,17 @@ class BandService : LifecycleService(), BandClient.Listener {
     // ---- BandClient.Listener --------------------------------------------
 
     override fun onConnectionChanged(connected: Boolean, ready: Boolean) {
+        // A client already let go of (dropBand, the MTU-floor rebuild) may
+        // still report its own disconnect; there is nothing to track for it,
+        // and arming the not-found watch would post a notification for a
+        // band this phone has just forgotten.
+        if (client == null) return
         _state.value = _state.value.copy(connected = connected, ready = ready)
+        if (!connected && resetPending != null) {
+            // The band drops the link as the last step of its reset.
+            finishReset()
+            return
+        }
         if (connected) {
             clearNotFoundWatch()
         } else {
@@ -341,8 +399,57 @@ class BandService : LifecycleService(), BandClient.Listener {
         c.provision(card.vcard())
     }
 
+    override fun onControlWritten(op: Int, ok: Boolean) {
+        if (op == Gatt.CTRL_RESET && resetPending != null) {
+            // The band does the wipe inside the write, so the acknowledgement
+            // means it is done; a failed write means it is not reachable
+            // after all, and the phone side goes ahead alone.
+            Log.i(TAG, "reset ${if (ok) "acknowledged" else "refused"} by the band")
+            finishReset()
+        }
+    }
+
     override fun onError(message: String) {
         _state.value = _state.value.copy(lastError = message)
+        /*
+         * The band refused this phone's key, or refused to pair with it: it
+         * has an owner and this phone is no longer — or never was — it
+         * (brief §6). The phone cannot know which, and says nothing that
+         * claims to; it just lets go of the band, the way it does when the
+         * bond is removed in Bluetooth settings. The pairing page, if that
+         * is where the wearer is, reads the reason out of [State.lastError],
+         * which [dropBand] keeps.
+         */
+        if (message == BandClient.ERR_KEY_REJECTED || message == BandClient.ERR_BOND_REFUSED) {
+            Log.i(TAG, "$message; forgetting ${_state.value.address}")
+            dropBand(reason = message)
+        }
+    }
+
+    /**
+     * The phone side of forgetting the band, from inside the service: the
+     * link, the stored address, the CompanionDeviceManager association, the
+     * OS bond, and the foreground state — the same as [forget], without the
+     * stop-intent round trip, and keeping [reason] in the state so a screen
+     * watching for it still sees why. Returns false when the OS bond could
+     * not be removed.
+     */
+    private fun dropBand(reason: String?): Boolean {
+        val address = Pairing.storedAddress(this) ?: _state.value.address
+        client?.close()
+        client = null
+        notFoundJob?.cancel()
+        notFoundJob = null
+        resetPending = null
+        syncInFlight = false
+        _state.value = State(lastError = reason)
+        val bondRemoved = address?.let { Pairing.removeBond(this, it) } ?: true
+        address?.let { Pairing.disassociate(this, it) }
+        Pairing.forget(this)
+        prefs.setBandOff(false)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        return bondRemoved
     }
 
     // ---- the not-found timer (review item 15, O8) -------------------------
@@ -414,6 +521,8 @@ class BandService : LifecycleService(), BandClient.Listener {
         private const val CHANNEL = "handoff.band"
         private const val NOTIFICATION_ID = 1
         private const val NOT_FOUND_TIMEOUT_MS = 15_000L
+        /** How long Forget waits for the band to answer a reset before going ahead. */
+        private const val RESET_TIMEOUT_MS = 3_000L
         const val EXTRA_ADDRESS = "address"
 
         fun start(context: Context, address: String? = null) {
@@ -441,10 +550,13 @@ class BandService : LifecycleService(), BandClient.Listener {
         }
 
         /**
-         * Forget this band: the stored address, the CompanionDeviceManager
-         * association, the OS bond, and the service (review item 14) — a
-         * band left bonded still showed up as paired in Bluetooth settings
-         * after this ran.
+         * Forget this band from outside the service, phone side only: the
+         * stored address, the CompanionDeviceManager association, the OS
+         * bond, and the service (review item 14) — a band left bonded still
+         * showed up as paired in Bluetooth settings after this ran. The Band
+         * screen's *Forget this band* goes through [forgetBand] instead, so
+         * the band is reset too; this is for the pairing page giving up on
+         * a band it never finished with, and for a service that is not bound.
          *
          * @return false when the OS bond could not be removed, so the caller
          * can point the wearer at Bluetooth settings by hand.
