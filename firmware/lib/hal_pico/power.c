@@ -8,15 +8,26 @@
  * happen under its lock, and the first conversions after the pin is handed
  * to the ADC read low, so a few are thrown away.
  *
- * NOT FOR M12. The DSP will own the ADC on core 1 with a free-running DMA
- * ring (adc_ring.c), and adc_select_input() here would steal its channel
- * mid-block. When that lands, either sample VSYS through the ring's own
- * round-robin or read it only while the ring is stopped.
+ * THE RING OWNS THE ADC. M12 landed and the DSP now runs a free-running DMA
+ * ring on core 1 (adc_ring.c). Everything below — adc_init(), a different
+ * channel, a different FIFO, adc_run(false) at the end — takes the converter
+ * away from it and does not give it back: the ring stops dead, core 1 stops
+ * producing chips, and the band goes deaf to the body link until it reboots.
+ * Measured on 93D1, 15 Sep 2026: one call and `chips` never advanced again.
+ *
+ * So power_vsys_mv() now declines while the ring is running rather than
+ * breaking the link, and 0 means "not measurable here". The real fix is to
+ * read VSYS the way adc_ring_noise_floor() reads the temperature sensor —
+ * switch the ring's own channel between blocks, on core 1, keeping the DMA
+ * and the counters alive — which needs core 1 to hold the CYW43 lock for
+ * GP29. That is its own piece of work.
  */
 #include "power.h"
 
 #include "hardware/adc.h"
 #include "pico/cyw43_arch.h"
+
+#include "adc_ring.h"
 
 #ifndef PICO_VSYS_PIN
 #define PICO_VSYS_PIN 29
@@ -31,6 +42,10 @@ uint16_t power_vsys_mv(void)
 {
     uint32_t sum = 0;
     int discard = VSYS_SAMPLES;
+
+    /* See the head of this file: taking the ADC from the ring kills the
+     * receiver for good. No reading is worth that. */
+    if (adc_ring_running()) return 0u;
 
     cyw43_thread_enter();
     /* Make sure the CYW43 is awake before touching a pin it shares. */

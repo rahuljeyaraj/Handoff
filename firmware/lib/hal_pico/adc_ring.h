@@ -25,6 +25,11 @@ void adc_ring_init(void);
 void adc_ring_start(void);
 void adc_ring_stop(void);
 
+/* True while the ring owns the ADC: its channel, its FIFO, its DREQ and
+ * its DMA. Anything else that wants a conversion has to wait for a stop,
+ * or it takes the converter away from the receiver. See power.c. */
+bool adc_ring_running(void);
+
 /* Next full block, or NULL. Samples are DC-centred to int16 for the DSP —
  * goertzel.c rejects DC at any bin but a signed sample keeps the headroom
  * arithmetic in gz_mag2 honest. *seq, if wanted, is the block's ordinal

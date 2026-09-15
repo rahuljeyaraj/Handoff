@@ -131,6 +131,8 @@ void adc_ring_start(void)
     dma_channel_start((uint)s_dma[0]);
 }
 
+bool adc_ring_running(void) { return s_running; }
+
 void adc_ring_stop(void)
 {
     uint i;
