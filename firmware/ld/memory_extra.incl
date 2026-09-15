@@ -1,0 +1,17 @@
+/*
+ * Core 0's stack lives in main RAM, not in the 4 kB scratch-Y bank the SDK
+ * defaults to. Every image here runs the main loop and, on the product
+ * image, the whole BTstack context — SM, ATT, the ECDH of a Secure
+ * Connections pairing — on that one stack, and measured on the bench
+ * (15 Sep 2026) the product image needs about 4 kB with a phone connected
+ * before a single handshake has ended: the bank is too small by itself.
+ *
+ * This is the SDK's memory_extra.incl hook. The region sits at the top of
+ * RAM; RAM_LENGTH is shortened by the same amount through
+ * pico_set_linker_script_var in the top-level CMakeLists.txt so the heap
+ * limit and the stack never meet. Core 1's stack stays in scratch X.
+ */
+MEMORY
+{
+    STACK0(rw) : ORIGIN = RAM_ORIGIN + RAM_LENGTH, LENGTH = 32k
+}

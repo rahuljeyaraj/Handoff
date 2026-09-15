@@ -541,8 +541,27 @@ Bench, 93D1 and 379E on the M13 divider, Release image:
   battery.
 - §11 point 9: `p <mv>` walked unknown / low / critical / good through the
   wearer's side; 0 now answers the button white, never green.
-- §11 point 8 (a phone connected across many measurements) is still to do.
+- §11 point 8, later the same day, once the phone could connect at all (see
+  below): phone bonded to 379E, link free-running against 93D1, a
+  measurement forced every 4 s for 605 s — 235/235 complete, 0 abort on both
+  boards, 158 measurements and none failed on each, false syncs 0, sample
+  rate 499.997 ksps, no disconnection. Mean handshake 949/954 ms: every
+  received card now also goes to the phone as a 154-byte notify. The phone's
+  status dump shows the 20 mV value the band caches. The provisioning path
+  fixed in the commit before this one was exercised five times from the
+  phone (Advanced, "Erase the card on the band", which the app answers by
+  re-pushing the card): `60 bytes of text -> 9 compact, flash written` each
+  time, core 1 alive, the record present after a reboot.
 - §9 was not needed.
+
+The phone bench also found that no phone could connect to a Release image:
+core 0's stack, the 4 kB scratch-Y bank shared by the main loop and the whole
+BTstack context, overflowed inside the BTstack interrupt on every connection
+(the stack guard's STKOF fault, silent on the bench until a fault recorder
+that first moves MSP back to the top of the stack was built). At -O3
+`on_done`'s 2 kB record is inlined into `main`, and the measured need with a
+phone connected is ~3.9 kB. Core 0's stack is now 32 kB at the top of main
+RAM (`firmware/ld/`, top-level CMakeLists.txt).
 
 The bench also turned up two defects in the flash write that neither this
 work nor M14 had caused and that took the receiver down on every `w`: the

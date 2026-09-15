@@ -52,15 +52,26 @@ function(handoff_add_app TARGET)
     # core 1's at the top of scratch X, the bank directly beneath it, with
     # nothing between them: a core-0 overflow lands in core 1's outermost
     # frames, which on every image here are the receiver's DSP state. That
-    # is how a flash write took the body link down (see store.h). So each
-    # core gets its whole bank, and the SDK's MPU guard at the bottom of
+    # is how a flash write took the body link down (see store.h).
+    #
+    # And 4 kB is not enough for core 0. The main loop and the whole BTstack
+    # context share it, and with a phone connected the product image was
+    # measured at ~3.9 kB before a single handshake had ended (15 Sep 2026:
+    # every phone connection to the Release image ended in an MSPLIM fault
+    # inside the BTstack interrupt; -O3 inlines on_done's 2 kB record into
+    # main, so it sits under every interrupt). So core 0 gets 32 kB carved
+    # from the top of main RAM (firmware/ld/*.incl override the SDK's stack
+    # placement; RAM_LENGTH below is 512 kB less that region), core 1 keeps
+    # its whole scratch bank, and the SDK's stack guard at the bottom of
     # each stack turns the next overflow into a hard fault on the bench
     # rather than a silently deaf band.
     target_compile_definitions(${TARGET} PRIVATE
-        PICO_STACK_SIZE=0x1000
+        PICO_STACK_SIZE=0x8000
         PICO_CORE1_STACK_SIZE=0x1000
         PICO_USE_STACK_GUARDS=1
     )
+    pico_add_linker_script_override_path(${TARGET} ${CMAKE_SOURCE_DIR}/firmware/ld GLOB_FILES)
+    pico_set_linker_script_var(${TARGET} RAM_LENGTH 491520)
     pico_add_extra_outputs(${TARGET})
 endfunction()
 

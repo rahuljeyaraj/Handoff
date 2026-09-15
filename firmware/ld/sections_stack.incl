@@ -1,0 +1,18 @@
+/*
+ * Overrides the SDK's sections_stack.incl: core 0's stack goes to the STACK0
+ * region declared in memory_extra.incl rather than scratch Y. Core 1's is
+ * unchanged. The section holds no symbols; the linker only sizes it from
+ * PICO_STACK_SIZE / PICO_CORE1_STACK_SIZE and derives the stack symbols in
+ * section_end.incl.
+ */
+SECTIONS
+{
+    .stack1_dummy (NOLOAD):
+    {
+        *(.stack1*)
+    } > SCRATCH_X
+    .stack_dummy (NOLOAD):
+    {
+        KEEP(*(.stack*))
+    } > STACK0
+}
