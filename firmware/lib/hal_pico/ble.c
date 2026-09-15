@@ -502,6 +502,36 @@ bool ble_notify_rx_vcard(const char *text, size_t len)
 
 bool ble_rx_vcard_busy(void) { return s_rx_vcard_active; }
 
+bool ble_rx_vcard_subscribed(void) { return s_sub_rx_vcard; }
+
+/* ---- the bond --------------------------------------------------------- */
+
+bool ble_has_bond(void)
+{
+    int i, n = le_device_db_max_count();
+    for (i = 0; i < n; i++) {
+        int type = BD_ADDR_TYPE_UNKNOWN;
+        bd_addr_t addr;
+        sm_key_t irk;
+        le_device_db_info(i, &type, addr, irk);
+        if (type != BD_ADDR_TYPE_UNKNOWN) return true;
+    }
+    return false;
+}
+
+void ble_forget_bonds(void)
+{
+    int i, n = le_device_db_max_count();
+    for (i = 0; i < n; i++) {
+        int type = BD_ADDR_TYPE_UNKNOWN;
+        bd_addr_t addr;
+        sm_key_t irk;
+        le_device_db_info(i, &type, addr, irk);
+        if (type != BD_ADDR_TYPE_UNKNOWN) le_device_db_remove(i);
+    }
+    if (s_con != HCI_CON_HANDLE_INVALID) gap_disconnect(s_con);
+}
+
 const char *ble_local_name(void) { return s_name; }
 
 bool ble_notify_status(const ble_status_t *st)

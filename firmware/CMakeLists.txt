@@ -3,7 +3,7 @@
 # handoff_lib is the whole of lib/ as one static library. It is split into two
 # halves that CMake keeps honest:
 #
-#   the portable half   dsp, link, record, proto — no SDK headers, ever
+#   the portable half   dsp, link, record, proto, ui — no SDK headers, ever
 #   the binding half    hal_pico — SDK everything
 #
 # The portable half is ALSO compiled by scripts/test.py with the host compiler,
@@ -30,6 +30,9 @@ add_library(handoff_lib STATIC
     lib/proto/beacon.c
     lib/proto/link_sm.c
 
+    lib/ui/ui.c
+    lib/ui/button.c
+
     lib/hal_pico/hal_pico.c
     lib/hal_pico/pio_carrier.c
     lib/hal_pico/adc_ring.c
@@ -49,6 +52,7 @@ target_include_directories(handoff_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/link
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/record
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/proto
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/ui
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/hal_pico
 )
 

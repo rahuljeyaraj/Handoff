@@ -14,6 +14,8 @@ void test_store(void);
 void test_carousel(void);
 void test_beacon(void);
 void test_link(void);
+void test_ui(void);
+void test_button(void);
 void test_vectors(void);
 void test_channel(void);
 void test_budget(void);

@@ -71,7 +71,8 @@ typedef enum {
     BLE_CTRL_TLM_DECIMATE = 0x04,  /* u16 LE, 0 disables telemetry    (M4)  */
     BLE_CTRL_FAKE_RX      = 0x05,  /* u8 delay seconds                (M2)  */
     BLE_CTRL_FORGET       = 0x06,  /* erase the provisioned record    (M2)  */
-    BLE_CTRL_HAPTIC       = 0x07   /* u8: 0 = off, 1 = on, persisted (review item 11) */
+    BLE_CTRL_HAPTIC       = 0x07,  /* u8: 0 = off, 1 = on, persisted (review item 11) */
+    BLE_CTRL_IDENTIFY     = 0x08   /* no args: flash and buzz this band (lib/ui) */
 } ble_ctrl_op_t;
 
 /* ---- status ----------------------------------------------------------- */
@@ -85,6 +86,7 @@ typedef enum {
 #define BLE_ST_USB_POWER   0x10u  /* VBUS present at the Pico (v2). NOT charging: the
                                      charger is off-board on J5 and invisible here */
 #define BLE_ST_HAPTIC_ON   0x20u  /* the motor fires on a shared/received card (review item 11) */
+#define BLE_ST_DEV_MODE    0x40u  /* the button's dev mode is on (lib/ui)      */
 
 /*
  * 20 bytes, which is exactly one notification at the 23-byte ATT floor
@@ -168,6 +170,22 @@ bool     ble_connected(void);
 const char *ble_local_name(void);
 bool     ble_encrypted(void);
 bool     ble_telemetry_subscribed(void);
+bool     ble_rx_vcard_subscribed(void);
+
+/* ---- the bond ----------------------------------------------------------- */
+
+/* Whether any phone's keys are stored. Decides "pairing mode" (advertising
+ * with no bond) from "bonded, phone away", which look the same on the air
+ * and must not on the LED. */
+bool     ble_has_bond(void);
+
+/*
+ * Erase every stored bond and drop the connection if there is one. The
+ * band then advertises as a fresh device; the phone still holds its half of
+ * the keys until the app's Forget, so a reconnect from it is refused rather
+ * than re-paired. BTstack context only, like everything else here.
+ */
+void     ble_forget_bonds(void);
 
 /* What the phone actually negotiated. BLE_MIN_ATT_MTU until it asks for more,
  * and the number every chunked transfer is sized from. */

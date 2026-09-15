@@ -1,10 +1,10 @@
 /*
  * Handoff — host unit test runner. Development plan M1.
  *
- * Every module under lib/dsp, lib/link, lib/record and lib/proto is compiled
- * here with the host compiler. That is not only convenience: it is the
- * enforcement mechanism for architecture §3.2. Reaching for hardware/adc.h in
- * any of those four directories fails this build immediately.
+ * Every module under lib/dsp, lib/link, lib/record, lib/proto and lib/ui is
+ * compiled here with the host compiler. That is not only convenience: it is
+ * the enforcement mechanism for architecture §3.2. Reaching for hardware/adc.h
+ * in any of those five directories fails this build immediately.
  */
 #include <stdarg.h>
 #include <stdio.h>
@@ -49,6 +49,8 @@ static const suite_t k_suites[] = {
     { "carousel",   test_carousel },
     { "beacon",     test_beacon },
     { "link",       test_link },
+    { "ui",         test_ui },
+    { "button",     test_button },
     { "vectors",    test_vectors },
     { "channel",    test_channel },
     { "budget",     test_budget },

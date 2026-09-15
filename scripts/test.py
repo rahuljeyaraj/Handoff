@@ -2,12 +2,12 @@
 """
 Build and run the Handoff host test suite. Development plan M1.
 
-Compiles lib/dsp, lib/link, lib/record and lib/proto with the HOST compiler and
+Compiles lib/dsp, lib/link, lib/record, lib/proto and lib/ui with the HOST compiler and
 runs the unit tests, the channel simulator and the two-node protocol
 simulation. No hardware, no Pico SDK, no external test framework.
 
 That is not only convenience. Architecture section 3.2 makes it the enforcement
-mechanism: those four directories may not include a Pico SDK header, and this
+mechanism: those five directories may not include a Pico SDK header, and this
 build fails immediately if one does. --check is the other half of that rule.
 
     python scripts/test.py                 build and run everything
@@ -39,12 +39,12 @@ HOST = FW / "test" / "host"
 VECTORS = FW / "test" / "vectors" / "generated"
 OUT = REPO_ROOT / "build-host"
 
-INCLUDE_DIRS = [LIB / "dsp", LIB / "link", LIB / "record", LIB / "proto", LIB / "hal",
-                HOST, OUT]
+INCLUDE_DIRS = [LIB / "dsp", LIB / "link", LIB / "record", LIB / "proto", LIB / "ui",
+                LIB / "hal", HOST, OUT]
 
-# Architecture 3.2: these four may see the C standard library and each other,
+# Architecture 3.2: these five may see the C standard library and each other,
 # and nothing else.
-SANDBOXED = ["dsp", "link", "record", "proto"]
+SANDBOXED = ["dsp", "link", "record", "proto", "ui"]
 FORBIDDEN = ('#include "pico/', "#include <pico/", '#include "hardware/',
              "#include <hardware/", "btstack", "pico_stdlib", "cyw43")
 
@@ -63,6 +63,8 @@ LIB_SOURCES = [
     LIB / "proto" / "carousel.c",
     LIB / "proto" / "beacon.c",
     LIB / "proto" / "link_sm.c",
+    LIB / "ui" / "ui.c",
+    LIB / "ui" / "button.c",
 ]
 
 SIM_SOURCES = [HOST / "chan.c", HOST / "hal_host.c", HOST / "sim_twonode.c"]
@@ -72,6 +74,7 @@ TEST_SOURCES = [HOST / n for n in (
     "test_frame.c", "test_chunk.c", "test_compact.c", "test_vcard.c",
     "test_frag.c", "test_store.c",
     "test_carousel.c", "test_beacon.c", "test_link.c",
+    "test_ui.c", "test_button.c",
     "test_vectors.c",
     "test_channel.c", "test_budget.c",
 )]

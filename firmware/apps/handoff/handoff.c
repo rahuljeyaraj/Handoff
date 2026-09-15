@@ -39,21 +39,32 @@
  * board's own sends out of the stream on the sample clock.
  *
  * TWO CONTEXTS. Everything that touches the radio runs inside BTstack:
- * the ble.c callbacks, the timers, the LED. Measured at M2: a call into the
- * CYW43 from the main loop parked the core for tens of seconds. The main
- * loop therefore polls the link and the console and nothing else; a card
- * that has arrived is handed to a BTstack timer, which notifies the phone.
+ * the ble.c callbacks, the timers, the onboard LED. Measured at M2: a call
+ * into the CYW43 from the main loop parked the core for tens of seconds.
+ * The main loop therefore polls the link, the console and the wearer's
+ * side (wear.c: the RGB LED, the motor, the button — plain pins) and
+ * nothing else; a card that has arrived is handed to a BTstack timer,
+ * which notifies the phone.
+ *
+ * WHAT THE WEARER SEES is lib/ui, bound in wear.c; ui.h carries the table.
+ * A card that could not be handed to the phone (no bonded phone
+ * subscribed) is HELD — the LED says so — and handed over when one
+ * subscribes.
  *
  * CONSOLE (the wristband has none; the bench does):
  *
  *   g         link on / off (on at boot if a card is stored)
- *   y [N]     sync pulse on GP15 now, or N of them 3 s apart
+ *   y [N]     sync pulse on GP15 now, or N of them 3 s apart — only in a
+ *             build with HANDOFF_BENCH_SYNC=ON; GP15 is the button otherwise
  *   d [ms]    pause after a handshake before the trigger re-arms (1500)
  *   w         store a bench card named after this board (needs no phone)
  *   r         print the last received card
  *   s         stats           z   zero the stats
  *   v         per-send lines on / off (on)
  *   c 40|200  carrier, kHz    h   this list
+ *   u         trace the LED and motor on / off
+ *   u <event> inject a ui.h event by name (u ? lists them)
+ *   b <ms>    press the button for that long
  *
  * LOG LINES, all with times in microseconds on this board's clock:
  *
@@ -64,6 +75,7 @@
  *                            landed mid-send): its tx line's end is void
  *   st <t> <STATE> <role>    the link changed state
  *   done ...                 a handshake ended, and what it brought
+ *   ui <ms> ...              wear.c's trace, in milliseconds (`u`)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,8 +98,14 @@
 #include "power.h"
 #include "store.h"
 #include "vcard.h"
+#include "wear.h"
+
+#ifndef HANDOFF_BENCH_SYNC
+#define HANDOFF_BENCH_SYNC 0
+#endif
 
 #define PIN_SYNC          15
+#define POWER_SAMPLE_TICKS (10000u / LINK_TICK_MS)   /* VSYS every 10 s      */
 #define SYNC_PULSE_US     200u
 #define SYNC_PERIOD_US    3000000u
 #define REIDLE_DEFAULT_US 1500000u
@@ -133,15 +151,18 @@ static volatile int       s_force_role = -1;
 
 /* written by the main loop, read by the BTstack timer */
 static volatile bool      s_rx_ready;      /* a card arrived: notify the phone */
+static bool               s_rx_pending;    /* ...and could not be: held for one */
 static volatile bool      s_status_dirty;
 static char               s_rx_text[BLE_VCARD_MAX];
 static size_t             s_rx_text_len;
 
+#if HANDOFF_BENCH_SYNC
 /* the GP15 edge, from its interrupt */
 static volatile bool      s_sync_hit;
 static volatile uint64_t  s_sync_us;
 static uint32_t           s_sync_left;     /* pulses still to send, `y N`   */
 static uint64_t           s_sync_next_us;
+#endif
 
 typedef struct {
     uint64_t since;
@@ -202,6 +223,7 @@ static void report_status(void)
     if (ble_telemetry_subscribed())                 st.flags |= BLE_ST_TLM_ON;
     if (power_on_usb())                             st.flags |= BLE_ST_USB_POWER;
     if (store_haptic_on(&s_store))                  st.flags |= BLE_ST_HAPTIC_ON;
+    if (wear_dev_mode())                            st.flags |= BLE_ST_DEV_MODE;
 
     st.own_blob_len = (uint16_t)len;
     st.chunk_errors = ble_chunk_errors();
@@ -250,6 +272,9 @@ static void on_my_vcard(const char *text, size_t len, void *ctx)
            e == STORE_OK ? "written" : "FAILED");
 
     s_own_dirty = true;
+    /* The card is in RAM and will transmit, but the band cannot keep it: a
+     * wearer whose card is gone after a charge should have seen something. */
+    wear_post(e == STORE_OK ? UI_EV_CARD_WRITTEN : UI_EV_FAULT);
     report_status();
 }
 
@@ -283,6 +308,7 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
         bool persisted;
 
         store_set_haptic(&s_store, on);
+        wear_set_haptic(on);
         persisted = store_get(&s_store, NULL, NULL) == STORE_OK
             && store_save(&s_store) == STORE_OK;
         printf("handoff: haptic %s%s\n", on ? "on" : "off",
@@ -296,6 +322,11 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
          * loop takes it up; link_sm_begin skips the trigger. */
         s_force_role = (len >= 1u && arg[0] != 0u) ? 1 : 0;
         printf("handoff: forced role %s\n", s_force_role ? "sender" : "receiver");
+        break;
+
+    case BLE_CTRL_IDENTIFY:
+        wear_post(UI_EV_IDENTIFY);
+        printf("handoff: identify\n");
         break;
 
     case BLE_CTRL_CARRIER:
@@ -322,7 +353,10 @@ static void send_fake_card(btstack_timer_source_t *ts)
     printf("handoff: fake rx_vcard %s (%u bytes, ATT MTU %u)\n",
            sent ? "sent" : "REFUSED", (unsigned)(sizeof k_fake_card - 1u),
            (unsigned)ble_att_mtu());
-    if (sent && store_haptic_on(&s_store)) motor_play(MOTOR_PATTERN_RECEIVED);
+    if (sent) {
+        wear_post(UI_EV_LINK_COMPLETE);
+        wear_post(UI_EV_LINK_FORWARDED);
+    }
 }
 
 /*
@@ -331,19 +365,45 @@ static void send_fake_card(btstack_timer_source_t *ts)
  */
 static void link_tick(btstack_timer_source_t *ts)
 {
+    static uint32_t ticks;
+
     if (s_rx_ready) {
         bool sent;
         s_rx_ready = false;
         sent = ble_notify_rx_vcard(s_rx_text, s_rx_text_len);
         printf("handoff: rx_vcard to the phone %s (%u bytes)\n",
-               sent ? "sent" : "not sent (no bonded phone subscribed)",
+               sent ? "sent" : "held (no bonded phone subscribed)",
                (unsigned)s_rx_text_len);
-        if (store_haptic_on(&s_store)) motor_play(MOTOR_PATTERN_RECEIVED);
+        s_rx_pending = !sent;
+        wear_post(sent ? UI_EV_LINK_FORWARDED : UI_EV_LINK_HELD);
+    } else if (s_rx_pending && ble_rx_vcard_subscribed() && !ble_rx_vcard_busy()) {
+        /* the phone came back: the held card goes now, unchanged */
+        if (ble_notify_rx_vcard(s_rx_text, s_rx_text_len)) {
+            s_rx_pending = false;
+            wear_post(UI_EV_LINK_FORWARDED);
+            printf("handoff: held rx_vcard sent to the phone (%u bytes)\n",
+                   (unsigned)s_rx_text_len);
+        }
     }
+
     if (s_status_dirty) {
         s_status_dirty = false;
         if (ble_connected()) report_status();
     }
+
+    /* the wearer's side: what only this context can know */
+    wear_set_ble(ble_connected(), ble_has_bond());
+    if (wear_take_forget_request()) {
+        ble_forget_bonds();
+        printf("handoff: bonds cleared from the button\n");
+        wear_post(UI_EV_BOND_CLEARED);
+    }
+    /* VSYS only when the receiver is not using the converter (power.c). On
+     * the product image the ring runs from boot, so this reads 0 = unknown
+     * and the battery rows stay dark; see power.c for what would fix it. */
+    if (ticks++ % POWER_SAMPLE_TICKS == 0u)
+        wear_set_power(power_vsys_mv(), power_on_usb());
+
     btstack_run_loop_set_timer(ts, LINK_TICK_MS);
     btstack_run_loop_add_timer(ts);
 }
@@ -422,6 +482,13 @@ static void write_bench_card(void)
 
 /* ---- the sync pin ------------------------------------------------------- */
 
+#if HANDOFF_BENCH_SYNC
+/*
+ * M14's bench-only pin. On the product board GP15 is the push button, with
+ * R15 pulling it up: a press during a driven-high pulse would short the
+ * GPIO, so the two are exclusive by build. The two-board bench of M14 is
+ * `-DHANDOFF_BENCH_SYNC=ON`; the button is disabled in that image.
+ */
 static void on_sync_irq(void)
 {
     uint32_t ev = gpio_get_irq_event_mask(PIN_SYNC);
@@ -453,6 +520,9 @@ static void sync_pulse(void)
     gpio_put(PIN_SYNC, 0);
     gpio_set_dir(PIN_SYNC, GPIO_IN);
 }
+#else
+static void sync_init(void) {}
+#endif
 
 /* ---- the link, from the main loop --------------------------------------- */
 
@@ -487,6 +557,7 @@ static void on_done(uint64_t now)
     else if (s_sm.role == LINK_ROLE_RECEIVER) s_st.as_receiver++;
     s_st.dur_sum_ms += ms;
     if (ms > s_st.dur_max_ms) s_st.dur_max_ms = ms;
+    wear_post(ok ? UI_EV_LINK_COMPLETE : UI_EV_LINK_ABORT);
 
     printf("done %llu %s #%lu role %s %lu ms sent %lu good %lu bad %lu turns %lu "
            "retries %u frags %u/%u\n",
@@ -543,6 +614,7 @@ static void poll_link(uint64_t now)
         }
     }
 
+#if HANDOFF_BENCH_SYNC
     if (s_sync_hit) {
         uint64_t t;
         s_sync_hit = false;
@@ -562,6 +634,7 @@ static void poll_link(uint64_t now)
         s_sync_next_us = now + SYNC_PERIOD_US;
         sync_pulse();
     }
+#endif
 
     if (!s_link_on || !s_have_own) {
         uint16_t sink[64];
@@ -662,9 +735,35 @@ static void help(void)
            "  r         print the last received card\n"
            "  s         stats           z  zero\n"
            "  v         per-send lines %s\n"
-           "  c 40|200  carrier, kHz    h  this\n",
+           "  c 40|200  carrier, kHz    h  this\n"
+           "  u         LED / motor trace %s;  u <event> inject one (u ? lists)\n"
+           "  b <ms>    press the button for that long\n",
            s_link_on ? "on" : "off", (unsigned long)(s_reidle_us / 1000u),
-           s_verbose ? "(on)" : "(off)");
+           s_verbose ? "(on)" : "(off)", wear_tracing() ? "(on)" : "(off)");
+}
+
+static void cmd_ui(const char *line)
+{
+    const char *p = line + 1;
+    int ev;
+
+    while (*p == ' ') p++;
+    if (!*p) {
+        wear_trace(!wear_tracing());
+        printf("    ui trace %s\n", wear_tracing() ? "on" : "off");
+        return;
+    }
+    if (*p == '?') {
+        int i;
+        printf("   ");
+        for (i = 0; i < (int)UI_EV_COUNT; i++) printf(" %s", ui_event_name((ui_event_t)i));
+        printf("\n");
+        return;
+    }
+    ev = ui_event_parse(p);
+    if (ev < 0) { printf("    unknown event (u ? lists them)\n"); return; }
+    wear_inject((ui_event_t)ev);
+    printf("    injected %s\n", ui_event_name((ui_event_t)ev));
 }
 
 static char parse(const char *line, uint32_t *arg, bool *have_arg)
@@ -701,9 +800,18 @@ static void dispatch(const char *line)
         printf("    link %s\n", s_link_on ? "on" : "off");
         break;
     case 'y':
+#if HANDOFF_BENCH_SYNC
         s_sync_left = have_arg && arg ? arg : 1u;
         s_sync_next_us = now;
         printf("    %lu sync pulse%s\n", (unsigned long)s_sync_left, s_sync_left == 1 ? "" : "s");
+#else
+        printf("    not in this build: GP15 is the button (HANDOFF_BENCH_SYNC=ON for the pulse)\n");
+#endif
+        break;
+    case 'u': cmd_ui(line); break;
+    case 'b':
+        wear_press(have_arg ? arg : 100u);
+        printf("    button down for %lu ms\n", (unsigned long)(have_arg ? arg : 100u));
         break;
     case 'd':
         if (have_arg) s_reidle_us = arg * 1000u;
@@ -808,6 +916,11 @@ int main(void)
     link_sm_init(&s_sm, s_hal, &s_cfg, &s_own);
     zero_stats();
 
+    /* The wearer's side. After the HAL, so its pins are the last claimed;
+     * the boot flash happens here. */
+    wear_init(hal_now_us(s_hal));
+    wear_set_haptic(store_haptic_on(&s_store));
+
     sleep_ms(1500);          /* let the USB console attach before the banner */
     print_banner();
 
@@ -826,6 +939,8 @@ int main(void)
         uint64_t now = hal_now_us(s_hal);
 
         poll_link(now);
+        wear_link(&s_sm);
+        wear_poll(now);
 
         if (ch == PICO_ERROR_TIMEOUT) {
             if (now >= next_hb) {
