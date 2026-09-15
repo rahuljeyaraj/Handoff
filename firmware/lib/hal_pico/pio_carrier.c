@@ -1,10 +1,14 @@
 /*
- * Handoff — carrier generation, OOK gating and self-measurement. M3.
+ * Handoff — carrier generation, OOK gating and self-measurement. M3, M13.
  * See pio_carrier.h for the contract and pio_carrier.pio for the two programs.
  *
  * The pad is GP2 (design §10.1). Two state machines share it: sm_out drives it
- * one bit per cycle, sm_cnt counts rising edges on it. That is the whole of
- * M3's instrumentation — no jumper, no scope, no second board.
+ * one slot per half-period, sm_cnt counts rising edges on it. That is the whole
+ * of M3's instrumentation — no jumper, no scope, no second board.
+ *
+ * Since M13 the stream carries the pad direction as well as its level (§9.8):
+ * a space chip releases the pad rather than driving it low. The CPU never
+ * touches the running state machine's pin direction; the data does.
  */
 #include "pio_carrier.h"
 
@@ -21,28 +25,34 @@
 
 #define CARRIER_PIN 2
 
+/* carrier_out is out-pins then out-pindirs with a one-cycle delay: three cycles a slot. */
+_Static_assert(HANDOFF_PIO_SLOT_CYCLES == 3, "pio_carrier.pio is written for 3-cycle slots");
+
 /*
- * One bit per state-machine cycle and two cycles per carrier period, so a chip
- * costs 2 * (carrier_hz / chip_rate) bits: 100 at 200 kHz, 20 at 40 kHz.
+ * Two bits per slot and two slots per carrier period, so a chip costs
+ * 4 * (carrier_hz / chip_rate) bits: 200 at 200 kHz, 40 at 40 kHz.
  *
- * The buffer is the transmit bound. 2048 words is 65 536 bits, which is 655
- * chips at 200 kHz — comfortably more than the ~600 a full fragment frame
- * needs (§8.3), and the send below refuses rather than truncates if a caller
- * ever exceeds it. M5 is where a streaming double-buffer would earn its
- * complexity; nothing before it sends more than one frame at a time.
+ * The buffer is the transmit bound. 4096 words is 131 072 bits, which is 655
+ * chips at 200 kHz — comfortably more than the 624 a fragment frame needs
+ * (§8.3) — and the send below refuses rather than truncates if a caller ever
+ * exceeds it. One word is always kept for the released tail, see send().
  */
-#define CARRIER_TX_WORDS 2048u
+#define CARRIER_TX_WORDS 4096u
+
+/* A slot pair per nibble, LSB first: level 1 driven, then level 0 driven. */
+#define MARK_WORD 0xBBBBBBBBu
 
 /* Aligned to its own size so the DMA read-address ring wraps on it. */
 static uint32_t s_mark[8] __attribute__((aligned(32)));
 static uint32_t s_tx[CARRIER_TX_WORDS];
 
 /*
- * M7's tone: a repeating pattern of up to PIO_CARRIER_TONE_BITS bits, looped
- * the same way as s_mark. 2048 bits is 256 bytes, so the ring is 8 address
- * bits and the buffer is aligned to that.
+ * M7's tone: a repeating pattern of up to PIO_CARRIER_TONE_SLOTS slots, looped
+ * the same way as s_mark. 1024 slots is 2048 bits is 256 bytes, so the ring
+ * is 8 address bits and the buffer is aligned to that.
  */
-static uint32_t s_tone[PIO_CARRIER_TONE_BITS / 32] __attribute__((aligned(256)));
+static uint32_t s_tone[PIO_CARRIER_TONE_SLOTS * PIO_CARRIER_SLOT_BITS / 32]
+    __attribute__((aligned(256)));
 
 static PIO      s_pio    = pio0;
 static uint     s_sm_out = 0;
@@ -53,7 +63,9 @@ static int      s_dma    = -1;
 static uint32_t s_hz;
 static uint32_t s_bits_per_chip;
 static bool     s_driving;
+static bool     s_sense = true;
 static bool     s_loaded;
+static uint64_t s_started_us;
 
 static void tx_abort(void);
 
@@ -62,19 +74,21 @@ static void tx_abort(void);
 void pio_carrier_init(uint32_t carrier_hz)
 {
     pio_sm_config c;
-    float div;
+    uint32_t div;
     size_t i;
 
     s_hz = carrier_hz;
 
-    /* Two state-machine cycles per carrier period. Both 40 kHz and 200 kHz
-     * divide 150 MHz exactly (design §10.1), which config.h static-asserts. */
-    div = (float)clock_get_hz(clk_sys) / (float)(2u * carrier_hz);
+    /* Three state-machine cycles per half-period slot. Both 40 kHz and
+     * 200 kHz divide 150 MHz / 6 exactly (design §10.1), which config.h
+     * static-asserts; the divider is an integer with no fractional jitter. */
+    div = clock_get_hz(clk_sys) / (PIO_CARRIER_SLOT_CYCLES * 2u * carrier_hz);
 
-    s_bits_per_chip = 2u * (carrier_hz / (uint32_t)HANDOFF_CHIP_RATE_HZ);
+    s_bits_per_chip = PIO_CARRIER_SLOT_BITS * 2u
+                    * (carrier_hz / (uint32_t)HANDOFF_CHIP_RATE_HZ);
 
     for (i = 0; i < count_of(s_mark); i++)
-        s_mark[i] = 0xAAAAAAAAu;      /* alternating: a continuous carrier */
+        s_mark[i] = MARK_WORD;         /* driven square: a continuous carrier */
 
     /* Re-initialising at a different carrier is how M3 walks 40 kHz and
      * 200 kHz in one run; the programs are loaded once or the instruction
@@ -90,16 +104,20 @@ void pio_carrier_init(uint32_t carrier_hz)
     /* ---- generator ---- */
     pio_gpio_init(s_pio, CARRIER_PIN);
     gpio_set_dir(CARRIER_PIN, GPIO_IN);       /* SIO side: input, so SIO = high-Z */
+    gpio_set_input_enabled(CARRIER_PIN, s_sense);
     c = carrier_out_program_get_default_config(s_off_out);
     sm_config_set_out_pins(&c, CARRIER_PIN, 1);
-    /* Shift right, autopull at 32: one pad bit per cycle, refilled for free. */
+    sm_config_set_set_pins(&c, CARRIER_PIN, 1);
+    /* Shift right, autopull at 32: one slot per two bits, refilled for free. */
     sm_config_set_out_shift(&c, true, true, 32);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
-    sm_config_set_clkdiv(&c, div);
+    sm_config_set_clkdiv_int_frac(&c, (uint16_t)div, 0);
     pio_sm_init(s_pio, s_sm_out, s_off_out, &c);
-    /* The SM's own pindir, set once while it is stopped; drive() switches the
-     * pad's function select from here on and never touches the SM. */
-    pio_sm_set_consecutive_pindirs(s_pio, s_sm_out, CARRIER_PIN, 1, true);
+    /* The pad starts released and stays that way until a mark slot says
+     * otherwise. Set while the state machine is stopped: the running one is
+     * never touched from here (the M5 stall suspect, since retired). */
+    pio_sm_set_pins_with_mask(s_pio, s_sm_out, 0, 1u << CARRIER_PIN);
+    pio_sm_set_consecutive_pindirs(s_pio, s_sm_out, CARRIER_PIN, 1, false);
 
     /* ---- counter ---- */
     c = edge_count_program_get_default_config(s_off_cnt);
@@ -121,16 +139,15 @@ void pio_carrier_init(uint32_t carrier_hz)
  * The pulls go too, because a pull is a load, and because txgen tests the
  * high-Z claim by seeing whether an internal pull can move the pad at all.
  *
- * The pad's output enable is switched by its FUNCTION SELECT, not by the
- * state machine's pin direction. The SM's pindir for GP2 is set once, in
- * init, and never touched again: switching the pad to SIO (whose direction
- * for GP2 is input, the reset state) makes it high-Z, and switching it back
- * to PIO0 hands it to the generator again. The alternative,
- * pio_sm_set_consecutive_pindirs, force-executes a `set pindirs` on the
- * RUNNING state machine and restores PINCTRL a few system cycles later; it
- * was M5's first suspect for the one transmit in ~2 700 that stayed busy
- * forever, and this way there is nothing to suspect. The PIO still reads
- * the pad for the edge counter whichever function owns it.
+ * The pad's output enable is switched by its FUNCTION SELECT, never by poking
+ * the running state machine: switching the pad to SIO (whose direction for
+ * GP2 is input, the reset state) makes it high-Z, and switching it back to
+ * PIO0 hands it to the generator again, whose own pin direction is released
+ * between sends and driven only inside mark slots. The alternative,
+ * pio_sm_set_consecutive_pindirs on the RUNNING machine, force-executes an
+ * instruction and restores PINCTRL a few cycles later; it was M5's first
+ * suspect for the one transmit in ~2 700 that stayed busy forever. The PIO
+ * still reads the pad for the edge counter whichever function owns it.
  */
 void pio_carrier_drive(bool on)
 {
@@ -139,29 +156,55 @@ void pio_carrier_drive(bool on)
 
     if (!on) {
         gpio_disable_pulls(CARRIER_PIN);
+        gpio_set_input_enabled(CARRIER_PIN, false);
         /*
          * RP2350-E9, measured at M3 rather than assumed: once a high-impedance
-         * bank-0 pad has been taken high, the internal pull-down cannot bring
-         * it back down -- it latches, and a latched pad is driving the
-         * electrode that §6.3 requires it to stop loading. Development plan §6
-         * guessed this would be harmless through R1's 1 MOhm; it is not, since
-         * a pull-down far stronger than 1 MOhm does not clear it either.
+         * bank-0 pad with its input buffer enabled has been taken high, the
+         * internal pull-down cannot bring it back down -- it latches, and a
+         * latched pad is driving the electrode that §6.3 requires it to stop
+         * loading. With the buffer off (the link's state, see sense()) the
+         * leakage path is gone and the latch cannot form, inside a frame or
+         * after it; that is the shipped mitigation, and it costs nothing.
          *
-         * Toggling the pad's input buffer does clear it, which txgen confirms
-         * both ways. It costs two register writes on the way into receive.
+         * With the buffer on (the instruments) a latch that already exists
+         * has to be discharged while the buffer is off, and M13's bare-pad
+         * run showed that a bare toggle does not do it: nothing pulls the
+         * pad down in the gap, so it floats at ~2.2 V and re-latches when
+         * the buffer comes back. The pull-down does it in microseconds --
+         * the M3 test that passed with an instant toggle had the pad driven
+         * low at the time. Only instruments come through here with the
+         * buffer on, so the brief pull is not a load on any link.
          */
-        gpio_set_input_enabled(CARRIER_PIN, false);
-        gpio_set_input_enabled(CARRIER_PIN, true);
+        if (s_sense) {
+            gpio_pull_down(CARRIER_PIN);
+            busy_wait_us(20);
+            gpio_disable_pulls(CARRIER_PIN);
+            gpio_set_input_enabled(CARRIER_PIN, true);
+        }
     }
+}
+
+void pio_carrier_sense(bool on)
+{
+    s_sense = on;
+    gpio_set_input_enabled(CARRIER_PIN, on);
 }
 
 /* ---------------------------------------------------------------------- */
 
+/*
+ * Stop whatever is being sent and leave the pad released. The state machine
+ * is halted first, so the pin-direction write below lands on a stopped
+ * machine and the pad goes high-impedance in the same instant -- which is
+ * the release M13 times a shout's settling from.
+ */
 static void tx_abort(void)
 {
     if (s_dma >= 0 && dma_channel_is_busy((uint)s_dma))
         dma_channel_abort((uint)s_dma);
     pio_sm_set_enabled(s_pio, s_sm_out, false);
+    pio_sm_set_consecutive_pindirs(s_pio, s_sm_out, CARRIER_PIN, 1, false);
+    pio_sm_set_pins_with_mask(s_pio, s_sm_out, 0, 1u << CARRIER_PIN);
     pio_sm_clear_fifos(s_pio, s_sm_out);
     pio_sm_restart(s_pio, s_sm_out);
     pio_sm_exec(s_pio, s_sm_out, pio_encode_jmp(s_off_out));
@@ -184,6 +227,9 @@ static void tx_start(const uint32_t *src, uint32_t words, uint ring_bits)
 
     dma_channel_configure((uint)s_dma, &c, &s_pio->txf[s_sm_out], src,
                           ring_bits ? 0xFFFFFFFFu : words, true);
+    /* The first word is in the FIFO within a bus cycle and the machine,
+     * stalled on autopull, takes it at its next tick: under a slot from now. */
+    s_started_us = time_us_64();
 }
 
 void pio_carrier_mark_continuous(bool on)
@@ -192,23 +238,37 @@ void pio_carrier_mark_continuous(bool on)
     else    tx_abort();
 }
 
-bool pio_carrier_tone(uint32_t sm_div, uint32_t period_bits, uint32_t high_bits)
+void pio_carrier_hold(int level)
 {
-    uint32_t bits = PIO_CARRIER_TONE_BITS;
-    uint32_t b;
+    tx_abort();
+    if (level < 0) return;
+    pio_sm_set_enabled(s_pio, s_sm_out, false);
+    pio_sm_set_pins_with_mask(s_pio, s_sm_out, level ? 1u << CARRIER_PIN : 0,
+                              1u << CARRIER_PIN);
+    pio_sm_set_consecutive_pindirs(s_pio, s_sm_out, CARRIER_PIN, 1, true);
+    pio_sm_set_enabled(s_pio, s_sm_out, true);   /* stalls on an empty FIFO */
+}
+
+bool pio_carrier_tone(uint32_t sm_div, uint32_t period_slots, uint32_t high_slots)
+{
+    uint32_t slots = PIO_CARRIER_TONE_SLOTS;
+    uint32_t s;
 
     if (sm_div < 1u || sm_div > 65535u) return false;
-    if (period_bits < 2u || period_bits > bits) return false;
-    if (period_bits & (period_bits - 1u)) return false;   /* must tile the ring */
-    if (high_bits < 1u || high_bits >= period_bits) return false;
+    if (period_slots < 2u || period_slots > slots) return false;
+    if (period_slots & (period_slots - 1u)) return false;   /* must tile the ring */
+    if (high_slots < 1u || high_slots >= period_slots) return false;
 
-    /* Bit b of the stream is bit (b % 32) of word (b / 32), LSB first,
-     * because the OSR shifts right -- the same layout send() uses. The
-     * high bits lead each period so a rising edge starts it. */
+    /* Slot s is bits 2s (level) and 2s+1 (driven) of the stream, LSB first,
+     * because the OSR shifts right -- the same layout send() uses. Every
+     * slot of a tone is driven; the high slots lead each period so a rising
+     * edge starts it. */
     memset(s_tone, 0, sizeof s_tone);
-    for (b = 0; b < bits; b++)
-        if ((b % period_bits) < high_bits)
-            s_tone[b >> 5] |= 1u << (b & 31u);
+    for (s = 0; s < slots; s++) {
+        uint32_t b = s * PIO_CARRIER_SLOT_BITS;
+        if ((s % period_slots) < high_slots) s_tone[b >> 5] |= 1u << (b & 31u);
+        s_tone[(b + 1u) >> 5] |= 1u << ((b + 1u) & 31u);
+    }
 
     tx_abort();
     pio_sm_set_clkdiv_int_frac(s_pio, s_sm_out, (uint16_t)sm_div, 0);
@@ -219,8 +279,9 @@ bool pio_carrier_tone(uint32_t sm_div, uint32_t period_bits, uint32_t high_bits)
 
 void pio_carrier_send(const uint8_t *chips, size_t n)
 {
-    uint32_t bits = (uint32_t)n * s_bits_per_chip;
-    uint32_t words = (bits + 31u) / 32u;
+    uint32_t bits  = (uint32_t)n * s_bits_per_chip;
+    uint32_t words = (bits + 31u) / 32u + 1u;   /* + one released word */
+    uint32_t slots_per_chip = s_bits_per_chip / PIO_CARRIER_SLOT_BITS;
     uint32_t b = 0;
     size_t i;
 
@@ -229,15 +290,26 @@ void pio_carrier_send(const uint8_t *chips, size_t n)
     memset(s_tx, 0, (size_t)words * sizeof s_tx[0]);
 
     /*
-     * A mark is the carrier: alternate every cycle. A space is silence: leave
-     * the zeros. Bit b of the stream is bit (b % 32) of word (b / 32), LSB
-     * first, because the OSR shifts right.
+     * A mark is the carrier: level alternating, driven every slot. A space
+     * is a released pad: leave the zeros, level and direction both. Bit b of
+     * the stream is bit (b % 32) of word (b / 32), LSB first, because the
+     * OSR shifts right. A mark starts high and ends low, so the pad is
+     * always released from 0 V; on a bare pad with the input buffer on that
+     * is the one release that cannot latch (txgen's E9 finding).
+     *
+     * The trailing word is all released slots. 624 chips at 200 kHz is
+     * exactly 3 900 words, so without it the stalled machine would hold the
+     * last mark's driven-low slot for as long as the CPU took to notice --
+     * and on the product that is the 0.28 V bias step §9.8 exists to avoid.
      */
     for (i = 0; i < n; i++) {
-        uint32_t k;
         if (chips[i]) {
-            for (k = 1; k < s_bits_per_chip; k += 2)
-                s_tx[(b + k) >> 5] |= 1u << ((b + k) & 31u);
+            uint32_t j;
+            for (j = 0; j < slots_per_chip; j++) {
+                uint32_t k = b + j * PIO_CARRIER_SLOT_BITS;
+                if (!(j & 1u)) s_tx[k >> 5] |= 1u << (k & 31u);        /* level */
+                s_tx[(k + 1u) >> 5] |= 1u << ((k + 1u) & 31u);         /* driven */
+            }
         }
         b += s_bits_per_chip;
     }
@@ -250,6 +322,8 @@ bool pio_carrier_busy(void)
     if (s_dma >= 0 && dma_channel_is_busy((uint)s_dma)) return true;
     return !pio_sm_is_tx_fifo_empty(s_pio, s_sm_out);
 }
+
+uint64_t pio_carrier_started_us(void) { return s_started_us; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -315,6 +389,6 @@ void pio_carrier_reset(void) { tx_abort(); }
 uint32_t pio_carrier_bits_per_chip(void) { return s_bits_per_chip; }
 size_t   pio_carrier_max_chips(void)
 {
-    return s_bits_per_chip ? (CARRIER_TX_WORDS * 32u) / s_bits_per_chip : 0;
+    return s_bits_per_chip ? ((CARRIER_TX_WORDS - 1u) * 32u) / s_bits_per_chip : 0;
 }
 bool     pio_carrier_is_driving(void)    { return s_driving; }

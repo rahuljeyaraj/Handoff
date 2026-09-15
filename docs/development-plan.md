@@ -797,6 +797,55 @@ data only after the settling window (§9.7).
 Exit criteria: 10 000 turnarounds with no false carrier detection during the
 recovery window, and measured settling time against the 1 ms budget.
 
+**Software half done 15 Sep 2026, the AFE not yet built.** `apps/turnaround`
+runs the turn forever on one board — drive, send, release, deaf for the
+window, then trust — and counts what the exit criteria ask for (`k f|s` a
+frame or a 10 ms shout per turn, `w` `l` `n` `b` the window, listen, run
+length and capture; the header comment maps the rest). Bench-checked on the
+COM8 board through the passive 10 kΩ / 540 Ω divider, GP2 → GP26:
+
+- **10 000 shouts and 10 000 frames, 0 false detections** — in the window
+  (a copy of the detector fed only the window's chips never fired; the
+  window's chip energy was 0 LSB in all 59 000 of them) and after it (the
+  link's own detector, frozen across the turn exactly as `link_sm` keeps
+  it, never declared a carrier in the 5 ms after the window nor in the
+  listen that followed). No TX stalls, no false syncs, no overruns.
+- **Settling on the bare divider: −250 to +26 µs typical**, worst 506 µs,
+  none over budget. The pad settles in nanoseconds here, so this is the
+  instrument's zero: +24 µs is the moving-window resolution, the negative
+  values are frames that ended in a space. The worst cases are single
+  ambient samples 8–10 LSB off a rest level pinned at the rail, which
+  restart the 0.5 ms hold; a first pass defined settling as "last sample
+  out of band" and read them as 1–4 ms, six times in 10 000. **The AFE
+  figure is the hardware day's**, from the same app.
+- **Chips are placed by ADC sample number, not arrival time.** The ipc
+  ring is up to a DMA block late, 4 ms, four budgets; `hal_pico_rx_chips_at`
+  carries each chip's last sample and `hal_pico_sample_us` puts it on the
+  timer, and the release instant is the DMA start plus the airtime, not the
+  CPU noticing busy clear. The raw capture for the settling figure is armed
+  for that instant before it happens.
+- **A space chip is now a released pad, not a driven low** — design §9.8,
+  found working out the DC-coupled loop before writing a line: a driven-low
+  space pulls the wristband's own stage-1 bias to 0.28 V and C1/R6 need
+  17 ms to come back. The PIO stream carries level and direction per
+  half-period (three-cycle slots, dividers 125 / 625), every send ends in a
+  released word, GP2's input buffer is off for good in the link so
+  RP2350-E9 has nothing to latch, and **C1 on the PCB is 1 nF C0G**.
+  Nothing regressed: txgen's M3 suite re-passes on a bare pad (93D1) with a
+  new "a space chip releases the pad" check, loopback boots clean at both
+  carriers and ran 1000/1000 at margin 132, and the turnaround app's boot
+  check reads the release through the divider with the ADC (space chips
+  with a pull-up move the node 37 LSB; a held low does not). The M3 latch
+  test turned out to have been vacuous — the pad was driven low when it
+  ran — and `drive(false)` now discharges a latched pad with a pull-down
+  while the input buffer is off, for the instruments that keep it on.
+- **The positive control is wired but not yet connected.** 93D1 runs
+  `linktest_tx` (role compiled in, no strap) into the same node through a
+  second 10 kΩ so the receiver has real frames to decode after each window;
+  with 93D1 sending 1 800 frames, COM8's node read what it reads in
+  silence, so that resistor is not on yet. Wire it, `p` on COM7 to resume,
+  `l 400` `n 500` `g` on COM8, and the `frames good` column is the control.
+
 ### M14 — Contact trigger and two-way
 
 **Hardware: none added** — two complete wristbands, which by now you have.
@@ -857,7 +906,7 @@ Carried from design §17, plus what this plan adds:
 | USB instrumentation vs §13 safety | **M4 — done** | continuous score stream, triggered raw bursts, BLE during body tests: `tlm_usb.c` and `tlm_ble.c` |
 | Role election implementation | **removed** | There is no election. `lib/proto/elect.c` and its 0–5 ms backoff were deleted and replaced by the contact trigger, which decides the sender by timing geometry rather than by a draw — see firmware-architecture §7.6 and §13.3, and `docs/simple-trigger-spec.md` |
 | Contact trigger implementation | **M1 done (logic)** / M14 (hardware) | `lib/proto/beacon.c`. Swept across all 112 relative phase offsets: every one rendezvous, worst case 108 ms, and every one produces exactly one sender. Forced simultaneous starts over 400 seeds: 398 resolve within two shout rounds, worst case three. Power is deliberately not optimised for v1 — the band listens continuously |
-| RP2350-E9 vs the GP2 high-Z requirement | **M3 — measured, and it is not harmless** | a high-Z pad taken high latches, and the internal pull-down cannot clear it, so 1 MΩ certainly cannot. Toggling the input buffer does; `pio_carrier_drive(false)` does that |
+| RP2350-E9 vs the GP2 high-Z requirement | **M3 — measured, and it is not harmless** | a high-Z pad taken high latches, and the internal pull-down cannot clear it, so 1 MΩ certainly cannot. Toggling the input buffer does — with a pull-down on during the gap, M13 found; without one the pad floats at 2.2 V and re-latches. Since M13 the link keeps GP2's input buffer off altogether, so nothing latches (design §9.8) |
 | Enclosure and strap | not scheduled | not on the critical path |
 
 ### Rejected orderings

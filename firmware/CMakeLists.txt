@@ -122,4 +122,5 @@ add_subdirectory(apps/adcbench)   # M4
 add_subdirectory(apps/loopback)   # M5
 add_subdirectory(apps/linktest)   # M6
 add_subdirectory(apps/afe_sweep)  # M7
+add_subdirectory(apps/turnaround) # M13
 add_subdirectory(apps/handoff)    # M14

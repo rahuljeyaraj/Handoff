@@ -12,6 +12,13 @@
  *   - gating on and off is chip-aligned, verified by counting edges per chip
  *   - GP2 reads as high-Z when told to be, RP2350-E9 notwithstanding
  *
+ * Since M13 a space chip RELEASES the pad rather than driving it low
+ * (design §9.8), so the "driven" half of the pad-state test parks the pad
+ * with pio_carrier_hold(); the high-Z half releases it the way a frame does.
+ * The gating count is unchanged by this: a mark still has exactly
+ * carrier / chip_rate rising edges, and a released pad between marks adds
+ * none because a mark ends low and the bare pad stays there.
+ *
  * Cannot prove: signal amplitude, or anything at all about the receive side.
  * Cannot prove either — and this is stated rather than glossed — edge-to-edge
  * jitter WITHIN a carrier period. Every measurement here counts edges or times
@@ -175,15 +182,29 @@ static void test_gating(uint32_t hz)
  */
 static void test_highz(void)
 {
-    bool down_first, up_then, down_again, driven_holds;
+    bool down_first, up_then, down_again, driven_holds, space_floats;
     uint8_t space[8];
 
-    /* Start from a known driven-low pad, then release it. */
+    /*
+     * A space chip is a released pad (§9.8): send a run of them and the pad
+     * must follow an internal pull while the generator still owns it. That
+     * is the in-frame half of the high-Z claim, new at M13.
+     */
     memset(space, 0, sizeof space);
     pio_carrier_drive(true);
     pio_carrier_send(space, sizeof space);
     while (pio_carrier_busy()) tight_loop_contents();
+    gpio_pull_down(2); sleep_ms(5); space_floats = (gpio_get(2) == 0);
+    gpio_pull_up(2);   sleep_ms(5); space_floats = space_floats && (gpio_get(2) == 1);
+    gpio_disable_pulls(2);
+    printf("    spaces:  pad follows a pull inside a run of space chips: %s\n",
+           space_floats ? "yes" : "NO");
+    check(space_floats, "a space chip releases the pad");
 
+    /* Start from a known driven-low pad, then release it the frame way. */
+    pio_carrier_hold(0);
+    sleep_ms(1);
+    pio_carrier_hold(-1);
     pio_carrier_drive(false);
 
     /*
@@ -202,10 +223,10 @@ static void test_highz(void)
     /* Drive it low again and confirm the same pull cannot lift it, so that a
      * pull too weak to move anything cannot pass the test by accident. */
     pio_carrier_drive(true);
-    pio_carrier_send(space, sizeof space);
-    while (pio_carrier_busy()) tight_loop_contents();
+    pio_carrier_hold(0);
     gpio_pull_up(2); sleep_ms(5); driven_holds = (gpio_get(2) == 0);
     gpio_disable_pulls(2);
+    pio_carrier_hold(-1);
 
     printf("    high-Z:  released->pull-down %s, then pull-up %s, "
            "then pull-down %s\n",
@@ -235,8 +256,9 @@ static void test_highz(void)
 
         if (!ie_clears) {
             pio_carrier_drive(true);
-            pio_carrier_send(space, sizeof space);
-            while (pio_carrier_busy()) tight_loop_contents();
+            pio_carrier_hold(0);
+            sleep_ms(1);
+            pio_carrier_hold(-1);
             pio_carrier_drive(false);
             sleep_ms(5);
             drive_clears = (gpio_get(2) == 0);
@@ -252,8 +274,13 @@ static void test_highz(void)
     }
 
     /*
-     * And the one that actually has to hold in the shipped code: entering
-     * receive clears any latch, because pio_carrier_drive(false) does it.
+     * And the one that has to hold for the instruments, which keep the input
+     * buffer on: entering receive clears any latch, because
+     * pio_carrier_drive(false) discharges the pad with the buffer off. The
+     * shipped link keeps the buffer off altogether (pio_carrier_sense), so
+     * nothing can latch there in the first place. This test is not vacuous
+     * any more: the pad really is floating and latched when drive(false) is
+     * called, where before M13 it was still driven low by the space send.
      */
     {
         bool cleared;

@@ -27,11 +27,14 @@
 
 void ipc_init(void);
 
-/* core 1 */
-bool ipc_push_chip(uint16_t energy);
+/* core 1. sample_idx is the number of the last ADC sample in the chip, so
+ * core 0 can place a chip on the sample clock (M13 needs to know which
+ * chips were sampled inside the turnaround window, and the ring's own
+ * latency is up to a DMA block). */
+bool ipc_push_chip(uint16_t energy, uint32_t sample_idx);
 
-/* core 0 */
-size_t ipc_pop_chips(uint16_t *dst, size_t max);
+/* core 0. idx may be NULL when the caller only wants energies. */
+size_t ipc_pop_chips(uint16_t *dst, uint32_t *idx, size_t max);
 
 /* Chips dropped because core 0 fell behind. Should be zero; if it is not, the
  * core split of §3.3 is wrong somewhere and the fix is there, not here. */

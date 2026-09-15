@@ -74,7 +74,7 @@ static void core1_main(void)
             uint32_t score;
             if (gz_push(&g, blk[i], &score)) {
                 s_windows++;
-                ipc_push_chip((uint16_t)(score > 0xFFFFu ? 0xFFFFu : score));
+                ipc_push_chip((uint16_t)(score > 0xFFFFu ? 0xFFFFu : score), 0);
             }
         }
 
@@ -150,7 +150,7 @@ int main(void)
 
         /* Core 0's half of §3.3: drain the ring so a full ring cannot be
          * mistaken for a core-1 problem. */
-        while (ipc_pop_chips(chips, count_of(chips)) > 0)
+        while (ipc_pop_chips(chips, 0, count_of(chips)) > 0)
             tight_loop_contents();
 
         if (secs >= last + REPORT_EVERY) {

@@ -355,7 +355,10 @@ static uint32_t raw_rms(int32_t *mean_code)
  *
  *   carrier on    a continuous mark, so the on-chip energy A is read without
  *                 any Manchester structure in the way
- *   driven low    a space: what an off chip inside a frame looks like
+ *   space         a run of space chips: what an off chip inside a frame
+ *                 looks like. Since M13 that is a RELEASED pad (§9.8), so
+ *                 on the divider it reads the same as the row below; on the
+ *                 product it is what keeps stage 1 at VREF mid-frame
  *   high-Z        design §6.3's receive state: the leakage criterion
  *
  * A is the Goertzel score, which for an on-bin tone is its amplitude in LSB —
@@ -380,8 +383,7 @@ static void cmd_measure(void)
     on = mean_energy(MEASURE_US, &on_max);
     pio_carrier_mark_continuous(false);
 
-    /* A starved PIO holds the pad at its last level, which after a mark is
-     * high; a short run of space chips is what actually drives it low. */
+    /* A run of space chips: the generator releases the pad for each one. */
     {
         uint8_t space[8];
         memset(space, 0, sizeof space);
@@ -401,7 +403,7 @@ static void cmd_measure(void)
 
     printf("    carrier on:   chip energy "); print_tenths(on);
     printf(" LSB (max %lu)\n", (unsigned long)on_max);
-    printf("    driven low:   chip energy "); print_tenths(low);
+    printf("    space (rel):  chip energy "); print_tenths(low);
     printf(" LSB (max %lu), raw ", (unsigned long)low_max); print_tenths(sig_low);
     printf(" LSB RMS about code %ld\n", (long)mean_low);
     printf("    high-Z:       chip energy "); print_tenths(hiz);

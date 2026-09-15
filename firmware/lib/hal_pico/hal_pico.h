@@ -73,4 +73,19 @@ uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last);
 uint32_t hal_pico_chips(void);
 uint32_t hal_pico_windows(void);
 
+/*
+ * M13 instrumentation. The chip stream with each chip's place on the ADC
+ * sample clock (the number of its last sample), and that clock in
+ * time_us_64() terms, so a bench app can say which chips were sampled
+ * inside a window rather than which arrived during it -- the ring's latency
+ * is up to a DMA block, 4 ms, which is four turnaround budgets. Same ring
+ * as hal_rx_chips(); pop from one or the other.
+ */
+size_t   hal_pico_rx_chips_at(uint16_t *dst, uint32_t *idx, size_t max);
+uint64_t hal_pico_sample_us(uint64_t idx);
+
+/* When the last send's final chip ended on the pad (the DMA start plus the
+ * airtime), which is when the generator released it. */
+uint64_t hal_pico_tx_pad_idle_us(void);
+
 #endif /* HANDOFF_HAL_PICO_H */

@@ -44,10 +44,17 @@ void tlm_usb_init(uint16_t decimate);
 void tlm_usb_score(uint16_t score);
 void tlm_usb_event(const char *text);
 
-/* Triggered burst. Capture then dump; never both at once. */
+/* Triggered burst. Capture then dump; never both at once. trigger() takes
+ * the whole buffer from the next DMA block; trigger_at() takes n samples
+ * starting at the first one converted at or after t0_us (M13: the release
+ * of the pad, known in advance), and may be armed up to a block ahead of
+ * it because core 1 has not yet seen that block. start_us() is when the
+ * first captured sample was converted, once busy() has cleared. */
 void tlm_usb_raw_trigger(void);
+void tlm_usb_raw_trigger_at(uint64_t t0_us, size_t n);
 bool tlm_usb_raw_busy(void);
 void tlm_usb_raw_dump(void);
+uint64_t tlm_usb_raw_start_us(void);
 
 /* The captured burst, once raw_busy() has cleared. NULL while capturing.
  * For a bench that wants a number (an RMS, a mean) rather than a dump. */

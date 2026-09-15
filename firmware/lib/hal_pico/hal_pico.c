@@ -35,7 +35,7 @@
 
 /* Deliberately not in tlm.h: only the owner of the block loop may feed the
  * raw burst, and after M5 that owner is this file. See tlm_usb.c. */
-void tlm_usb_raw_feed(const int16_t *samples, size_t n);
+void tlm_usb_raw_feed(const int16_t *samples, size_t n, uint64_t first_idx);
 
 static hal_iface_t s_iface;
 static bool        s_inited;
@@ -85,7 +85,8 @@ static void core1_main(void)
     for (;;) {
         const int16_t *blk;
         size_t n = 0, i;
-        uint64_t t0;
+        uint64_t t0, base;
+        uint32_t seq = 0;
 
         if (s_carrier_req != hz) {
             hz = s_carrier_req;
@@ -96,13 +97,14 @@ static void core1_main(void)
         /* Same accounting as M4's adcbench: the DC-centring copy inside
          * next_block() is core-1 work, a failed poll is not. */
         t0  = time_us_64();
-        blk = adc_ring_next_block(&n);
+        blk = adc_ring_next_block_seq(&n, &seq);
         if (blk == 0) {
             tight_loop_contents();
             continue;
         }
+        base = (uint64_t)seq * ADC_RING_BLOCK;
 
-        tlm_usb_raw_feed(blk, n);
+        tlm_usb_raw_feed(blk, n, base);
 
         for (i = 0; i < n; i++) {
             uint32_t score;
@@ -116,7 +118,7 @@ static void core1_main(void)
             carrier_push(&car, chip);
             s_level = carrier_level(&car);
             s_chips++;
-            ipc_push_chip(chip);
+            ipc_push_chip(chip, (uint32_t)(base + i));
         }
 
         busy += time_us_64() - t0;
@@ -129,11 +131,15 @@ static void core1_main(void)
 /*
  * When the PIO will have finished clocking out the last chip. pio_carrier_busy()
  * clears when the DMA is done and the TX FIFO is empty, but the OSR can still
- * hold up to 32 pad bits — 80 us at 200 kHz, 400 us at 40 kHz, which is more
- * than a chip. The last chips of a frame are the CRC, so busy has to cover
- * them: it is held until the chips have had their airtime plus that tail.
+ * hold up to 32 stream bits — the released word every send ends in, 40 us at
+ * 200 kHz, 200 us at 40 kHz. The last chips of a frame are the CRC, so busy
+ * has to cover them: it is held until the chips have had their airtime plus
+ * that tail. The airtime is counted from the DMA start the generator
+ * reports, not from when send() returned, so the pad-idle instant is known
+ * to a slot and M13 can time settling from it.
  */
 static uint64_t s_tx_until;
+static uint64_t s_tx_pad_idle;   /* when the last chip of the last send ends */
 
 /*
  * A transmit that is still busy well after its airtime has stalled: the
@@ -172,11 +178,13 @@ static size_t p_tx_chips(void *ctx, const uint8_t *chips, size_t n)
     if (tx_stalled_and_reset()) { /* recovered: fall through and send */ }
     else if (pio_carrier_busy() || time_us_64() < s_tx_until) return 0;
 
-    /* 32 OSR bits at two per carrier period. */
-    tail_us = 16000000u / hal_pico_carrier_hz();
+    /* The released word the send appends: 32 stream bits at the chip's
+     * bits-per-chip -- 40 us at 200 kHz, 200 us at 40 kHz. */
+    tail_us = 32u * (uint32_t)HANDOFF_CHIP_US / pio_carrier_bits_per_chip();
 
     pio_carrier_send(chips, n);
-    s_tx_until = time_us_64() + (uint64_t)n * HANDOFF_CHIP_US + tail_us;
+    s_tx_pad_idle = pio_carrier_started_us() + (uint64_t)n * HANDOFF_CHIP_US;
+    s_tx_until    = s_tx_pad_idle + tail_us;
     return n;
 }
 
@@ -190,7 +198,7 @@ static bool p_tx_busy(void *ctx)
 static size_t p_rx_chips(void *ctx, uint16_t *dst, size_t max)
 {
     (void)ctx;
-    return ipc_pop_chips(dst, max);
+    return ipc_pop_chips(dst, 0, max);
 }
 
 static uint32_t p_rx_carrier_level(void *ctx)
@@ -236,9 +244,12 @@ const hal_iface_t *hal_pico_init(void)
     adc_ring_stop();
     adc_ring_start();
 
-    /* The carrier comes up driven; the resting state of a wristband is
-     * listening, and design §6.3 says listening means high-Z. */
+    /* The carrier comes up owned by the generator; the resting state of a
+     * wristband is listening, and design §6.3 says listening means high-Z.
+     * The pad's input buffer goes off for good: the link never reads GP2,
+     * and with it off RP2350-E9 cannot latch a released pad (§9.8). */
     pio_carrier_init(s_carrier_req);
+    pio_carrier_sense(false);
     pio_carrier_drive(false);
 
     tlm_usb_init(0);
@@ -289,7 +300,7 @@ bool hal_pico_set_carrier(uint32_t hz)
     if (hz == 0 || hz % (uint32_t)HANDOFF_WINDOW_RATE_HZ != 0) return false;
     bin = hz / (uint32_t)HANDOFF_WINDOW_RATE_HZ;
     if (bin == 0 || 2u * bin >= (uint32_t)HANDOFF_GZ_N) return false;
-    if ((uint32_t)HANDOFF_SYS_CLK_HZ % (2u * hz) != 0) return false;
+    if ((uint32_t)HANDOFF_SYS_CLK_HZ % (2u * PIO_CARRIER_SLOT_CYCLES * hz) != 0) return false;
 
     if (!s_inited) {
         s_carrier_req = hz;
@@ -299,6 +310,7 @@ bool hal_pico_set_carrier(uint32_t hz)
     while (p_tx_busy(0)) tight_loop_contents();
 
     pio_carrier_init(hz);
+    pio_carrier_sense(false);
     pio_carrier_drive(false);
 
     s_carrier_req = hz;
@@ -315,3 +327,11 @@ uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last)
 }
 uint32_t hal_pico_chips(void)      { return s_chips; }
 uint32_t hal_pico_windows(void)    { return s_windows; }
+
+size_t hal_pico_rx_chips_at(uint16_t *dst, uint32_t *idx, size_t max)
+{
+    return ipc_pop_chips(dst, idx, max);
+}
+
+uint64_t hal_pico_sample_us(uint64_t idx)  { return adc_ring_sample_us(idx); }
+uint64_t hal_pico_tx_pad_idle_us(void)     { return s_tx_pad_idle; }

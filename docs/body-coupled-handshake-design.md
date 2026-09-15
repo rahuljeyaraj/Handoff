@@ -154,7 +154,7 @@ Two components. No gate driver, no boost converter.
 
 The load is capacitive and draws around 12 µA, well within a GPIO's capability. A CD4049 at 12 V would gain approximately 11 dB but adds a chip, a boost converter, and a switching noise source adjacent to a high-impedance node. It is deliberately kept off the critical path and can be added later if measurement shows the link is short.
 
-**Firmware requirement:** GP2 must be switched to input (high-Z) while receiving, so the transmitter does not load the pad.
+**Firmware requirement:** GP2 must be switched to input (high-Z) while receiving, so the transmitter does not load the pad — and, since M13, for every **space chip inside a frame** as well. A driven-low space is not "no carrier": through R1 and R2 it pulls the wristband's own stage-1 bias to 0.28 V and the interstage capacitor then needs tens of milliseconds to recover. §9.8 has the numbers. The PIO stream carries the pad's direction alongside its level, so the release is slot-exact and costs the CPU nothing.
 
 ### 6.4 Receive path
 
@@ -179,7 +179,7 @@ No input coupling capacitor is required. The pad is capacitively coupled to skin
 
 | Component | Value | Function |
 |---|---|---|
-| C1 | 100 nF | Blocks stage 1 DC offset |
+| C1 | **1 nF C0G** (was 100 nF) | Blocks stage 1 DC offset. Sized for turnaround recovery, §9.8: with R6 the corner is 1.6 kHz, so any DC excursion at stage 1 is out of stage 2's rails in 0.17 ms and gone to an LSB in 0.9 ms. 100 nF put the corner at 16 Hz and the recovery at 17 ms |
 | R6 | 100 kΩ | Re-biases stage 2 +IN to VREF |
 
 **Stage 2 — U2B, non-inverting, gain 11**
@@ -401,7 +401,38 @@ After roles are settled, the link switches to master/slave polling with stop-and
 
 With a shared electrode, the wristband's own transmitter drives the amplifier input hard. No damage results — the 1 MΩ limits fault current to approximately 3 µA — but the amplifier saturates.
 
-Allow 1 ms of settling after transmit ends before trusting received data. Actual recovery is in the microsecond range; 1 ms is deliberately generous.
+Allow 1 ms of settling after transmit ends before trusting received data (`HANDOFF_TURNAROUND_US` in `config.h`). Actual recovery of the *amplifier* is in the microsecond range; 1 ms is deliberately generous. What is not in the microsecond range is the interstage capacitor recovering from a DC step, and the transmitter as first written produced one on every space chip — §9.8. With released spaces and the C1 of §6.4 there is no step, and 1 ms stands. M13 measures the figure; on the passive bench (15 Sep 2026) the "settling" is the ADC pipeline's own offset, and the amplifier figure is the hardware day's.
+
+### 9.8 A space is a released pad, not a driven low
+
+Found while writing M13's turnaround app, before the AFE existed. In the DC-coupled loop the wristband's own GP2 sees its own stage 1 through R1 + R2 = 2 MΩ, against R3 = 10 MΩ to VREF. The stage-1 bias for each thing GP2 can do:
+
+| GP2 | Stage-1 +IN | Stage-1 output |
+|---|---|---|
+| carrier (mark, 50 % square) | 1.65 V average — the square averages VREF | VREF ± the ripple, no DC shift |
+| driven low (space, as first built) | **0.275 V** | railed at 0 V |
+| driven high | 3.025 V | railed at 3.3 V |
+| released (high-Z) | 1.65 V, via R3 | VREF |
+
+So a mark moves the stage-1 DC not at all and a driven-low space moves it by 1.4 V, hard onto the rail. Over a Manchester frame (half marks) the stage-1 output is a 0 / 1.65 V pulse train at the chip rate; C1 (100 nF) with R6 (100 kΩ) is a 16 Hz high-pass, τ = 10 ms, so it charges to the frame's running mean, ~0.8 V, and passes the pulse train whole into stage 2, which rails on both halves. When the frame ends and GP2 is released, stage 1 returns to VREF and C1 hands stage 2 a +0.8 V step that decays with τ = 10 ms:
+
+| C1 / R6 | corner | stage 2 out of the rails (step below 0.15 V) | within 1 LSB at the ADC |
+|---|---|---|---|
+| 100 nF / 100 k | 16 Hz | **17 ms** | 93 ms |
+| 10 nF / 100 k | 159 Hz | 1.7 ms | 9.3 ms |
+| 1 nF / 100 k | 1.6 kHz | 0.17 ms | 0.9 ms |
+
+Seventeen milliseconds of deafness after every frame, against a 1 ms budget — and the same step, the other way, at the start of every frame. A faster C1 alone shrinks the tail but the pulse train is still there, at full amplitude, through the whole frame.
+
+**Decision: a space chip releases the pad.** The stage-1 bias then sits at VREF for the entire frame, mark or space; C1 sees no step at all, and the turnaround has only the amplifier's own microseconds to wait for. The far end gains too: a driven-low space put a 1.5 V chip-rate envelope on the pad node (the node sits at 0.14 V for a driven-low space, 1.65 V for a mark), thirty times the carrier's own swing there, and the body coupled that envelope across as faithfully as it coupled the carrier; a released space puts nothing on the node.
+
+How it is done (`lib/hal_pico/pio_carrier.pio`): the PIO stream carries two bits per half-period, the pad level and the pad direction, so a mark is a driven square and a space is a released pad, slot-exact, with no CPU involvement and nothing touching the running state machine. Three PIO cycles per half-period rather than two, because 150 MHz / (2 × 200 kHz) = 375 = 3 × 125 and a two-cycle slot would need 187.5; the dividers in §10.1 are updated. A mark starts high and ends low, so the pad is always released from 0 V, and every send ends in an explicit released slot so the stalled generator cannot park the pad low while the CPU is still noticing the frame has ended (624 chips at 200 kHz is exactly 3 900 words; without the extra one it did).
+
+**RP2350-E9 applies to every release now, not twice a frame.** The erratum is a leakage path that exists only while the pad's input buffer is enabled; a released pad drifting through ~1–2 V latches at ~2.2 V and, through R1, would hold the pad node there — stage 1 railed high instead of low, the same failure. The link never reads GP2, so `hal_pico` disables GP2's input buffer for good, and there is nothing to latch, inside a frame or after it. The M3 instruments (txgen's edge counter) enable it for their measurements on a bare pad.
+
+**C1: fit 1 nF, C0G, in the 100 nF position.** With released spaces the interstage step is gone by design; the smaller C1 is defence in depth for any DC excursion that does reach stage 1 — a contact made or broken mid-frame, the release transient itself — and takes its recovery from 17 ms to 0.17 ms. At 40 kHz the corner costs 0.08 % of gain, at 200 kHz nothing; below 1.6 kHz it now rejects what it used to pass, which is the right side of mains.
+
+Verified 15 Sep 2026 (development plan M13): txgen's whole M3 suite re-passes on a bare pad with the two-bit stream, plus a new check that a pull moves the pad inside a run of space chips; the release is read through the divider by the ADC on the second board (a pull-up moves the node 37 LSB while space chips are being sent, and cannot while a driven low is held); loopback ran 1000/1000 and the turnaround soaks are in the plan's M13 paragraph.
 
 ---
 
@@ -409,12 +440,12 @@ Allow 1 ms of settling after transmit ends before trusting received data. Actual
 
 ### 10.1 Carrier generation
 
-PIO state machine toggling a GPIO.
+PIO state machine toggling a GPIO — and, since M13, releasing it for every space (§9.8). Each half-period is one three-cycle slot carrying the pad level and the pad direction.
 
-| Carrier | System clock | Total divider |
-|---|---|---|
-| 200 kHz | 150 MHz | 750 |
-| 40 kHz | 150 MHz | 3750 |
+| Carrier | System clock | Cycles per period | State-machine divider |
+|---|---|---|---|
+| 200 kHz | 150 MHz | 750 = 2 × 3 × 125 | 125 |
+| 40 kHz | 150 MHz | 3750 = 2 × 3 × 625 | 625 |
 
 Both are exact integer divisions. Only the divider changes between bring-up and operating frequency.
 
@@ -685,6 +716,8 @@ Design decisions that were tried and rejected, kept here so they are not repeate
 | Static priority IDs for arbitration | Requires collision detection that body coupling cannot provide |
 | Sound card as bring-up instrument | Consumer USB dongles cap at 48 kHz sample rate, far below any usable carrier |
 | Carriers at 150 and 200 kHz | Relevant only if FDD is revisited: the 2nd harmonic of 150 kHz aliases to exactly 200 kHz at 500 ksps |
+| Space chips driven low | Pulls the wristband's own stage-1 bias to 0.28 V through R1 + R2 against R3; C1/R6 then recover over 17 ms, against a 1 ms turnaround. A space is a released pad (§9.8) |
+| C1 = 100 nF interstage | 16 Hz corner, 10 ms time constant: any DC excursion at stage 1 deafens stage 2 for 17 ms. Fit 1 nF (§6.4, §9.8) |
 
 ---
 

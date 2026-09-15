@@ -28,6 +28,7 @@ static uint16_t s_raw[ADC_RING_BLOCKS][ADC_RING_BLOCK];
 static int16_t  s_out[ADC_RING_BLOCK];
 
 static volatile bool     s_full[ADC_RING_BLOCKS];
+static volatile uint32_t s_seq[ADC_RING_BLOCKS];   /* ordinal of the block in it */
 static volatile uint32_t s_overruns;
 static volatile uint32_t s_blocks;
 static volatile uint8_t  s_next_irq;    /* block the IRQ will fill next */
@@ -51,6 +52,7 @@ static void __isr on_dma(void)
          * block, and it is the number this milestone exists to report. */
         if (s_full[i]) s_overruns++;
 
+        s_seq[i]  = s_blocks;
         s_full[i] = true;
         s_blocks++;
 
@@ -146,6 +148,11 @@ void adc_ring_stop(void)
 
 const int16_t *adc_ring_next_block(size_t *count)
 {
+    return adc_ring_next_block_seq(count, 0);
+}
+
+const int16_t *adc_ring_next_block_seq(size_t *count, uint32_t *seq)
+{
     uint8_t b = s_next_read;
     size_t i;
 
@@ -153,6 +160,7 @@ const int16_t *adc_ring_next_block(size_t *count)
         if (count) *count = 0;
         return 0;
     }
+    if (seq) *seq = s_seq[b];
 
     /* DC-centre into the caller's view. goertzel.c rejects DC at any bin but
      * a signed sample keeps gz_mag2's headroom arithmetic honest. */
@@ -178,6 +186,11 @@ uint32_t adc_ring_measured_sps(void)
 }
 
 uint32_t adc_ring_overruns(void) { return s_overruns; }
+
+uint64_t adc_ring_sample_us(uint64_t idx)
+{
+    return s_t0 + (idx * 1000000u) / (uint64_t)HANDOFF_ADC_FS_HZ;
+}
 
 /*
  * RMS deviation of a bare block, in tenths of an LSB. Blocking, and

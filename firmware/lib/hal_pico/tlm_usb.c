@@ -26,9 +26,12 @@
 static uint16_t s_decimate;
 static uint16_t s_phase;
 
-static int16_t  s_raw[RAW_SAMPLES];
-static size_t   s_raw_n;
-static bool     s_raw_arming;
+static int16_t           s_raw[RAW_SAMPLES];
+static size_t            s_raw_n;
+static volatile bool     s_raw_arming;
+static volatile size_t   s_raw_want;      /* samples to take                  */
+static volatile uint64_t s_raw_t0;        /* first sample at or after this    */
+static uint64_t          s_raw_start_us;  /* when the first taken one was     */
 
 void tlm_usb_init(uint16_t decimate)
 {
@@ -53,30 +56,56 @@ void tlm_usb_event(const char *text)
 
 void tlm_usb_raw_trigger(void)
 {
+    tlm_usb_raw_trigger_at(0, RAW_SAMPLES);
+}
+
+void tlm_usb_raw_trigger_at(uint64_t t0_us, size_t n)
+{
     s_raw_n      = 0;
+    s_raw_want   = n > RAW_SAMPLES ? RAW_SAMPLES : n;
+    s_raw_t0     = t0_us;
     s_raw_arming = true;
 }
 
 bool tlm_usb_raw_busy(void) { return s_raw_arming; }
+
+uint64_t tlm_usb_raw_start_us(void) { return s_raw_start_us; }
 
 /*
  * Called from the sample path with each block. Kept out of the header because
  * only the owner of the block loop can call it, and it must not be mistaken
  * for something the protocol layer may reach for.
  */
-void tlm_usb_raw_feed(const int16_t *samples, size_t n)
+void tlm_usb_raw_feed(const int16_t *samples, size_t n, uint64_t first_idx)
 {
-    size_t room;
+    size_t room, skip = 0;
 
     if (!s_raw_arming) return;
 
-    room = RAW_SAMPLES - s_raw_n;
+    /* Nothing taken yet: skip to the first sample at or after t0. A t0
+     * before this block is simply late (the caller armed too late, or asked
+     * for time already consumed) and the burst starts here. */
+    if (s_raw_n == 0 && s_raw_t0) {
+        uint64_t t_first = adc_ring_sample_us(first_idx);
+        if (t_first < s_raw_t0) {
+            uint64_t d = s_raw_t0 - t_first;
+            skip = (size_t)((d * (uint64_t)HANDOFF_ADC_FS_HZ + 999999u) / 1000000u);
+            if (skip >= n) return;           /* not in this block yet */
+        }
+        s_raw_start_us = adc_ring_sample_us(first_idx + skip);
+    } else if (s_raw_n == 0) {
+        s_raw_start_us = adc_ring_sample_us(first_idx);
+    }
+
+    samples += skip;
+    n       -= skip;
+    room = s_raw_want - s_raw_n;
     if (n > room) n = room;
 
     memcpy(&s_raw[s_raw_n], samples, n * sizeof s_raw[0]);
     s_raw_n += n;
 
-    if (s_raw_n >= RAW_SAMPLES) s_raw_arming = false;
+    if (s_raw_n >= s_raw_want) s_raw_arming = false;
 }
 
 void tlm_usb_raw_dump(void)

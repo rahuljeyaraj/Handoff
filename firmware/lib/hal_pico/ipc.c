@@ -23,6 +23,7 @@ _Static_assert((IPC_RING_CHIPS & IPC_MASK) == 0u,
     "IPC_RING_CHIPS must be a power of two");
 
 static uint16_t          s_buf[IPC_RING_CHIPS];
+static uint32_t          s_idx[IPC_RING_CHIPS];
 static volatile uint32_t s_head;      /* written by core 1 only */
 static volatile uint32_t s_tail;      /* written by core 0 only */
 static volatile uint32_t s_dropped;
@@ -33,7 +34,7 @@ void ipc_init(void)
     s_dropped = 0;
 }
 
-bool ipc_push_chip(uint16_t energy)
+bool ipc_push_chip(uint16_t energy, uint32_t sample_idx)
 {
     uint32_t h = s_head;
     uint32_t n = (h + 1u) & IPC_MASK;
@@ -46,18 +47,20 @@ bool ipc_push_chip(uint16_t energy)
     }
 
     s_buf[h] = energy;
+    s_idx[h] = sample_idx;
     __dmb();                 /* fill the slot before publishing the index */
     s_head = n;
     return true;
 }
 
-size_t ipc_pop_chips(uint16_t *dst, size_t max)
+size_t ipc_pop_chips(uint16_t *dst, uint32_t *idx, size_t max)
 {
     uint32_t t = s_tail;
     uint32_t h = s_head;
     size_t n = 0;
 
     while (n < max && t != h) {
+        if (idx) idx[n] = s_idx[t];
         dst[n++] = s_buf[t];
         t = (t + 1u) & IPC_MASK;
     }

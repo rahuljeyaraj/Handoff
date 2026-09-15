@@ -87,8 +87,10 @@
 /* Windows actually summed into a chip energy, after guarding. */
 #define HANDOFF_CHIP_INTEGRATE    (HANDOFF_WINDOWS_PER_CHIP - 2 * HANDOFF_CHIP_GUARD)
 
-/* PIO toggles the pad, so it needs two ticks per carrier period. */
-#define HANDOFF_PIO_DIVIDER       (HANDOFF_SYS_CLK_HZ / (2 * HANDOFF_CARRIER_HZ))
+/* PIO spends three cycles on each half-period slot (level, direction, and
+ * one to make the half-period a whole number of system cycles). */
+#define HANDOFF_PIO_SLOT_CYCLES   3
+#define HANDOFF_PIO_DIVIDER       (HANDOFF_SYS_CLK_HZ / (2 * HANDOFF_PIO_SLOT_CYCLES * HANDOFF_CARRIER_HZ))
 
 /* ---- the assertions --------------------------------------------------- */
 
@@ -125,9 +127,12 @@ HANDOFF_STATIC_ASSERT(HANDOFF_CHIP_INTEGRATE >= 1,
     "chip guard leaves no windows to integrate");
 
 /* Design §10.1: both 40 kHz and 200 kHz are exact integer divisions of the
- * 150 MHz system clock. Anything that is not, is not generatable by PIO. */
-HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % (2 * HANDOFF_CARRIER_HZ) == 0,
+ * 150 MHz system clock, three PIO cycles per half-period (§9.8). Anything
+ * that is not, is not generatable by PIO without fractional jitter. */
+HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % (2 * HANDOFF_PIO_SLOT_CYCLES * HANDOFF_CARRIER_HZ) == 0,
     "carrier is not an exact PIO divider of the system clock");
+HANDOFF_STATIC_ASSERT(HANDOFF_PIO_DIVIDER >= 1 && HANDOFF_PIO_DIVIDER <= 65535,
+    "PIO divider out of range");
 
 HANDOFF_STATIC_ASSERT(HANDOFF_FRAG_PAYLOAD >= 8 && HANDOFF_FRAG_PAYLOAD <= 255,
     "fragment payload out of range");

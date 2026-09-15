@@ -51,8 +51,11 @@
  *     point of it.
  *
  * FREQUENCY. The generator is pio_carrier_tone(): an integer PIO divider and
- * a bit pattern, so every point is an exact clock ratio and the DFT is
- * evaluated at f/fs = clk_sys / (div * period * 500 000) with no rounding.
+ * a slot pattern, so every point is an exact clock ratio and the DFT is
+ * evaluated at f/fs = clk_sys / (3 * div * period * 500 000) with no
+ * rounding -- the 3 is PIO_CARRIER_SLOT_CYCLES, since M13 gave each
+ * half-period slot a direction bit as well as a level (§9.8); the arithmetic
+ * below works in slot clocks, clk_sys / 3.
  * pio_carrier_measure_hz() counts the pad for a check column, not for the
  * number. Both clocks come from the one crystal.
  *
@@ -126,7 +129,7 @@ static int16_t  s_cap[CAP_BLOCKS_MAX * ADC_RING_BLOCK];
 typedef struct {
     bool     on;
     uint32_t div, period, high;
-    double   f_set;         /* clk_sys / (div * period), exact               */
+    double   f_set;         /* slot clock / (div * period), exact            */
     uint64_t num, den;      /* f / fs as a reduced fraction                  */
 } tone_t;
 
@@ -138,20 +141,27 @@ static uint64_t gcd64(uint64_t a, uint64_t b)
     return a;
 }
 
+/* The generator advances one slot every PIO_CARRIER_SLOT_CYCLES system
+ * cycles; every frequency here is a ratio of this clock. */
+static uint64_t slot_hz(void)
+{
+    return clock_get_hz(clk_sys) / PIO_CARRIER_SLOT_CYCLES;
+}
+
 /*
  * period 0 picks the smallest power of two whose divider fits, at 50 %
- * duty: period 2 down to 1144 Hz, then 4, 8 ... so the sweep keeps the
+ * duty: period 2 down to 381 Hz, then 4, 8 ... so the sweep keeps the
  * finest frequency steps it can at every point.
  */
 static bool tone_set(uint32_t hz, uint32_t period, uint32_t high)
 {
-    uint64_t clk = clock_get_hz(clk_sys);
+    uint64_t clk = slot_hz();
     uint64_t div, g;
 
     if (hz == 0) return false;
     if (period == 0) {
         period = 2;
-        while (clk / ((uint64_t)period * hz) > 65535u && period < PIO_CARRIER_TONE_BITS)
+        while (clk / ((uint64_t)period * hz) > 65535u && period < PIO_CARRIER_TONE_SLOTS)
             period <<= 1;
         high = period / 2u;
     }
@@ -476,7 +486,7 @@ static void cmd_sweep(uint32_t f0, uint32_t f1, uint32_t step)
 static bool point_clean(uint32_t div, meas_t *m)
 {
     static const int nudge[] = {0, 1, -1, 2, -2, 3, -3};
-    uint64_t clk = clock_get_hz(clk_sys);
+    uint64_t clk = slot_hz();
     size_t i;
 
     for (i = 0; i < count_of(nudge); i++) {
@@ -495,7 +505,7 @@ static bool point_clean(uint32_t div, meas_t *m)
 /*
  * Walk up from a 40 kHz reference until the response is 3 dB down, then
  * bisect the divider between the last point above and the first below.
- * Period is 2 for everything above 1144 Hz, so the divider IS the frequency
+ * Period is 2 for everything above 381 Hz, so the divider IS the frequency
  * and every candidate is an exact clock ratio.
  */
 static void cmd_corner(void)
@@ -505,7 +515,7 @@ static void cmd_corner(void)
         550000, 600000, 650000, 700000, 800000, 900000, 1000000, 1200000, 1500000
     };
     meas_t ref, m, lo_m, hi_m;
-    uint64_t clk = clock_get_hz(clk_sys);
+    uint64_t clk = slot_hz();
     uint32_t lo_div, hi_div = 0, i;
     double thresh;
 

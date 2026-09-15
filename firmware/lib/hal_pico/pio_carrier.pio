@@ -1,6 +1,6 @@
 ;
-; Handoff — carrier generation, OOK gating and self-measurement. M3.
-; design §10.1, §6.3; development plan M3.
+; Handoff — carrier generation, OOK gating and self-measurement. M3, M13.
+; design §10.1, §6.3, §9.8; development plan M3, M13.
 ;
 ; TWO STATE MACHINES ON ONE PAD, which is what lets M3 measure itself with no
 ; external hardware at all: the PIO input mux reads the pad independently of
@@ -9,25 +9,40 @@
 ;
 
 ;
-; carrier_out — one pad bit per state-machine cycle.
+; carrier_out — one pad LEVEL and one pad DIRECTION per half-period.
 ;
-; The state machine is clocked at TWICE the carrier, so one instruction is one
-; half-period and a mark chip is the bit pattern 1010…, a space chip is zeros.
+; Each half-period is a SLOT of three state-machine cycles and two stream
+; bits: the first bit is the pad level, the second is whether the pad is
+; driven at all. A mark chip is slots (1,drive) (0,drive) (1,drive) ... ; a
+; space chip is slots (x,release) — the pad is high-impedance for the whole
+; chip, not driven low. design §9.8 has the numbers: a driven-low space pulls
+; the wristband's own stage-1 bias to 0.28 V and C1/R6 then take ~17 ms to
+; come back, against a 1 ms turnaround budget; a released pad sits at VREF
+; and there is nothing to recover from.
+;
+; Three cycles rather than two because the half-period must be a whole number
+; of system cycles: 150 MHz / (2 x 200 kHz) = 375 = 3 x 125, and the 40 kHz
+; bring-up carrier gives 1875 = 3 x 625. Two cycles would need 187.5. config.h
+; static-asserts the division.
 ;
 ; This is deliberately a bit stream rather than a counted toggle loop. A loop
 ; that pulls a chip and then toggles N times spends different numbers of cycles
 ; on the mark path and the space path unless every branch is hand-balanced, and
 ; an unbalanced branch shifts every chip after the first gated one — which is
 ; precisely what M3's third exit criterion ("gating on and off is chip-aligned")
-; exists to catch. With one bit per cycle the alignment is a property of the
-; data, not of the control flow, and there is nothing left to get wrong.
+; exists to catch. With one slot per two bits the alignment is a property of
+; the data, not of the control flow, and there is nothing left to get wrong.
+; The pad direction is in the same stream for the same reason: it switches on
+; exactly the slot the data says, never a few cycles later.
 ;
-; Autopull refills the OSR, so a starved FIFO stalls the pad at its last level
-; rather than emitting a half chip.
+; Autopull refills the OSR, so a starved FIFO stalls the pad in its last slot
+; rather than emitting a half chip; every send ends in an explicit released
+; slot so that last slot is high-impedance.
 ;
 .program carrier_out
 .wrap_target
     out pins, 1
+    out pindirs, 1  [1]
 .wrap
 
 ;

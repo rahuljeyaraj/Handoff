@@ -635,8 +635,13 @@ int main(void)
 
     s_role = read_role();
 
+#if defined(LINKTEST_ROLE)
+    printf("\nhandoff linktest (M6: two boards over a wire) — %s (role compiled in)\n",
+           s_role == ROLE_TX ? "TRANSMITTER" : "RECEIVER");
+#else
     printf("\nhandoff linktest (M6: two boards over a wire) — %s\n",
            s_role == ROLE_TX ? "TRANSMITTER (GP14 strapped)" : "RECEIVER (GP14 open)");
+#endif
     printf("  carrier %d Hz, ADC %d Hz, Goertzel N=%d bin %d, %d chips/s, %d bps\n",
            HANDOFF_CARRIER_HZ, HANDOFF_ADC_FS_HZ, HANDOFF_GZ_N, HANDOFF_GZ_BIN,
            HANDOFF_CHIP_RATE_HZ, HANDOFF_BIT_RATE_BPS);

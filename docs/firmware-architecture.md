@@ -270,6 +270,14 @@ Notes that matter:
   DMA ─► PIO ─► GP2 ─► R1 ─► pad          core 1 not involved
 ```
 
+The PIO stream carries two bits per half-period, the pad level and the pad
+direction: a mark chip is a driven square, a space chip is a released pad
+(design §9.8, M13). `hal_tx_drive()` is the frame-level switch; the
+chip-level one is in the data, so the CPU never touches the running state
+machine and the release is slot-exact. GP2's input buffer is off for good in
+`hal_pico` (RP2350-E9 cannot latch a released pad without it); the M3
+instruments turn it on for their own measurements.
+
 ---
 
 ## 7. Link state machine
