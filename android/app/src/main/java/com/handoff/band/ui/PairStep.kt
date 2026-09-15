@@ -24,8 +24,12 @@ sealed interface PairStep {
     /** The label read; our own scan and then the OS chooser are looking for it. */
     data class Looking(val code: BandCode) : PairStep
 
-    /** The chooser handed back a device; the service is connecting and bonding. */
-    data class Connecting(val name: String, val code: BandCode) : PairStep
+    /**
+     * The chooser handed back a device; the service is connecting and
+     * bonding. [address] is which one, so the page can tell the service's
+     * state for this attempt from what a previous band left behind.
+     */
+    data class Connecting(val name: String, val code: BandCode, val address: String) : PairStep
 
     /** The link is up and encrypted — step 2. */
     data class Connected(val name: String) : PairStep

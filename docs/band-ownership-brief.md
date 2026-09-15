@@ -42,10 +42,10 @@ Gestures after this change:
 | press | meaning |
 |---|---|
 | short | battery check (unchanged) |
-| held past 6 s, released | **reset for a new wearer** |
+| held past 5 s, released | **reset for a new wearer** |
 
 The 2 s "dev mode" hold is **removed** (see §5). Hold feedback stays:
-a tap at 6 s so the wearer knows to let go. Nothing happens at 2 s.
+a tap at 5 s so the wearer knows to let go. Nothing happens at 2 s.
 
 **Reset for a new wearer** puts the band in the *no owner* state from
 whatever it was in. It must clear everything the previous wearer left:
@@ -62,7 +62,7 @@ Then the bond-cleared pattern (purple x4 + buzz, exists), then the blue
 "pairing" background because the band now has no owner (exists: it is
 driven by `!connected && !bonded` in `wear.c`).
 
-Today the 6 s hold does step 1 only. That is the bug this brief exists
+Today the 5 s hold does step 1 only. That is the bug this brief exists
 for: a band that changes hands hands the previous wearer's card to the
 new phone at first connect.
 
@@ -116,7 +116,7 @@ There is no such feature. Remove:
 - `wear.c`: `s_dev`, `wear_dev_mode()`, the `BUTTON_HOLD1` case;
 - `button.h`/`button.c`: `BUTTON_HOLD1`, `BUTTON_HOLD1_REACHED`,
   `BUTTON_HOLD1_MS` — the state machine becomes short / hold reached /
-  hold, with one threshold at 6 s. Keep the tests honest
+  hold, with one threshold at 5 s. Keep the tests honest
   (`firmware/test` if button has one);
 - `ui.h`/`ui.c`: `UI_EV_DEV_ON`, `UI_EV_DEV_OFF`, the purple-blip
   background, the `dev` field, and its row in the priority list and the
@@ -137,7 +137,7 @@ reaching the pairing page's failed state). Decided by the wearer, use
 verbatim:
 
     Band in use
-    Hold the button for 6 s to reset.
+    Hold the button for 5 s to reset.
 
 The same two lines go into the 15 s not-found hint, since a band the
 chooser cannot find is very often one that is simply not in range, but
@@ -156,7 +156,7 @@ else on screen.
 Two phones, two bands.
 
 1. **Reset wipes the wearer.** Pair 93D1 to phone A, write a card.
-   Hold 6 s. Pair to phone B: status must show *not provisioned*, no
+   Hold 5 s. Pair to phone B: status must show *not provisioned*, no
    card arrives, `my_vcard` reads empty. Repeat with a held received
    card (use `FAKE_RX` with the phone away, then reset).
 2. **One owner.** With 93D1 owned by phone A, pair from phone B without
@@ -174,10 +174,26 @@ Two phones, two bands.
    dialog, the fix is on A's side (drop the bond the first time the
    band refuses), **not** a time limit on the band — §1 is not
    negotiable.
+
+   *Run 15 Sep 2026, one phone (OnePlus CPH2569, Android 15), band 379E,
+   the press by console `b 5500`.* A's stack reconnected ~5 s after the
+   reset, tried to encrypt with its stored key, got `HCI_ERR_KEY_MISSING`,
+   and then dropped the app's rx_vcard CCCD write with no callback — the
+   app sat on "Connected", Battery Unknown, forever, and did so again on
+   every relaunch. The stack broadcasts KEY_MISSING once, to privileged
+   receivers only (Wear got it, we did not). Fixed on A's side as this
+   test says: `BandClient` puts a 5 s deadline on the first encrypted
+   write of a bonded link and reports `ERR_KEY_REJECTED` when it passes;
+   the service forgets the band. Re-run: reset at 22:12:32, reconnect
+   :41, forgotten :46, home on *Pair a band*. A second bug found the same
+   way: the pairing page read the service's leftover `lastError` from the
+   forget as the new attempt's failure and closed the fresh connect 60 ms
+   in; `PairStep.Connecting` now carries the address and the page ignores
+   state that is not about it.
 6. **Reboot in no-owner state.** Reset, power-cycle, confirm blue
    blink and open pairing from B.
 7. **Dev mode is gone.** Hold 3 s and release: nothing but the hold
-   tap at 6 s if held that long; no purple; status bit 0x40 never set.
+   tap at 5 s if held that long; no purple; status bit 0x40 never set.
 
 Log the runs the way the pairing brief did (timestamps, what happened).
 

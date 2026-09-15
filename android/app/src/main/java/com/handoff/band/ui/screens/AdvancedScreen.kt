@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +56,12 @@ fun AdvancedScreen(state: BandService.State?, ownCard: OwnCard?, onBack: () -> U
 
     var floor by remember { mutableStateOf(band.service?.forceMtuFloor ?: false) }
     var scanNote by remember { mutableStateOf<String?>(null) }
+    var scanning by remember { mutableStateOf<Pairing.Locate?>(null) }
+
+    // A scan that outlives the row that started it leaks its filter slot the
+    // same way a second tap used to (see debugScan) — leaving this screen
+    // must end it, not just stop logging its results.
+    DisposableEffect(Unit) { onDispose { scanning?.cancel(); scanning = null } }
 
     Scaffold(
         topBar = {
@@ -100,8 +107,9 @@ fun AdvancedScreen(state: BandService.State?, ownCard: OwnCard?, onBack: () -> U
                 subtitle = scanNote ?: "Ten seconds, unfiltered, every result logged.",
                 chevron = false,
                 onClick = {
+                    scanning?.cancel()
                     scanNote = "scanning…"
-                    Pairing.debugScan(context) { scanNote = it }
+                    scanning = Pairing.debugScan(context) { scanNote = it; scanning = null }
                 },
             )
 

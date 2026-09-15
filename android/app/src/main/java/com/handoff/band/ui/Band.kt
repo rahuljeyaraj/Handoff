@@ -101,14 +101,22 @@ data class BandView(
     enum class Connection(val label: String) {
         NOT_PAIRED("Not paired"),
         OFF("Disconnected"),
+        /** The phone's radio is off — distinct from [NOT_FOUND] (15 Sep). */
+        BLUETOOTH_OFF(BandService.BLUETOOTH_OFF_TEXT),
         WAITING("Looking for the band"),
-        /** Label unused — the status line interpolates the band's name (Copy G). */
         NOT_FOUND("Not found"),
         CONNECTING("Connecting…"),
         CONNECTED("Connected"),
     }
 
-    /** The status line's second line (review item 15, Copy G). */
+    /**
+     * For a snackbar or the foreground notification, which appear on their
+     * own with no band name already on screen (review item 15, Copy G).
+     * [Connection.label] is what goes next to a name that is already shown —
+     * the status line's row and the Band screen's hero both sit right under
+     * [name] and must not repeat it (Copy §1: nothing restates what the
+     * screen already shows).
+     */
     val statusLabel: String
         get() = if (connection == Connection.NOT_FOUND) "$name not found" else connection.label
 
@@ -123,6 +131,7 @@ data class BandView(
             val connection = when {
                 !paired -> Connection.NOT_PAIRED
                 off -> Connection.OFF
+                state?.bluetoothOff == true -> Connection.BLUETOOTH_OFF
                 state?.ready == true -> Connection.CONNECTED
                 state?.connected == true -> Connection.CONNECTING
                 state?.notFoundAt != null -> Connection.NOT_FOUND

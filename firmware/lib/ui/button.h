@@ -8,12 +8,12 @@
  * length:
  *
  *   short          released before BUTTON_HOLD_MS          battery check
- *   hold           held past BUTTON_HOLD_MS (6 s)          reset for a new wearer
+ *   hold           held past BUTTON_HOLD_MS (5 s)          reset for a new wearer
  *
- * The ACTION fires on release, so a finger that lets go at 5 s has done
+ * The ACTION fires on release, so a finger that lets go at 4 s has done
  * nothing but a battery check. Crossing the threshold while still held fires
  * a REACHED event at that instant: that is the motor's tap telling the
- * finger "you can let go now" — without it there is no way to know when 6 s
+ * finger "you can let go now" — without it there is no way to know when 5 s
  * has passed. There is no shorter hold: a 2 s "dev mode" toggle used to live
  * here and was removed with the ownership model (docs/band-ownership-brief).
  *
@@ -28,13 +28,13 @@
 #include <stdint.h>
 
 #define BUTTON_DEBOUNCE_MS 30u
-#define BUTTON_HOLD_MS     6000u
+#define BUTTON_HOLD_MS     5000u
 
 typedef enum {
     BUTTON_NONE = 0,
     BUTTON_SHORT,           /* released before the hold                  */
-    BUTTON_HOLD_REACHED,    /* still held, 6 s crossed                    */
-    BUTTON_HOLD,            /* released after 6 s                         */
+    BUTTON_HOLD_REACHED,    /* still held, 5 s crossed                    */
+    BUTTON_HOLD,            /* released after 5 s                         */
 } button_event_t;
 
 typedef struct {

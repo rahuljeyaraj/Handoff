@@ -68,6 +68,7 @@ fun BandScreen(
     notFoundAt: Long?,
     cardSaved: Notice?,
     onDisconnect: () -> Unit,
+    onIdentify: () -> Unit,
     onForget: () -> Unit,
     onCard: () -> Unit,
     onBack: () -> Unit,
@@ -118,6 +119,16 @@ fun BandScreen(
                         leading = { BatteryIcon(band.battery) })
             SettingsRow("Firmware", icon = HandoffIcons.Chip,
                         subtitle = firmware ?: "Not reported", chevron = false)
+
+            // Find my band: the band answers with its own LED and motor
+            // (BLE_CTRL_IDENTIFY), so there is nothing to confirm here. Only
+            // a connected band can be asked; the row says so otherwise.
+            val connected = band.connection == BandView.Connection.CONNECTED
+            SettingsRow("Find my band", icon = HandoffIcons.Vibrate,
+                        subtitle = if (connected) "Flashes and buzzes the band"
+                                   else "Connect the band first",
+                        onClick = if (connected) onIdentify else null,
+                        chevron = false)
 
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(24.dp))
@@ -182,12 +193,16 @@ private fun Hero(band: BandView) {
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             ConnectionDot(band.connection == BandView.Connection.CONNECTED)
-            Text(band.statusLabel, style = MaterialTheme.typography.labelLarge,
+            Text(band.connection.label, style = MaterialTheme.typography.labelLarge,
                  color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
-        if (band.connection == BandView.Connection.NOT_FOUND) {
-            Text("Switch it on and keep the phone close.",
-                 style = MaterialTheme.typography.bodySmall,
+        val hint = when (band.connection) {
+            BandView.Connection.NOT_FOUND -> "Switch it on and keep the phone close."
+            BandView.Connection.BLUETOOTH_OFF -> "Turn on Bluetooth to reconnect."
+            else -> null
+        }
+        if (hint != null) {
+            Text(hint, style = MaterialTheme.typography.bodySmall,
                  color = MaterialTheme.colorScheme.onSurfaceVariant,
                  modifier = Modifier.padding(top = 10.dp))
         }

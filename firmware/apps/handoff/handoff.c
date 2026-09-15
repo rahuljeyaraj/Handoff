@@ -53,7 +53,7 @@
  *
  * ONE BAND, ONE PHONE (docs/band-ownership-brief.md). The band has no owner
  * or exactly one; ble.c gates pairing on it. reset_for_new_wearer() — the
- * 6 s hold, or BLE_CTRL_RESET from the owner's app — wipes everything the
+ * 5 s hold, or BLE_CTRL_RESET from the owner's app — wipes everything the
  * previous wearer left and puts the band back to no owner.
  *
  * CONSOLE (the wristband has none; the bench does):

@@ -330,14 +330,29 @@ object Pairing {
      * Diagnostic only: an unfiltered ten-second scan, every result logged.
      * For when the chooser above comes back empty and the question is whether
      * this handset hears the band at all, or hears it and fails the filter.
+     *
+     * Returns a [Locate]-style handle for the same reason [locate] does: the
+     * caller (AdvancedScreen's "Run a Bluetooth scan" row) is a button meant
+     * to be tapped more than once, and a second tap used to start a second
+     * concurrent scan on top of the first rather than replacing it. Each one
+     * held its own scan-filter registration in the controller until its own
+     * `postDelayed` fired — and that stopScan was unguarded, so a Bluetooth
+     * toggle in between (invalidating the captured `scanner`) made it throw
+     * and skip the stopScan entirely, leaking the registration for good: not
+     * released by turning the radio off and on, only by restarting the
+     * Bluetooth process. A few taps during a bench session was enough to
+     * exhaust the phone's shared scan-filter slots for every app.
      */
     @Suppress("MissingPermission")
-    fun debugScan(context: Context, onDone: (String) -> Unit) {
+    fun debugScan(context: Context, onDone: (String) -> Unit): Locate? {
         val scanner = BluetoothAdapter.getDefaultAdapter()?.bluetoothLeScanner
-            ?: return onDone("no LE scanner")
+            ?: run { onDone("no LE scanner"); return null }
+        val handler = Handler(Looper.getMainLooper())
+        var live = true
         val seen = LinkedHashMap<String, String>()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, r: ScanResult) {
+                if (!live) return
                 val rec = r.scanRecord
                 val line = "${r.device.address} rssi=${r.rssi} name=${rec?.deviceName} " +
                     "uuids=${rec?.serviceUuids} raw=${rec?.bytes?.joinToString("") { "%02x".format(it) }}"
@@ -345,13 +360,24 @@ object Pairing {
             }
             override fun onScanFailed(errorCode: Int) { Log.e("HandoffScan", "failed $errorCode") }
         }
+        val stop = {
+            if (live) {
+                live = false
+                runCatching { scanner.stopScan(cb) }
+            }
+        }
+        val finish = Runnable {
+            stop()
+            val hit = seen.values.firstOrNull { it.contains("48414e44-0001", ignoreCase = true) || it.contains("Handoff") }
+            onDone("scan: ${seen.size} devices, band ${hit ?: "NOT seen"}")
+        }
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         scanner.startScan(null, settings, cb)
-        Handler(Looper.getMainLooper()).postDelayed({
-            scanner.stopScan(cb)
-            val hit = seen.values.firstOrNull { it.contains("48414e44-0001", ignoreCase = true) || it.contains("Handoff") }
-            onDone("scan: ${seen.size} devices, band ${hit ?: "NOT seen"}")
-        }, 10_000)
+        handler.postDelayed(finish, 10_000)
+        return Locate {
+            handler.removeCallbacks(finish)
+            stop()
+        }
     }
 }

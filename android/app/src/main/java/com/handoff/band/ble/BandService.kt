@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -71,6 +72,8 @@ class BandService : LifecycleService(), BandClient.Listener {
          * open — see ContactsScreen/BandScreen's LaunchedEffect on it.
          */
         val notFoundAt: Long? = null,
+        /** The phone's radio, not the band — see [btWatch]. */
+        val bluetoothOff: Boolean = false,
     )
 
     inner class LocalBinder : Binder() {
@@ -100,6 +103,46 @@ class BandService : LifecycleService(), BandClient.Listener {
         // should follow. The same sync runs on every status the band sends.
         lifecycleScope.launch { prefs.ownCard.collect { sync() } }
         registerReceiver(bondWatch, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        registerReceiver(btWatch, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+    }
+
+    /**
+     * The phone's Bluetooth radio, not the band's link. Left undetected, the
+     * radio going off looked exactly like the band going out of range: the
+     * status line sat on "Looking for the band" and then "not found," never
+     * saying what was actually wrong (seen 15 Sep). And `autoConnect = true`
+     * does not reliably resume once the adapter itself has cycled, so a
+     * phone that had it off and back on could sit "not found" forever with
+     * nothing prompting a fresh [BluetoothDevice.connectGatt] — the fix is
+     * this receiver rebuilding the client the moment the radio comes back,
+     * not a user-facing scan (there is no discovery step in a reconnect;
+     * see [BandClient]'s class comment on autoConnect).
+     */
+    private val btWatch = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            when (i.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)) {
+                BluetoothAdapter.STATE_OFF -> {
+                    notFoundJob?.cancel()
+                    notFoundJob = null
+                    client?.close()
+                    client = null
+                    _state.value = _state.value.copy(
+                        bluetoothOff = true, connected = false, ready = false,
+                        status = null, notFoundAt = null,
+                    )
+                    updateNotification(BLUETOOTH_OFF_TEXT)
+                }
+                BluetoothAdapter.STATE_ON -> {
+                    _state.value = _state.value.copy(bluetoothOff = false)
+                    val address = _state.value.address ?: return
+                    // The user's own Disconnect, not the radio, is why there
+                    // is no client — leave that alone.
+                    if (prefs.bandOff.value) return
+                    client = BandClient(this@BandService, address, this@BandService).also { it.connect() }
+                    armNotFoundWatch()
+                }
+            }
+        }
     }
 
     /**
@@ -112,6 +155,12 @@ class BandService : LifecycleService(), BandClient.Listener {
      * An unpair in settings is the wearer saying Forget, so it does what
      * Forget does. A pairing that never completed goes BONDING -> NONE and
      * is BandClient's to report, not this.
+     *
+     * Not handled here: the band reset for a new wearer while this phone
+     * still holds its key. Android 15 does broadcast KEY_MISSING for that,
+     * but only to privileged receivers (the bench OnePlus delivered it to
+     * Wear and not to us); BandClient's deadline on the first encrypted
+     * write catches it instead and arrives as ERR_KEY_REJECTED.
      */
     private val bondWatch = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
@@ -161,9 +210,15 @@ class BandService : LifecycleService(), BandClient.Listener {
 
         if (client == null || _state.value.address != address) {
             client?.close()
-            _state.value = State(address = address)
-            client = BandClient(this, address, this).also { it.connect() }
-            armNotFoundWatch()
+            // A launch with the radio already off: say so from the start
+            // rather than cycling through "Looking for the band" first —
+            // btWatch picks it up the moment it comes on.
+            val adapterOff = BluetoothAdapter.getDefaultAdapter()?.isEnabled != true
+            _state.value = State(address = address, bluetoothOff = adapterOff)
+            if (!adapterOff) {
+                client = BandClient(this, address, this).also { it.connect() }
+                armNotFoundWatch()
+            }
         }
 
         // STICKY, because the whole point is surviving the phone going to
@@ -173,6 +228,7 @@ class BandService : LifecycleService(), BandClient.Listener {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(bondWatch) }
+        runCatching { unregisterReceiver(btWatch) }
         client?.close()
         client = null
         super.onDestroy()
@@ -191,7 +247,7 @@ class BandService : LifecycleService(), BandClient.Listener {
     /**
      * Forget this band, from the Band screen (band-ownership brief §3). If
      * the band is connected on its encrypted link it is told to reset for a
-     * new wearer first — the same wipe as the 6 s hold — and the phone side
+     * new wearer first — the same wipe as the 5 s hold — and the phone side
      * follows once the band has answered: the write's acknowledgement, or
      * the disconnect the band makes as its last step, whichever lands first,
      * with a timeout in case neither does. If the band is not reachable the
@@ -524,6 +580,8 @@ class BandService : LifecycleService(), BandClient.Listener {
         /** How long Forget waits for the band to answer a reset before going ahead. */
         private const val RESET_TIMEOUT_MS = 3_000L
         const val EXTRA_ADDRESS = "address"
+        /** [btWatch]'s notification text, and [com.handoff.band.ui.BandView.Connection]'s. */
+        const val BLUETOOTH_OFF_TEXT = "Bluetooth is off"
 
         fun start(context: Context, address: String? = null) {
             val intent = Intent(context, BandService::class.java)

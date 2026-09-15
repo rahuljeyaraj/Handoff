@@ -63,7 +63,7 @@ void test_button(void)
         HF_EQ_INT(n, 1);
     }
 
-    hf_begin("button: released before 6 s is a short press, however long");
+    hf_begin("button: released before 5 s is a short press, however long");
     {
         /* the 2 s threshold is gone: 3 s is a battery check, nothing else */
         t = 0; n = 0;
@@ -75,7 +75,7 @@ void test_button(void)
         HF_EQ_INT(at, 3000 + BUTTON_DEBOUNCE_MS);
     }
 
-    hf_begin("button: the hold taps once at 6 s and acts on release");
+    hf_begin("button: the hold taps once at 5 s and acts on release");
     {
         t = 0; n = 0;
         button_init(&b, t);
@@ -88,7 +88,7 @@ void test_button(void)
         HF_EQ_INT(n, 2);
     }
 
-    hf_begin("button: holding past 6 s for a long time fires nothing more");
+    hf_begin("button: holding past 5 s for a long time fires nothing more");
     {
         t = 0; n = 0;
         button_init(&b, t);

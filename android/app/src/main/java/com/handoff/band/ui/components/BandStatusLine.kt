@@ -88,16 +88,17 @@ fun BandStatusLine(
              modifier = Modifier.padding(end = 2.dp).size(28.dp))
 
         // On a 360 dp phone the text column is about 160 dp once the card,
-        // battery and chevron have theirs. The name stays one line; the
-        // status may take two ("Handoff band 93D1 not found") with the dot
-        // held on its first line rather than centred on the block.
+        // battery and chevron have theirs. The name is right above, so the
+        // status line says only the state ("Not found"), never the name
+        // again (Copy §1) — that repeat is what review item 15's snackbar
+        // and notification are for instead.
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(band.name, style = MaterialTheme.typography.titleMedium,
                  maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ConnectionDot(connected, modifier = Modifier.padding(top = 6.dp))
-                Text(band.statusLabel, style = MaterialTheme.typography.bodyMedium,
+                Text(band.connection.label, style = MaterialTheme.typography.bodyMedium,
                      color = MaterialTheme.colorScheme.onSurfaceVariant,
                      maxLines = 2, overflow = TextOverflow.Ellipsis)
             }

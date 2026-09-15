@@ -17,7 +17,7 @@
  * The button. SW2 on GP15, R15 pulling up, active low. Its two lengths:
  *
  *   short          battery check: one flash by level
- *   hold 6 s       reset for a new wearer — done on the BTstack side, which
+ *   hold 5 s       reset for a new wearer — done on the BTstack side, which
  *                  asks wear_take_reset_request(), wipes everything the
  *                  previous wearer left (handoff.c) and posts BOND_CLEARED
  *
@@ -83,7 +83,7 @@ void wear_link(const link_sm_t *sm);
 
 /* ---- outputs ---------------------------------------------------------- */
 
-/* True once per 6 s hold: the BTstack side resets the band for a new wearer
+/* True once per 5 s hold: the BTstack side resets the band for a new wearer
  * and posts UI_EV_BOND_CLEARED. */
 bool wear_take_reset_request(void);
 

@@ -76,6 +76,14 @@ object Gatt {
      */
     fun reset(): ByteArray = byteArrayOf(CTRL_RESET.toByte())
 
+    /**
+     * Find my band: the band flashes white three times and taps three times
+     * (lib/ui's identify row). Not gated on the encrypted link — it does
+     * nothing a bystander could not do by looking at the band — and the
+     * motor half waits if a handshake is in progress.
+     */
+    fun identify(): ByteArray = byteArrayOf(CTRL_IDENTIFY.toByte())
+
     /** The Settings switch (review item 11). The band persists this itself. */
     fun haptic(on: Boolean): ByteArray =
         byteArrayOf(CTRL_HAPTIC.toByte(), if (on) 1 else 0)

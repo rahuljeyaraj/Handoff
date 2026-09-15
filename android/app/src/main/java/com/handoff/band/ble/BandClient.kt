@@ -14,6 +14,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.util.ArrayDeque
 
@@ -74,6 +76,27 @@ class BandClient(
     private val pending = ArrayDeque<() -> Boolean>()
     private var busy = false
 
+    /**
+     * The first encrypted operation on a bonded link gets a deadline. A
+     * band that was reset for a new wearer no longer has this phone's key;
+     * the stack finds that out when it tries to encrypt for the rx_vcard
+     * CCCD write, and then — measured on the OnePlus / Android 15 — drops
+     * the write without a callback, every reconnect, forever. (It also
+     * broadcasts KEY_MISSING the first time, to privileged receivers only
+     * on Android 15 — not to us.) One ATT round trip after a sub-second
+     * encryption does not take five seconds. Walked 15 Sep: a stale bond
+     * on relaunch, and a live reset with the app running, both back on
+     * "Pair a band" five seconds after the reconnect.
+     */
+    private val main = Handler(Looper.getMainLooper())
+    private val keyDeadline = Runnable {
+        if (!bonded()) return@Runnable
+        Log.i(TAG, "encrypted subscribe got no answer in ${KEY_DEADLINE_MS} ms; key rejected")
+        pending.clear()
+        busy = false
+        listener.onError(ERR_KEY_REJECTED)
+    }
+
     val chunkBytes: Int
         get() = (if (forceMtuFloor) Gatt.MIN_ATT_MTU else mtu) - Gatt.ATT_NOTIFY_OVERHEAD
 
@@ -93,6 +116,7 @@ class BandClient(
     fun close() {
         pending.clear()
         busy = false
+        main.removeCallbacks(keyDeadline)
         stopBondWatch()
         // disconnect() before close(): close() alone leaves the ACL up, and
         // the next client would inherit its negotiated MTU (see BandService).
@@ -312,7 +336,13 @@ class BandClient(
              * for why it is made explicitly rather than left to the stack.
              */
             val subscribeAll = {
-                queue { subscribe(Gatt.RX_VCARD) }
+                queue {
+                    // The one write the deadline above watches: encrypted,
+                    // and first. Only when the bond predates this connect;
+                    // a bond just made has a key the band accepted seconds ago.
+                    if (bonded()) main.postDelayed(keyDeadline, KEY_DEADLINE_MS)
+                    subscribe(Gatt.RX_VCARD)
+                }
                 queue { subscribe(Gatt.STATUS) }
                 // A read as well as the subscription: status only notifies
                 // on change, and the service needs a baseline to decide
@@ -340,6 +370,7 @@ class BandClient(
         override fun onDescriptorWrite(
             g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int,
         ) {
+            main.removeCallbacks(keyDeadline)
             if (keyRejected(status)) {
                 pending.clear()
                 listener.onError(ERR_KEY_REJECTED)
@@ -447,5 +478,8 @@ class BandClient(
 
         /** GATT_AUTH_FAIL (0x89): the stack tried to encrypt for us and could not. */
         private const val GATT_AUTH_FAIL = 0x89
+
+        /** See [keyDeadline]. */
+        private const val KEY_DEADLINE_MS = 5_000L
     }
 }
