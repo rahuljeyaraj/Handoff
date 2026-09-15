@@ -248,8 +248,13 @@ static void report_status(void)
 /*
  * Provisioning, architecture §9. Runs in the BTstack context, so it must not
  * block — parsing and encoding a card is a few microseconds, and the flash
- * write is a few milliseconds with interrupts off and core 1 parked, which
- * is within what a connection interval tolerates.
+ * write is a sector erase, tens of milliseconds with interrupts off and
+ * core 1 parked, which is within what a connection interval tolerates.
+ * Two things had to be true for that blackout to be survivable, and both
+ * were found wanting on 15 Sep 2026: the ADC ring must not need its
+ * interrupt to stay inside its buffers (adc_ring.c), and this context's
+ * stack — already deep inside BTstack — must not carry the card's scratch
+ * (store.h).
  */
 static void on_my_vcard(const char *text, size_t len, void *ctx)
 {

@@ -48,6 +48,19 @@ function(handoff_add_app TARGET)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
+    # The SDK puts core 0's stack at the top of the 4 kB scratch-Y bank and
+    # core 1's at the top of scratch X, the bank directly beneath it, with
+    # nothing between them: a core-0 overflow lands in core 1's outermost
+    # frames, which on every image here are the receiver's DSP state. That
+    # is how a flash write took the body link down (see store.h). So each
+    # core gets its whole bank, and the SDK's MPU guard at the bottom of
+    # each stack turns the next overflow into a hard fault on the bench
+    # rather than a silently deaf band.
+    target_compile_definitions(${TARGET} PRIVATE
+        PICO_STACK_SIZE=0x1000
+        PICO_CORE1_STACK_SIZE=0x1000
+        PICO_USE_STACK_GUARDS=1
+    )
     pico_add_extra_outputs(${TARGET})
 endfunction()
 

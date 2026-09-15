@@ -45,6 +45,20 @@ typedef struct {
      * saved record actually exists.
      */
     bool     haptic_on;
+
+    /*
+     * Scratch for store_put_vcard: the parsed record and the encoded blob,
+     * held here until the encode has succeeded and can be committed. 2.6 kB,
+     * and deliberately NOT on the stack: the RP2350 SDK gives core 0 a 4 kB
+     * stack in scratch Y with core 1's stack in the bank directly beneath
+     * it, and nothing enforces the boundary. A card provisioned from the
+     * BTstack context, or `w` on the bench, overflowed into core 1's frames
+     * — its Goertzel state, and the frame it was parked in for the flash
+     * write — and the receiver came back deaf, or not at all (15 Sep 2026).
+     * The store is already the one object both callers share.
+     */
+    compact_rec_t rec_scratch;
+    uint8_t       blob_scratch[COMPACT_MAX_BLOB];
 } store_t;
 
 void        store_init(store_t *s);

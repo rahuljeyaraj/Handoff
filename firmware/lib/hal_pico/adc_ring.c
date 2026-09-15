@@ -10,6 +10,23 @@
  * the arithmetic was never the risk -- 300 cycles per sample against a
  * single-digit Goertzel iteration -- and that DMA, interrupts and ring overrun
  * are. So the overrun is counted rather than assumed absent.
+ *
+ * THE WRITE ADDRESS WRAPS IN HARDWARE. A chained restart does not reset a
+ * channel's write pointer, only its count, so a channel the interrupt has
+ * not re-armed carries on from the end of its block into whatever follows
+ * s_raw in RAM -- the link state machine, the USB device, the flash
+ * driver's lockout, this file's own s_dma[]. Anything that keeps DMA_IRQ_0
+ * out for more than one block, 4 ms, does that: a flash write holds core
+ * 0's interrupts off for a sector erase, ~45 ms, and every `w` on the
+ * bench (and every card provisioned from the phone, the same path) was
+ * trampling RAM -- seen 15 Sep 2026 as a chip storm, a 100 % core-1 load,
+ * a record that did not survive, and a hard hang on the next write. With
+ * the DMA ring-wrap set to the block size and the blocks aligned to it,
+ * a restart without a re-arm only ever overwrites its own block. A
+ * blackout then costs data and never memory; on_dma() counts the lost
+ * blocks from the clock so the sample clock stays true. (The flash write also
+ * overflowed core 0's stack into core 1's, a separate defect fixed the same
+ * day; see store.h. Either one alone was enough to take the band down.)
  */
 #include "adc_ring.h"
 
@@ -24,15 +41,19 @@
 #define ADC_INPUT   0     /* GP26 */
 #define ADC_MIDPOINT 2048 /* 12-bit, DC-centred for the DSP */
 
-static uint16_t s_raw[ADC_RING_BLOCKS][ADC_RING_BLOCK];
+/* Each block is exactly ADC_RING_WRAP bytes, so aligning the array aligns
+ * every block, which is what the hardware wrap needs. */
+#define ADC_RING_WRAP_BITS 12
+#define ADC_RING_WRAP      (1u << ADC_RING_WRAP_BITS)
+static uint16_t s_raw[ADC_RING_BLOCKS][ADC_RING_BLOCK]
+    __attribute__((aligned(ADC_RING_WRAP)));
+_Static_assert(sizeof s_raw[0] == ADC_RING_WRAP, "block must be one wrap region");
 static int16_t  s_out[ADC_RING_BLOCK];
 
 static volatile bool     s_full[ADC_RING_BLOCKS];
 static volatile uint32_t s_seq[ADC_RING_BLOCKS];   /* ordinal of the block in it */
 static volatile uint32_t s_overruns;
 static volatile uint32_t s_blocks;
-static volatile uint8_t  s_next_irq;    /* block the IRQ will fill next */
-static uint8_t           s_next_read;   /* block the consumer wants next */
 
 static int      s_dma[ADC_RING_BLOCKS];
 static uint64_t s_t0;
@@ -40,13 +61,54 @@ static bool     s_running;
 
 /* ---------------------------------------------------------------------- */
 
+/* One block on the sample clock. The ADC and the timer share the crystal,
+ * so this is exact, not approximate. */
+#define ADC_RING_BLOCK_US ((uint64_t)ADC_RING_BLOCK * 1000000u / (uint64_t)HANDOFF_ADC_FS_HZ)
+
 static void __isr on_dma(void)
 {
-    uint i;
+    bool     good[ADC_RING_BLOCKS];
+    uint     i, pending = 0;
+    uint32_t expected;
 
+    /*
+     * A pending channel that is BUSY completed a block this handler never
+     * saw and is already filling the same buffer again -- the wrap keeps it
+     * in bounds -- so what is in that buffer is torn. It is dropped and
+     * counted, not re-armed mid-flight. In steady state the completed
+     * channel is always idle (the other one is filling), so this costs
+     * nothing until an interrupt is late by a whole block.
+     */
     for (i = 0; i < ADC_RING_BLOCKS; i++) {
+        good[i] = false;
         if (!(dma_hw->ints0 & (1u << s_dma[i]))) continue;
         dma_hw->ints0 = 1u << s_dma[i];
+        if (dma_channel_is_busy((uint)s_dma[i])) { s_overruns++; continue; }
+        good[i] = true;
+        pending++;
+    }
+
+    /*
+     * Blocks the converter finished while this handler could not run are
+     * gone -- the channels wrap in place, see the head of the file -- but
+     * time is not, and the count has to say so before the blocks in hand
+     * are labelled: adc_ring_sample_us() places every chip on the sample
+     * clock from this count, and the own-send cut is placed on that. Left
+     * uncorrected, eight flash writes put the clock 300 ms behind and the
+     * band woke on its own shouts (15 Sep 2026). The ordinal of the block
+     * being filled right now is known from the clock alone; rounding makes
+     * it robust to the few microseconds between a block ending and this
+     * handler running.
+     */
+    expected = (uint32_t)((time_us_64() - s_t0 + ADC_RING_BLOCK_US / 2u) / ADC_RING_BLOCK_US);
+    if (expected > s_blocks + pending) {
+        uint32_t lost = expected - s_blocks - pending;
+        s_overruns += lost;
+        s_blocks   += lost;
+    }
+
+    for (i = 0; i < ADC_RING_BLOCKS; i++) {
+        if (!good[i]) continue;
 
         /* Still full means core 1 never took the last one. That is a dropped
          * block, and it is the number this milestone exists to report. */
@@ -89,6 +151,7 @@ void adc_ring_init(void)
         channel_config_set_transfer_data_size(&c, DMA_SIZE_16);
         channel_config_set_read_increment(&c, false);
         channel_config_set_write_increment(&c, true);
+        channel_config_set_ring(&c, true, ADC_RING_WRAP_BITS);   /* see the head of the file */
         channel_config_set_dreq(&c, DREQ_ADC);
         channel_config_set_chain_to(&c, (uint)s_dma[(i + 1) % ADC_RING_BLOCKS]);
         dma_channel_configure((uint)s_dma[i], &c, s_raw[i], &adc_hw->fifo,
@@ -120,8 +183,6 @@ void adc_ring_start(void)
     }
     s_overruns = 0;
     s_blocks   = 0;
-    s_next_irq = 0;
-    s_next_read = 0;
 
     adc_fifo_drain();
     adc_run(true);
@@ -153,12 +214,24 @@ const int16_t *adc_ring_next_block(size_t *count)
     return adc_ring_next_block_seq(count, 0);
 }
 
+/*
+ * The oldest full block, by ordinal -- not by turn. Alternating 0, 1, 0, 1
+ * assumes the consumer saw every completion; after an interrupt blackout
+ * it can come back on the wrong foot and, with the other block always
+ * full by the time it looks, hand every pair over newest first for the
+ * rest of the run. That was a band whose frames all failed their CRC
+ * after a flash write (15 Sep 2026): 4 ms of samples swapped, forever.
+ */
 const int16_t *adc_ring_next_block_seq(size_t *count, uint32_t *seq)
 {
-    uint8_t b = s_next_read;
+    int b = -1;
     size_t i;
 
-    if (!s_full[b]) {
+    for (i = 0; i < ADC_RING_BLOCKS; i++) {
+        if (!s_full[i]) continue;
+        if (b < 0 || (int32_t)(s_seq[i] - s_seq[b]) < 0) b = (int)i;
+    }
+    if (b < 0) {
         if (count) *count = 0;
         return 0;
     }
@@ -170,7 +243,6 @@ const int16_t *adc_ring_next_block_seq(size_t *count, uint32_t *seq)
         s_out[i] = (int16_t)((int)s_raw[b][i] - ADC_MIDPOINT);
 
     s_full[b] = false;
-    s_next_read = (uint8_t)((b + 1) % ADC_RING_BLOCKS);
 
     if (count) *count = ADC_RING_BLOCK;
     return s_out;
