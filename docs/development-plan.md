@@ -839,19 +839,132 @@ COM8 board through the passive 10 kΩ / 540 Ω divider, GP2 → GP26:
   test turned out to have been vacuous — the pad was driven low when it
   ran — and `drive(false)` now discharges a latched pad with a pull-down
   while the input buffer is off, for the instruments that keep it on.
-- **The positive control is wired but not yet connected.** 93D1 runs
-  `linktest_tx` (role compiled in, no strap) into the same node through a
-  second 10 kΩ so the receiver has real frames to decode after each window;
-  with 93D1 sending 1 800 frames, COM8's node read what it reads in
-  silence, so that resistor is not on yet. Wire it, `p` on COM7 to resume,
-  `l 400` `n 500` `g` on COM8, and the `frames good` column is the control.
+- **The positive control, run 15 Sep 2026 once the second 10 kΩ was on.**
+  93D1 runs `linktest_tx` (role compiled in, no strap) into the same node,
+  so the receiver has real frames to decode after each window. 379E's
+  turnaround, `l 400` `n 500` `g`, with 93D1 sending a frame every 176 ms:
 
-### M14 — Contact trigger and two-way
+  | turns | listen | frames after the window | idle | stalls / overruns |
+  |---|---|---|---|---|
+  | 500 | 400 ms | **672 good, 34 bad** | 17 | 0 / 0 |
+
+  The receiver decodes after every turn, so the 0 of phase 1 was a silent
+  channel and not a deaf receiver. The app's two PASS/FAIL lines both say
+  FAIL in this phase, as expected: with the far end never silent, every
+  detection after the window is the far end, and its frames land in the
+  settle capture. Only the frames-good column is read here.
+
+### M14 — Contact trigger and two-way — **software binding verified 15 Sep 2026 on the passive divider, all four criteria**
 
 **Hardware: none added** — two complete wristbands, which by now you have.
 
 The state machine was written and tested at M1 against two simulated nodes.
 Only its binding to real hardware is new here.
+
+**Bench, 15 Sep 2026, the AFE not yet built.** Two boards on M13's divider,
+both driving and hearing the same node. Boards are named by the last four
+hex of their id, the four the Bluetooth name shows:
+
+```
+  93D1 (COM7)                                         379E (COM8)
+    GP2  ───10 k───┐                    ┌───10 k───  GP2
+                   ├──────── node ──────┤
+    GP26 ◄─────────┘          │         └──────────► GP26
+                            540 R
+                              │
+    GND ────────────────────GND──────────────────── GND
+    GP15 ◄──────────── sync pulse, pin 20 ─────────► GP15
+```
+
+Five things meet at the node: the two 10 kΩ, the 540 Ω to ground, and the
+two GP26 sense inputs. Compared with M13, the 93D1 side is new (its 10 kΩ
+and its GP26 wire), and the GP15 line is new: either board pulses it, both
+take the edge on an interrupt, restart the trigger in the same microsecond
+and log the time — the forced simultaneous start and the common clock
+reference in one wire. Both boards on USB, grounds commoned.
+
+The image is `apps/handoff`, the product image, with the link bound in
+(`g` `y` `d` `w` `r` `s` `z` `v` `c`; the header comment maps them). Each
+board stored a bench card named after itself with `w` — the first flash
+write with core 1 running, which is why core 1 now registers as a
+flash-lockout victim. Every send is logged with its DMA start and pad-idle
+time on the board's own clock (`tx S` / `tx F`), the GP15 edge as `sync`,
+and a send cut short by a sync as `cut`; a script aligns the two logs on
+the sync pairs (offset drift over 280 s: 54 µs) and checks every pair of
+sends for overlap.
+
+**The run, 105 handshakes free-running with 40 of them forced:**
+
+| criterion | 93D1 | 379E |
+|---|---|---|
+| handshakes complete / abort | **105 / 0** | **105 / 0** |
+| the other's card decoded on every completion | `Band 379E`, 105 of 105 | `Band 93D1`, 105 of 105 |
+| role, as sender / receiver | 50 / 55 | 55 / 50 |
+| duration, mean / max | 888 / 985 ms | 895 / 983 ms |
+| frames sent / good / bad | 363 / 297 / 0 | 370 / 294 / 0 |
+| stalls, overruns, false syncs | 0, 0, 0 | 0, 0, 0 |
+
+- **Exactly one sender, every time.** Pairing each board's handshake with
+  the other's by aligned end time: 105 pairs, 105 with one sender and one
+  receiver, none S/S, none R/R. The 40 forced simultaneous starts (`y 40`,
+  a pulse every 3 s, both boards shouting within 1.2 ms of the edge) all
+  resolved with one sender; 31 of them needed a second shout round, as
+  §7.6 says the both-deaf case must.
+- **No two frames on the pad at once**: 0 frame–frame overlaps in 739
+  frames. One frame–shout overlap of 381 µs, at a forced restart where the
+  pulse landed during a frame's encode and the abort followed 0.4 ms after
+  its DMA had started — the bench's doing, not the trigger's.
+- **Shout–shout collisions, the allowed case: 31 in 105 rendezvous**, by
+  0.7–9.8 ms, all resolved the next round. The simulator's figure is 0.5 %.
+  The difference is the receive path's latency: a chip surfaces up to a
+  DMA block (4 ms) after it was sampled, so a board's ears effectively open
+  ~9 ms after the far end starts, not ~1 ms, and two listen windows expiring
+  within that of each other collide. Harmless to the proof (one sender
+  still), costly in rendezvous time (one extra 50–100 ms round in three).
+  Shrinking `ADC_RING_BLOCK` shrinks it; not done here, M4 verified the
+  ring at 2048.
+
+**Three things the binding had to get right, none of them in `link_sm.c`:**
+
+- **A board's own sends are cut out of the chip stream on the sample clock,
+  in `hal_pico.c`.** The ipc ring runs up to 4 ms behind the ADC. A band
+  that discarded "whatever arrives while I transmit" and trusted "whatever
+  arrives after" — which is what `link_sm` and the trigger do, and what is
+  correct against the simulator's zero-latency HAL — was handed the tail
+  of its own shout every time its ears opened, and woke on itself every
+  cycle. `hal_rx_chips()` drops every chip sampled between a send's DMA
+  start and its pad-idle time plus the turnaround window, and nothing above
+  the HAL changed. Same lesson as M13's chip placement, one layer down.
+- **`rx_idle_us` is 21 ms here, not the 6 ms the simulator was swept
+  at.** The chain from our pad going idle to the reply registering: the
+  far end sees our last frame end (a block, 4 ms, plus the CRC), turns
+  around (2 ms), packs its frame (**5.4–6.2 ms**, measured over 789 frames:
+  `pio_carrier_send` writes every stream bit of 624 chips before the DMA
+  starts), the detector needs a chip-group (1 ms), and the ring holds that
+  for another block. At 6 ms every receive turn gave up before the reply
+  arrived and a two-fragment exchange took 30 turnarounds, 2 retries and
+  the whole 3.1 s budget. At 14 ms the margin was about a millisecond, and
+  on forced starts it went negative once in four: both boards clocking
+  frames out together for three frames until the barren turns sent them
+  back through the trigger — 46 frame–frame overlaps in that run, all of
+  that kind. `HAL_PICO_RX_LATENCY_US` and `HAL_PICO_TX_SETUP_US` in
+  `hal_pico.h` carry the two numbers; `apps/handoff` adds them to the
+  default. The packing time is an open item: a precomputed chip pattern
+  would make it near zero.
+- **The two contexts stay apart.** The main loop polls the link and the
+  console and nothing else; a card that arrives is handed to a BTstack
+  timer, which notifies the phone (M2's rule: a CYW43 call from the main
+  loop parks the core). The phone half of the image is unchanged and still
+  runs alongside — advertising, the bond, provisioning over `my_vcard`.
+  Neither bench board has a bonded phone subscribed, so the `rx_vcard`
+  notify reported "not sent" on every handshake; the phone landing is
+  M12's, and was never this milestone's criterion.
+
+**What this does not show**: anything about the AFE, a body, or a plate.
+The pad here settles in nanoseconds and the channel is a resistor. The AFE
+day re-runs the same image unchanged; the numbers that should move are the
+duration and the collision count, and the ones that must not are the four
+in the first table.
 
 There is no role election to bring up: it was removed and replaced by the
 contact trigger of firmware-architecture §7.6. What has to hold on hardware is
@@ -862,8 +975,8 @@ shout is the one that sends.
 Exit criteria: 50 handshakes; both parties end up with each other's contact; two
 units started from a synchronised trigger still resolve to exactly one sender
 (the deliberately forced case, which in simulation needs a second shout round
-about once in two hundred); and no pair is ever observed transmitting frames
-simultaneously.
+about once in two hundred — on the bench, with the ring's latency, three in
+four); and no pair is ever observed transmitting frames simultaneously.
 
 ---
 

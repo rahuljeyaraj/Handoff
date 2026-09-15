@@ -755,7 +755,7 @@ already list.
 | M8–M11 | nothing new; constants in `config.h`, plots in `tools/plot.py` | — |
 | M12 | wires `rx_vcard` notify to the real receive path | — |
 | M13 | `link_sm.c` turnaround transitions — header already exists from M1 | — |
-| M14 | `beacon.c` binding only; logic was written and tested at M1 | — |
+| M14 | `beacon.c` binding only; logic was written and tested at M1. **Done 15 Sep 2026 on the passive divider**: `apps/handoff` polls `link_sm`; `hal_pico.c` cuts a board's own sends out of the chip stream on the sample clock and registers core 1 as a flash-lockout victim; the two latencies the link must allow for are named in `hal_pico.h` | — |
 
 M6 through M11 add **no new firmware modules at all**. That is the intended
 result: six milestones of measurement against code that already exists. If a
@@ -782,6 +782,8 @@ revised here first.
 | Record sector placement | **settled at M2: NOT the last sector** — the SDK reserves it on RP2350 for the E10 workaround and BTstack's bond bank takes the two below it. `flash.c` static-asserts against `PICO_FLASH_BANK_STORAGE_OFFSET` | M2 ✅ |
 | Pairing method | **settled at M2: LE Secure Connections, Just Works, bonded.** No display, no keypad, so nothing stronger exists. See §11.2 | M2 ✅ |
 | Where the record store's backend lives | **settled at M2: registered from below.** `hal_pico/flash.c` calls `store_set_backend()`; `store.c` names no transport and stays host-testable | M2 ✅ |
+| Receive-path latency | **found at M14.** A chip surfaces up to one DMA block (4 ms) after it was sampled. The HAL now hides a board's own sends on the sample clock, and `apps/handoff` widens `rx_idle_us` by two blocks — but the trigger's effective deaf window is ~9 ms rather than ~1 ms, and one rendezvous in three needs a second shout round against the simulator's one in two hundred. A smaller `ADC_RING_BLOCK` shrinks it; M4's overrun soak would have to be re-run | when rendezvous time matters |
+| Frame packing time | **found at M14.** `pio_carrier_send` writes every stream bit before the DMA starts: 5.4–6.2 ms per frame, measured. Budgeted as `HAL_PICO_TX_SETUP_US` and added to `rx_idle_us`; a packer that copied a precomputed chip pattern would make it near zero and take 7 ms off every turn | when a turn is worth 7 ms |
 
 ### 13.1 What M1 changed in this document
 

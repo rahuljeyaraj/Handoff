@@ -1,4 +1,4 @@
-# M2 today (phone link), M14 eventually (the real thing).
+# The product image: M2 gave it the phone half, M14 the body link.
 #
 # handoff_ble is the only app link that differs from every other image: it
 # carries BTstack, the cyw43 Bluetooth firmware and the flash record store.

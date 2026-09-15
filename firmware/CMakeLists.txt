@@ -62,7 +62,8 @@ target_link_libraries(handoff_lib
     hardware_pio
     hardware_flash
     pico_multicore
-    pico_rand         # hal_iface_t.random, the election backoff draw
+    pico_flash        # core 1 registers as a flash-lockout victim, hal_pico.c
+    pico_rand         # hal_iface_t.random, the trigger's listen draw
 )
 
 # The phone half, M2. Three files out of lib/hal_pico that share one

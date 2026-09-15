@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "hardware/sync.h"
+#include "pico/flash.h"
 #include "pico/multicore.h"
 #include "pico/rand.h"
 #include "pico/stdlib.h"
@@ -77,6 +78,12 @@ static void core1_main(void)
     carrier_t car;
     uint32_t  hz = s_carrier_req;
     uint64_t  busy = 0;
+
+    /* This loop runs out of XIP. A flash erase on core 0 — the record store
+     * being provisioned, the bond store on a fresh pairing — would hang it
+     * mid-fetch unless core 0 can park it first; flash.c takes the lockout
+     * path only if this has been called (see run_write there). */
+    flash_safe_execute_core_init();
 
     core1_dsp_init(&g, &sy, &car, hz);
     s_carrier_ack = hz;
@@ -139,7 +146,9 @@ static void core1_main(void)
  * to a slot and M13 can time settling from it.
  */
 static uint64_t s_tx_until;
+static uint64_t s_tx_started;    /* DMA start of the last send               */
 static uint64_t s_tx_pad_idle;   /* when the last chip of the last send ends */
+static uint32_t s_rx_cut;        /* chips dropped as our own, see p_rx_chips */
 
 /*
  * A transmit that is still busy well after its airtime has stalled: the
@@ -183,7 +192,8 @@ static size_t p_tx_chips(void *ctx, const uint8_t *chips, size_t n)
     tail_us = 32u * (uint32_t)HANDOFF_CHIP_US / pio_carrier_bits_per_chip();
 
     pio_carrier_send(chips, n);
-    s_tx_pad_idle = pio_carrier_started_us() + (uint64_t)n * HANDOFF_CHIP_US;
+    s_tx_started  = pio_carrier_started_us();
+    s_tx_pad_idle = s_tx_started + (uint64_t)n * HANDOFF_CHIP_US;
     s_tx_until    = s_tx_pad_idle + tail_us;
     return n;
 }
@@ -195,10 +205,52 @@ static bool p_tx_busy(void *ctx)
     return pio_carrier_busy() || time_us_64() < s_tx_until;
 }
 
+/*
+ * The chip stream, with our own transmissions cut out of it ON THE SAMPLE
+ * CLOCK. The ipc ring is up to a DMA block late — 4 ms, four turnaround
+ * budgets — so a consumer that discards "whatever arrives while I am
+ * transmitting" and trusts "whatever arrives after" (link_sm's
+ * drain_discard, and the trigger's deaf phases) would be handed the tail of
+ * its own shout for the first few milliseconds of every listen, and would
+ * wake on it every cycle. The far end's chips are not affected: they were
+ * sampled after our pad went quiet, and only the sample number is looked at.
+ *
+ * The cut runs from the start of the send to the pad-idle instant plus the
+ * settling window, so the amplifier's recovery is deaf here too, placed by
+ * when it was sampled — link_sm's TURNAROUND can only apply it by arrival.
+ * A chip straddling either edge is dropped with the rest. Before any send
+ * s_tx_pad_idle is 0 and nothing is cut.
+ */
+static uint64_t s_idx_hi;
+static uint32_t s_idx_last;
+
 static size_t p_rx_chips(void *ctx, uint16_t *dst, size_t max)
 {
+    uint32_t idx[64];
+    size_t n, i, kept = 0;
     (void)ctx;
-    return ipc_pop_chips(dst, 0, max);
+
+    if (max > 64) max = 64;
+    n = ipc_pop_chips(dst, idx, max);
+
+    for (i = 0; i < n; i++) {
+        uint64_t t_end, t_start;
+
+        /* Low 32 bits of the sample number wrap every 2.4 hours; chips only
+         * ever arrive in order. */
+        if (idx[i] < s_idx_last) s_idx_hi += 1ull << 32;
+        s_idx_last = idx[i];
+        t_end   = adc_ring_sample_us(s_idx_hi | idx[i]);
+        t_start = t_end - (uint64_t)HANDOFF_CHIP_US;
+
+        if (s_tx_pad_idle &&
+            t_end > s_tx_started && t_start < s_tx_pad_idle + HANDOFF_TURNAROUND_US) {
+            s_rx_cut++;
+            continue;
+        }
+        dst[kept++] = dst[i];
+    }
+    return kept;
 }
 
 static uint32_t p_rx_carrier_level(void *ctx)
@@ -335,3 +387,16 @@ size_t hal_pico_rx_chips_at(uint16_t *dst, uint32_t *idx, size_t max)
 
 uint64_t hal_pico_sample_us(uint64_t idx)  { return adc_ring_sample_us(idx); }
 uint64_t hal_pico_tx_pad_idle_us(void)     { return s_tx_pad_idle; }
+uint64_t hal_pico_tx_started_us(void)      { return s_tx_started; }
+
+bool hal_pico_tx_abort(void)
+{
+    uint64_t now = time_us_64();
+    bool cut = s_tx_pad_idle > now;
+
+    pio_carrier_reset();
+    if (cut) s_tx_pad_idle = now;   /* released early */
+    s_tx_until = now;
+    return cut;
+}
+uint32_t hal_pico_rx_cut(void)             { return s_rx_cut; }

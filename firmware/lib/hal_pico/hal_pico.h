@@ -15,6 +15,7 @@
 #ifndef HANDOFF_HAL_PICO_H
 #define HANDOFF_HAL_PICO_H
 
+#include "adc_ring.h"
 #include "hal.h"
 #include "pio_carrier.h"
 
@@ -26,6 +27,31 @@
 #define HANDOFF_PIN_TX      2    /* GP2 -> R1 -> pad,  design §6.3  */
 #define HANDOFF_PIN_ADC     26   /* GP26 = ADC0,       design §10.2 */
 #define HANDOFF_ADC_CHANNEL 0
+
+/*
+ * How far behind the ADC hal_rx_chips() can run: one DMA block. Core 1 only
+ * sees a block once the DMA has filled it, so a chip can surface this long
+ * after it was sampled. The link's own timings assume chips arrive as they
+ * are sampled (the simulator's HAL does), so anything in link_cfg_t that
+ * waits for the far end to be heard has to allow for this — M14 found
+ * rx_idle_us at its 6 ms default giving up on a reply that was still in
+ * the ring, and the two boards talking over each other every turn.
+ */
+#define HAL_PICO_RX_LATENCY_US \
+    ((uint32_t)ADC_RING_BLOCK * 1000000u / (uint32_t)HANDOFF_ADC_FS_HZ)
+
+/*
+ * How long hal_tx_chips() takes to get a frame onto the pad: pio_carrier_send
+ * packs every stream bit of every chip before the DMA starts, and a frame is
+ * 624 chips of 200 bits at 200 kHz. Measured at M14 from the console logs,
+ * 789 frames on two boards: 5.4 ms minimum, 5.5 median, 6.2 maximum. The far
+ * end is silent for this long between deciding to reply and being audible,
+ * on top of its turnaround, and a receiver that gave up before then talked
+ * over the reply (M14, both boards clocking frames out together for three
+ * frames at a time). A packer that copied precomputed chip patterns would
+ * make this near zero; until then it is budgeted.
+ */
+#define HAL_PICO_TX_SETUP_US 7000u
 
 /*
  * Fills in the interface and starts core 1. Idempotent: a second call returns
@@ -85,7 +111,25 @@ size_t   hal_pico_rx_chips_at(uint16_t *dst, uint32_t *idx, size_t max);
 uint64_t hal_pico_sample_us(uint64_t idx);
 
 /* When the last send's final chip ended on the pad (the DMA start plus the
- * airtime), which is when the generator released it. */
+ * airtime), which is when the generator released it — and when its DMA
+ * started. Between them the pad was ours; M14 logs both for every send so
+ * two boards' logs can be checked for overlap. */
 uint64_t hal_pico_tx_pad_idle_us(void);
+uint64_t hal_pico_tx_started_us(void);
+
+/* Cut a send short and release the pad now. hal_tx_busy() clears at once,
+ * so a fresh send is accepted straight after. M14's forced simultaneous
+ * start uses it: both boards drop whatever they were doing on the same
+ * edge and restart the trigger together. True if a send was actually in
+ * flight — its pad-idle time is now the moment of the cut. */
+bool     hal_pico_tx_abort(void);
+
+/*
+ * Chips hal_rx_chips() dropped because they were sampled while our own pad
+ * was driven or settling — placed on the sample clock, since the ipc ring
+ * runs up to 4 ms behind it (M14; see p_rx_chips). Not counted for
+ * hal_pico_rx_chips_at(), which hands over the raw stream.
+ */
+uint32_t hal_pico_rx_cut(void);
 
 #endif /* HANDOFF_HAL_PICO_H */
