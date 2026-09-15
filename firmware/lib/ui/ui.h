@@ -49,6 +49,7 @@
  *   dev mode (button)                purple blip / 2 s            -
  *   identify (from the app)          white x3 fast                3 taps
  *   battery check (button)           green / amber / red 300 ms   -
+ *   battery check, level unknown     white 300 ms                 -
  *   hold threshold reached           -                            tap
  *
  * (h): masked by the app's vibrate setting. Everything else always plays.
@@ -102,6 +103,7 @@ typedef enum {
     UI_EV_BATTERY_SHOW_GOOD, /* the button's answer, by level              */
     UI_EV_BATTERY_SHOW_MID,
     UI_EV_BATTERY_SHOW_LOW,
+    UI_EV_BATTERY_SHOW_UNKNOWN, /* ...or no reading yet: not the same as good */
     UI_EV_HOLD_REACHED,      /* the button crossed a hold threshold        */
     UI_EV_COUNT
 } ui_event_t;

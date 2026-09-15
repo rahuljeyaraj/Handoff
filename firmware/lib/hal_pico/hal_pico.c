@@ -94,12 +94,18 @@ static void core1_main(void)
         size_t n = 0, i;
         uint64_t t0, base;
         uint32_t seq = 0;
+        bool reinit;
 
         if (s_carrier_req != hz) {
             hz = s_carrier_req;
             core1_dsp_init(&g, &sy, &car, hz);
             s_carrier_ack = hz;
         }
+
+        /* A VSYS request is acted on the moment it is seen, block or not:
+         * this loop is idle-spinning most of the time and the swap costs
+         * nothing. */
+        adc_ring_aux_poll();
 
         /* Same accounting as M4's adcbench: the DC-centring copy inside
          * next_block() is core-1 work, a failed poll is not. */
@@ -110,6 +116,24 @@ static void core1_main(void)
             continue;
         }
         base = (uint64_t)seq * ADC_RING_BLOCK;
+
+        /*
+         * A VSYS measurement borrows the converter for three blocks
+         * (hal_pico_read_vsys_mv). They are still taken from the ring —
+         * otherwise the IRQ would count them as overruns, and that number
+         * has to keep meaning what it means — but they carry a step to a DC
+         * level and back, which is broadband, so they reach neither the
+         * detector nor the raw telemetry, and the detector is rebuilt once
+         * the input is back on the pad. Never blocks, never takes a lock:
+         * this loop is the ring's only consumer and the ring overruns in
+         * 4 ms.
+         */
+        if (adc_ring_aux_step(blk, n, seq, &reinit)) {
+            if (reinit) core1_dsp_init(&g, &sy, &car, hz);
+            busy += time_us_64() - t0;
+            s_busy_us = busy;
+            continue;
+        }
 
         tlm_usb_raw_feed(blk, n, base);
 
@@ -379,6 +403,38 @@ uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last)
 }
 uint32_t hal_pico_chips(void)      { return s_chips; }
 uint32_t hal_pico_windows(void)    { return s_windows; }
+uint32_t hal_pico_sps(void)        { return adc_ring_measured_sps(); }
+
+/*
+ * The core-0 half of the VSYS measurement (see adc_ring.h for the block
+ * sequence). The spin is deliberate: someone has to hold the CYW43 lock
+ * across the whole window, core 0 cannot hold it across a return, and core
+ * 1 must not hold it at all — so core 0 waits, and the wait is bounded so
+ * a wedged core 1 cannot take the Bluetooth link down with it. On a
+ * timeout the request is cancelled, and core 1 still completes the swap
+ * back on its own; the caller gets 0 = not read.
+ */
+uint16_t hal_pico_read_vsys_mv(void)
+{
+    int32_t code = -1;
+    uint64_t deadline;
+
+    if (!s_core1_up) return 0;
+    if (!adc_ring_aux_request(HANDOFF_VSYS_CHANNEL, HANDOFF_PIN_VSYS)) return 0;
+
+    deadline = time_us_64() + HAL_PICO_VSYS_WAIT_US;
+    while (!adc_ring_aux_ready(&code)) {
+        if (time_us_64() > deadline) {
+            adc_ring_aux_cancel();
+            return 0;
+        }
+        tight_loop_contents();
+    }
+    if (code < 0) return 0;
+
+    /* 12-bit against a 3.3 V reference, through the Pico's own 3:1 divider. */
+    return (uint16_t)(((uint32_t)code * 3u * 3300u) / 4096u);
+}
 
 size_t hal_pico_rx_chips_at(uint16_t *dst, uint32_t *idx, size_t max)
 {

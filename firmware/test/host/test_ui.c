@@ -387,6 +387,18 @@ void test_ui(void)
         HF_EQ_INT(on, 0);
     }
 
+    hf_begin("ui: a battery check with no reading is white, never green");
+    {
+        uint32_t on; int pulses;
+        ui_init(&u, 0);
+        ui_event(&u, UI_EV_BATTERY_SHOW_UNKNOWN, 0);
+        n = trace(&u, 0, 1000, e, 64);
+        HF_EQ_INT(n, 2); HF_CHECK(IS_WHITE(e[0].out.led)); HF_EQ_INT(e[1].at, 300);
+        motor_stats(&u, 0, 1000, &on, &pulses);
+        HF_EQ_INT(on, 0);
+        HF_EQ_INT(ui_event_parse("battery-show-unknown"), (int)UI_EV_BATTERY_SHOW_UNKNOWN);
+    }
+
     hf_begin("ui: a hold threshold is one tap");
     {
         uint32_t on; int pulses;

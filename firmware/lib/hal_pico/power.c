@@ -2,25 +2,39 @@
  * VSYS and VBUS on a Pico 2 W. See power.h for what these do and do not
  * mean electrically.
  *
- * This is pico-examples/adc/read_vsys/power_status.c, trimmed to the one
- * board this firmware runs on. The shape matters: GP29 is the CYW43's SPI
- * clock as well as ADC3, so the driver must be awake and the read has to
- * happen under its lock, and the first conversions after the pin is handed
- * to the ADC read low, so a few are thrown away.
+ * GP29 is ADC3 and the CYW43's SPI clock. Reading it means putting the pad
+ * into analogue mode, which takes it away from the driver; the driver sets
+ * the function back at the head of its next transfer (start_spi_comms in
+ * cyw43_spi.c), so the pin heals itself and is not restored by hand — the
+ * right funcsel is private to the driver. What has to be guaranteed is only
+ * that no transfer overlaps the window in which the pin is analogue, and
+ * that is what holding the lock across the read buys. The chip is woken
+ * first, because waking it IS a transfer, and one that ran after the swap
+ * would take the clock pin back mid-measurement.
  *
- * THE RING OWNS THE ADC. M12 landed and the DSP now runs a free-running DMA
- * ring on core 1 (adc_ring.c). Everything below — adc_init(), a different
- * channel, a different FIFO, adc_run(false) at the end — takes the converter
- * away from it and does not give it back: the ring stops dead, core 1 stops
- * producing chips, and the band goes deaf to the body link until it reboots.
- * Measured on 93D1, 15 Sep 2026: one call and `chips` never advanced again.
+ * THERE IS ONE ADC AND THE RING OWNS IT. From hal_pico_init() on, core 1
+ * runs a free-running DMA ring on the converter (adc_ring.c), and
+ * pico-examples' read_vsys — adc_init(), another channel, another FIFO,
+ * adc_run(false) at the end — took it away for good: the ring stopped, core
+ * 1 spun on a block that never came, and the band went deaf until it
+ * rebooted (93D1, 15 Sep 2026). Stopping and restarting the ring instead
+ * would reset the sample clock the own-send cutting is placed on.
  *
- * So power_vsys_mv() now declines while the ring is running rather than
- * breaking the link, and 0 means "not measurable here". The real fix is to
- * read VSYS the way adc_ring_noise_floor() reads the temperature sensor —
- * switch the ring's own channel between blocks, on core 1, keeping the DMA
- * and the counters alive — which needs core 1 to hold the CYW43 lock for
- * GP29. That is its own piece of work.
+ * So there are two paths, and this file routes between them:
+ *
+ *   ring running    core 0 owns the PERMISSION — this context, the lock,
+ *                   the woken chip — and core 1 owns the CONVERTER: it
+ *                   swaps the ring's input to ADC3 between blocks and back,
+ *                   with the counters and the sample clock running through
+ *                   (hal_pico_read_vsys_mv, adc_ring_aux_step). Core 1
+ *                   never takes the lock: it is the only consumer of a ring
+ *                   that overruns in 4 ms, and cyw43_thread_enter() blocks.
+ *
+ *   ring stopped    the standalone read below, which is read_vsys as it was.
+ *                   Correct when nothing else owns the converter: the bench
+ *                   apps, and boot before the ring starts.
+ *
+ * The full argument is docs/vsys-in-the-ring.md.
  */
 #include "power.h"
 
@@ -28,32 +42,19 @@
 #include "pico/cyw43_arch.h"
 
 #include "adc_ring.h"
-
-#ifndef PICO_VSYS_PIN
-#define PICO_VSYS_PIN 29
-#endif
-#ifndef PICO_FIRST_ADC_PIN
-#define PICO_FIRST_ADC_PIN 26
-#endif
+#include "hal_pico.h"
 
 #define VSYS_SAMPLES 3
 
-uint16_t power_vsys_mv(void)
+/* The converter is nobody's: take it, read, and leave it stopped. */
+static uint16_t vsys_standalone(void)
 {
     uint32_t sum = 0;
     int discard = VSYS_SAMPLES;
 
-    /* See the head of this file: taking the ADC from the ring kills the
-     * receiver for good. No reading is worth that. */
-    if (adc_ring_running()) return 0u;
-
-    cyw43_thread_enter();
-    /* Make sure the CYW43 is awake before touching a pin it shares. */
-    (void)cyw43_arch_gpio_get(CYW43_WL_GPIO_VBUS_PIN);
-
     adc_init();
-    adc_gpio_init(PICO_VSYS_PIN);
-    adc_select_input(PICO_VSYS_PIN - PICO_FIRST_ADC_PIN);
+    adc_gpio_init(HANDOFF_PIN_VSYS);
+    adc_select_input(HANDOFF_VSYS_CHANNEL);
 
     adc_fifo_setup(true, false, 0, false, false);
     adc_run(true);
@@ -67,12 +68,25 @@ uint16_t power_vsys_mv(void)
 
     adc_run(false);
     adc_fifo_drain();
-    cyw43_thread_exit();
 
     sum /= VSYS_SAMPLES;
 
     /* 12-bit against a 3.3 V reference, through the Pico's own 3:1 divider. */
     return (uint16_t)((sum * 3u * 3300u) / 4096u);
+}
+
+uint16_t power_vsys_mv(void)
+{
+    uint16_t mv;
+
+    cyw43_thread_enter();
+    /* Awake before the swap: waking it is itself a transfer on GP29. */
+    (void)cyw43_arch_gpio_get(CYW43_WL_GPIO_VBUS_PIN);
+
+    mv = adc_ring_running() ? hal_pico_read_vsys_mv() : vsys_standalone();
+
+    cyw43_thread_exit();
+    return mv;
 }
 
 bool power_on_usb(void)

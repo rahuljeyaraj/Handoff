@@ -64,11 +64,17 @@ void wear_set_ble(bool connected, bool bonded)
     s_ble_valid = true;
 }
 
+/*
+ * 0 mV is "not measured" (power.h), and unknown is not good: a band that
+ * could not read its cell must not tell the wearer the battery is fine. So
+ * a 0 leaves the level where the last real reading put it and makes the
+ * button answer "unknown" until the next one lands.
+ */
 void wear_set_power(uint16_t vsys_mv, bool on_usb)
 {
     s_vsys_mv = vsys_mv;
     s_on_usb = on_usb;
-    s_power_valid = true;
+    s_power_valid = vsys_mv != 0u;
 }
 
 void wear_set_haptic(bool on)
@@ -79,9 +85,10 @@ void wear_set_haptic(bool on)
 
 /* ---- the battery -------------------------------------------------------- */
 
+/* Only ever called with a real reading (s_power_valid); 0 never gets here. */
 static ui_batt_t battery_level(uint16_t mv, bool on_usb, ui_batt_t was)
 {
-    if (on_usb || mv == 0u || mv >= WEAR_VSYS_USB_MV) return UI_BATT_OK;
+    if (on_usb || mv >= WEAR_VSYS_USB_MV) return UI_BATT_OK;
     switch (was) {
     case UI_BATT_CRITICAL:
         if (mv < WEAR_VSYS_CRIT_MV + WEAR_VSYS_HYST_MV) return UI_BATT_CRITICAL;
@@ -99,7 +106,8 @@ static ui_batt_t battery_level(uint16_t mv, bool on_usb, ui_batt_t was)
 
 static ui_event_t battery_show(uint16_t mv, bool on_usb)
 {
-    if (on_usb || mv == 0u || mv >= WEAR_VSYS_USB_MV) return UI_EV_BATTERY_SHOW_GOOD;
+    if (mv == 0u) return UI_EV_BATTERY_SHOW_UNKNOWN;
+    if (on_usb || mv >= WEAR_VSYS_USB_MV) return UI_EV_BATTERY_SHOW_GOOD;
     if (mv >= WEAR_VSYS_GOOD_MV) return UI_EV_BATTERY_SHOW_GOOD;
     if (mv >= WEAR_VSYS_LOW_MV)  return UI_EV_BATTERY_SHOW_MID;
     return UI_EV_BATTERY_SHOW_LOW;

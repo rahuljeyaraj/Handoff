@@ -20,9 +20,11 @@
 #include <stdint.h>
 
 /*
- * VSYS in millivolts, after D1. Read the way pico-examples/adc/read_vsys
- * does: on a Pico 2 W GP29 is shared with the CYW43 SPI clock, so the CYW43
- * has to be awake and the pin briefly claimed for the ADC.
+ * VSYS in millivolts, after D1; 0 = not read. On a Pico 2 W GP29 is shared
+ * with the CYW43 SPI clock, so the CYW43 has to be awake and the pin briefly
+ * claimed for the ADC. While the receiver's ring is running the reading is
+ * taken inside it, on core 1, and the link is blind for ~12 ms: call this
+ * when nothing is in flight (apps/handoff gates it), and cache the answer.
  */
 uint16_t power_vsys_mv(void);
 

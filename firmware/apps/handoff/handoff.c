@@ -65,6 +65,8 @@
  *   u         trace the LED and motor on / off
  *   u <event> inject a ui.h event by name (u ? lists them)
  *   b <ms>    press the button for that long
+ *   p [mv]    measure VSYS at the next quiet tick; with a value, feed the
+ *             wearer's side that reading instead (0 = unknown)
  *
  * LOG LINES, all with times in microseconds on this board's clock:
  *
@@ -76,6 +78,8 @@
  *   st <t> <STATE> <role>    the link changed state
  *   done ...                 a handshake ended, and what it brought
  *   ui <ms> ...              wear.c's trace, in milliseconds (`u`)
+ *   vsys <mV> usb|batt (<us>) a VSYS reading, and how long the link was
+ *                            blind for it (0 mV = core 1 did not answer)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,7 +109,7 @@
 #endif
 
 #define PIN_SYNC          15
-#define POWER_SAMPLE_TICKS (10000u / LINK_TICK_MS)   /* VSYS every 10 s      */
+#define POWER_SAMPLE_TICKS (60000u / LINK_TICK_MS)   /* VSYS every 60 s      */
 #define SYNC_PULSE_US     200u
 #define SYNC_PERIOD_US    3000000u
 #define REIDLE_DEFAULT_US 1500000u
@@ -151,10 +155,18 @@ static volatile int       s_force_role = -1;
 
 /* written by the main loop, read by the BTstack timer */
 static volatile bool      s_rx_ready;      /* a card arrived: notify the phone */
+static volatile bool      s_power_due;     /* measure VSYS at the next quiet tick */
 static bool               s_rx_pending;    /* ...and could not be: held for one */
 static volatile bool      s_status_dirty;
 static char               s_rx_text[BLE_VCARD_MAX];
 static size_t             s_rx_text_len;
+
+/* the last VSYS reading, BTstack context only: measured on a schedule,
+ * read by every status notify (0 = not read) */
+static uint16_t           s_vsys_mv;
+static bool               s_on_usb;
+static uint32_t           s_vsys_reads, s_vsys_fails;
+static uint32_t           s_vsys_last_us;  /* how long the last one blocked */
 
 #if HANDOFF_BENCH_SYNC
 /* the GP15 edge, from its interrupt */
@@ -234,10 +246,7 @@ static void report_status(void)
     st.frame_errors = (uint16_t)s_sm.frames_rx_bad;
     st.last_score   = (uint16_t)hal_rx_carrier_level(s_hal);
 
-    {
-        uint32_t mv = power_vsys_mv();
-        st.vsys_20mv = (uint8_t)((mv + 10u) / 20u > 255u ? 255u : (mv + 10u) / 20u);
-    }
+    st.vsys_20mv = (uint8_t)((s_vsys_mv + 10u) / 20u > 255u ? 255u : (s_vsys_mv + 10u) / 20u);
     st.fw_major = HANDOFF_FW_VERSION_MAJOR;
     st.fw_minor = HANDOFF_FW_VERSION_MINOR;
     st.fw_patch = HANDOFF_FW_VERSION_PATCH;
@@ -365,6 +374,47 @@ static void send_fake_card(btstack_timer_source_t *ts)
 }
 
 /*
+ * "Safe to disturb the link": no exchange in flight, parked after one, or
+ * not listening at all. poll_link uses it before re-provisioning the state
+ * machine mid-life; the VSYS read uses the same one rather than a second.
+ */
+static bool link_quiet(void)
+{
+    return s_sm.state == LINK_IDLE || s_parked || !s_link_on;
+}
+
+/*
+ * VSYS, from the BTstack context, inside the receiver's ring: core 1 swaps
+ * the converter to GP29 between blocks and back (power.c, docs/vsys-in-
+ * the-ring.md). The link is blind for the three blocks it borrows, ~12 ms,
+ * and a hole that size mid-exchange kills a handshake — M14's margins are
+ * about a millisecond — so it only happens through link_quiet(), once a
+ * minute, and every reader takes the cached value. If contact begins inside
+ * the window the trigger simply re-arms: one retried handshake in a rare
+ * coincidence.
+ *
+ * True if a measurement was attempted (the gate was open).
+ */
+static bool sample_power(void)
+{
+    uint64_t t0;
+
+    if (!link_quiet()) return false;
+
+    t0 = hal_now_us(s_hal);
+    s_vsys_mv = power_vsys_mv();
+    s_vsys_last_us = (uint32_t)(hal_now_us(s_hal) - t0);
+    s_on_usb = power_on_usb();
+    if (s_vsys_mv) s_vsys_reads++; else s_vsys_fails++;
+
+    wear_set_power(s_vsys_mv, s_on_usb);
+    if (s_verbose)
+        printf("vsys %u mV %s (%lu us)\n", (unsigned)s_vsys_mv,
+               s_on_usb ? "usb" : "batt", (unsigned long)s_vsys_last_us);
+    return true;
+}
+
+/*
  * The main loop's way into the BTstack context. A card that arrived over the
  * pad is handed to the phone from here, never from the loop that decoded it.
  */
@@ -403,11 +453,11 @@ static void link_tick(btstack_timer_source_t *ts)
         printf("handoff: bonds cleared from the button\n");
         wear_post(UI_EV_BOND_CLEARED);
     }
-    /* VSYS only when the receiver is not using the converter (power.c). On
-     * the product image the ring runs from boot, so this reads 0 = unknown
-     * and the battery rows stay dark; see power.c for what would fix it. */
-    if (ticks++ % POWER_SAMPLE_TICKS == 0u)
-        wear_set_power(power_vsys_mv(), power_on_usb());
+    /* VSYS on its schedule, and at boot once the HAL is bound (main sets
+     * the first due). A tick that finds the link busy tries again at the
+     * next one rather than waiting out the minute. */
+    if (++ticks % POWER_SAMPLE_TICKS == 0u) s_power_due = true;
+    if (s_power_due && s_hal && sample_power()) s_power_due = false;
 
     btstack_run_loop_set_timer(ts, LINK_TICK_MS);
     btstack_run_loop_add_timer(ts);
@@ -606,7 +656,7 @@ static void poll_link(uint64_t now)
 
     if (s_own_dirty) {
         s_own_dirty = false;
-        if (s_sm.state == LINK_IDLE || s_parked || !s_link_on) {
+        if (link_quiet()) {
             split_own();
             link_sm_init(&s_sm, s_hal, &s_cfg, &s_own);
             /* the machine restarted its counters; the baselines follow */
@@ -690,7 +740,7 @@ static void print_stats(void)
 {
     uint32_t n = s_st.complete + s_st.abort;
 
-    printf("  %6lu s  handshakes %lu complete %lu abort, as sender %lu receiver %lu; "
+    printf("  %6lu s  handshakes %lu: %lu complete %lu abort, as sender %lu receiver %lu; "
            "syncs %lu\n",
            (unsigned long)elapsed_s(s_st.since), (unsigned long)n,
            (unsigned long)s_st.complete, (unsigned long)s_st.abort,
@@ -710,6 +760,11 @@ static void print_stats(void)
            (unsigned long)hal_pico_rx_cut(), (unsigned long)s_sm.framer.false_syncs,
            (unsigned long)hal_pico_overruns(), (unsigned long)hal_pico_tx_stalls(0),
            hal_pico_core1_load());
+    printf("           chips %lu at %lu sps; vsys %u mV %s, %lu reads %lu failed, last %lu us\n",
+           (unsigned long)hal_pico_chips(), (unsigned long)hal_pico_sps(),
+           (unsigned)s_vsys_mv, s_on_usb ? "usb" : "batt",
+           (unsigned long)s_vsys_reads, (unsigned long)s_vsys_fails,
+           (unsigned long)s_vsys_last_us);
 }
 
 static void print_received(void)
@@ -742,7 +797,8 @@ static void help(void)
            "  v         per-send lines %s\n"
            "  c 40|200  carrier, kHz    h  this\n"
            "  u         LED / motor trace %s;  u <event> inject one (u ? lists)\n"
-           "  b <ms>    press the button for that long\n",
+           "  b <ms>    press the button for that long\n"
+           "  p [mv]    measure VSYS at the next quiet tick, or feed the wearer side a value\n",
            s_link_on ? "on" : "off", (unsigned long)(s_reidle_us / 1000u),
            s_verbose ? "(on)" : "(off)", wear_tracing() ? "(on)" : "(off)");
 }
@@ -817,6 +873,17 @@ static void dispatch(const char *line)
     case 'b':
         wear_press(have_arg ? arg : 100u);
         printf("    button down for %lu ms\n", (unsigned long)(have_arg ? arg : 100u));
+        break;
+    case 'p':
+        if (have_arg) {
+            /* the wearer's side alone: a flat cell, or 0 = unknown, without
+             * needing one on the bench */
+            wear_set_power((uint16_t)arg, false);
+            printf("    wearer side told vsys %lu mV\n", (unsigned long)arg);
+        } else {
+            s_power_due = true;
+            printf("    vsys measurement due (now %u mV)\n", (unsigned)s_vsys_mv);
+        }
         break;
     case 'd':
         if (have_arg) s_reidle_us = arg * 1000u;
@@ -926,6 +993,11 @@ int main(void)
     wear_init(hal_now_us(s_hal));
     wear_set_haptic(store_haptic_on(&s_store));
 
+    /* The first VSYS reading, from the BTstack context at its next tick, so
+     * the first minute is not "unknown". Not from here: a CYW43 call from
+     * the main loop is the thing the two-context rule exists to stop. */
+    s_power_due = true;
+
     sleep_ms(1500);          /* let the USB console attach before the banner */
     print_banner();
 
@@ -950,8 +1022,11 @@ int main(void)
         if (ch == PICO_ERROR_TIMEOUT) {
             if (now >= next_hb) {
                 next_hb += HEARTBEAT_US;
+                /* chips and sps are the pair that showed the ADC being taken
+                 * from the ring: a frozen count over a decaying rate. */
                 printf("hb %lu s %s %s ok %lu abort %lu shouts %lu frames %lu/%lu/%lu "
-                       "cut %lu stalls %lu load %u%%\n",
+                       "cut %lu stalls %lu load %u%% chips %lu sps %lu overruns %lu "
+                       "vsys %u\n",
                        (unsigned long)elapsed_s(s_st.since), link_state_name(s_sm.state),
                        s_link_on ? (s_parked ? "parked" : "on") : "off",
                        (unsigned long)s_st.complete, (unsigned long)s_st.abort,
@@ -960,7 +1035,9 @@ int main(void)
                        (unsigned long)(s_sm.frames_rx_good - s_st.good_at_zero),
                        (unsigned long)(s_sm.frames_rx_bad - s_st.bad_at_zero),
                        (unsigned long)hal_pico_rx_cut(),
-                       (unsigned long)hal_pico_tx_stalls(0), hal_pico_core1_load());
+                       (unsigned long)hal_pico_tx_stalls(0), hal_pico_core1_load(),
+                       (unsigned long)hal_pico_chips(), (unsigned long)hal_pico_sps(),
+                       (unsigned long)hal_pico_overruns(), (unsigned)s_vsys_mv);
             }
             continue;
         }

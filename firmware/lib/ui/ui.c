@@ -51,6 +51,7 @@ PAT(k_fg_identify,   0, { WHITE, 100 }, { OFF, 100 }, { WHITE, 100 }, { OFF, 100
 PAT(k_fg_batt_good,  0, { GREEN, 300 });
 PAT(k_fg_batt_mid,   0, { AMBER, 300 });
 PAT(k_fg_batt_low,   0, { RED, 300 });
+PAT(k_fg_batt_unknown, 0, { WHITE, 300 });   /* asked, and no reading to give */
 
 /* ---- the motor ------------------------------------------------------ */
 
@@ -254,6 +255,7 @@ void ui_event(ui_t *u, ui_event_t ev, uint32_t now)
     case UI_EV_BATTERY_SHOW_GOOD: fg(u, &k_fg_batt_good, now); break;
     case UI_EV_BATTERY_SHOW_MID:  fg(u, &k_fg_batt_mid, now);  break;
     case UI_EV_BATTERY_SHOW_LOW:  fg(u, &k_fg_batt_low, now);  break;
+    case UI_EV_BATTERY_SHOW_UNKNOWN: fg(u, &k_fg_batt_unknown, now); break;
     case UI_EV_HOLD_REACHED:
         motor(u, &k_motor_tap, now);
         break;
@@ -297,7 +299,7 @@ static const char *const k_names[UI_EV_COUNT] = {
     "link-abort", "link-no-card",
     "battery-ok", "battery-low", "battery-critical",
     "fault", "bond-cleared", "dev-on", "dev-off", "identify",
-    "battery-show-good", "battery-show-mid", "battery-show-low",
+    "battery-show-good", "battery-show-mid", "battery-show-low", "battery-show-unknown",
     "hold-reached",
 };
 

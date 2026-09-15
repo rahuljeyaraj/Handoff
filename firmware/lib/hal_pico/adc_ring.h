@@ -60,4 +60,46 @@ uint32_t adc_ring_overruns(void);
  * — is compared against this one. */
 uint32_t adc_ring_noise_floor(int32_t *mean_code);
 
+/*
+ * Measure another ADC channel INSIDE the ring, without stopping it. The
+ * converter keeps running, the FIFO, DREQ and DMA are untouched, and the
+ * block counter and sample clock run through the measurement — only AINSEL
+ * moves, the way noise_floor() moves it to the temperature sensor. Stopping
+ * the ring instead would reset the sample clock that hal_pico's own-send
+ * cutting is placed on (docs/vsys-in-the-ring.md, §2.2).
+ *
+ * Requested from core 0; serviced by whoever drains the ring (core 1 on the
+ * product image): adc_ring_aux_poll() once per loop picks the request up
+ * and swaps at once, adc_ring_aux_step() once per block taken classifies
+ * it by its ordinal against the swap:
+ *
+ *   finished before the swap       all the old channel      DSP as usual
+ *   filling at the swap            old head, new tail       discarded
+ *   the one after                  all the new channel      MEASURED, swap back
+ *   filling at the swap back       new head, old tail       discarded
+ *
+ * and the answer is published once the input is back on the pad. Up to
+ * three blocks blind, 12.3 ms. The caller owns the pin (GP29 belongs to the
+ * CYW43: power.c) and owns the question of whether the link can spare the
+ * time (apps/handoff).
+ *
+ * request() refuses while the ring is stopped or a measurement is in
+ * flight. ready() is true once the servicer has answered; *mean_code is the
+ * raw 12-bit mean, or -1 if the measurement was cancelled. cancel() makes
+ * the servicer finish the sequence — restore the input, discard the result
+ * — never abandon the converter on the other channel.
+ */
+bool adc_ring_aux_request(uint8_t channel, uint8_t gpio);
+bool adc_ring_aux_ready(int32_t *mean_code);
+void adc_ring_aux_cancel(void);
+
+/* The servicer's two calls. poll() once per loop iteration, block or no
+ * block, so a request is acted on the moment it is seen. step() once per
+ * block taken, with the block's ordinal from next_block_seq(): true if the
+ * block belongs to the measurement and must not reach the DSP; *reinit is
+ * set on the last of them, when the detector should be rebuilt — the steps
+ * to a DC level and back are broadband, and goertzel.c only rejects DC. */
+void adc_ring_aux_poll(void);
+bool adc_ring_aux_step(const int16_t *blk, size_t n, uint32_t seq, bool *reinit);
+
 #endif /* HANDOFF_ADC_RING_H */

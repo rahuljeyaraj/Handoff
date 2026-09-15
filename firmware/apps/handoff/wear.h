@@ -66,6 +66,8 @@ void wear_poll(uint64_t now_us);
 
 void wear_post(ui_event_t ev);
 void wear_set_ble(bool connected, bool bonded);
+/* vsys_mv 0 = not measured: the level keeps its last real reading and the
+ * button answers "unknown" rather than "good". */
 void wear_set_power(uint16_t vsys_mv, bool on_usb);
 void wear_set_haptic(bool on);
 

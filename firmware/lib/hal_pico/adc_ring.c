@@ -33,6 +33,7 @@
 #include "hardware/adc.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
+#include "hardware/sync.h"
 #include "pico/stdlib.h"
 
 #include "config.h"
@@ -322,4 +323,120 @@ uint32_t adc_ring_noise_floor(int32_t *mean_code)
     adc_select_input(ADC_INPUT);
     adc_set_temp_sensor_enabled(false);
     return rms_tenths;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/*
+ * The in-ring measurement of adc_ring.h. Same handshake as hal_pico's
+ * carrier change: core 0 bumps s_aux_req, the servicer echoes it into
+ * s_aux_ack when it is done, and each variable has exactly one writer.
+ *
+ * Blocks are classified by their ordinal against the swap, not by counting
+ * phases: the IRQ's s_blocks is the ordinal of the block the DMA is filling
+ * right now, so at the swap in, everything below it is clean and it is the
+ * mixed one; at the swap back, everything up to it is dirty. The ordinal is
+ * read BEFORE the swap in and AFTER the swap back, so a completion landing
+ * between the two only ever costs one extra clean block, never passes a
+ * dirty one — the price is a sample or two of the old channel at the head
+ * of the measured block, which the settle skip below absorbs. A skipped
+ * ordinal (an overrun) falls out the same way.
+ *
+ * The first samples of the measured block are thrown away for the same
+ * reason pico-examples throws three away: the VSYS divider is ~66 kOhm
+ * Thevenin, far more than the sample-and-hold likes, and the mux step has
+ * to settle through it. 128 samples is 256 us, some forty times that, and
+ * it costs nothing out of 2048. It matters when the swap lands right at a
+ * block boundary and the transient falls at the head of the measured block
+ * instead of in the one discarded before it.
+ */
+#define AUX_SETTLE_SAMPLES 128
+
+enum { AUX_IDLE, AUX_IN, AUX_OUT };
+
+static volatile uint32_t s_aux_req;      /* core 0 */
+static volatile uint8_t  s_aux_chan;     /* core 0 */
+static volatile uint8_t  s_aux_gpio;     /* core 0 */
+static volatile bool     s_aux_cancel;   /* core 0 */
+static volatile uint32_t s_aux_ack;      /* servicer */
+static volatile int32_t  s_aux_mean;     /* servicer */
+static uint8_t           s_aux_phase;    /* servicer only */
+static uint32_t          s_aux_edge;     /* ordinal of the block mixed by the last swap */
+static int32_t           s_aux_result;   /* servicer only */
+
+bool adc_ring_aux_request(uint8_t channel, uint8_t gpio)
+{
+    if (!s_running || s_aux_req != s_aux_ack) return false;
+    s_aux_chan   = channel;
+    s_aux_gpio   = gpio;
+    s_aux_cancel = false;
+    __dmb();                    /* the parameters land before the request */
+    s_aux_req++;
+    return true;
+}
+
+bool adc_ring_aux_ready(int32_t *mean_code)
+{
+    if (s_aux_ack != s_aux_req) return false;
+    __dmb();
+    if (mean_code) *mean_code = s_aux_mean;
+    return true;
+}
+
+void adc_ring_aux_cancel(void) { s_aux_cancel = true; }
+
+static void aux_finish(int32_t mean)
+{
+    s_aux_mean  = mean;
+    s_aux_phase = AUX_IDLE;
+    __dmb();                    /* the answer lands before the ack */
+    s_aux_ack   = s_aux_req;
+}
+
+void adc_ring_aux_poll(void)
+{
+    if (s_aux_phase != AUX_IDLE || s_aux_req == s_aux_ack) return;
+    if (s_aux_cancel) { aux_finish(-1); return; }
+
+    /* Everything converted from here is the other channel. */
+    s_aux_edge = s_blocks;
+    adc_gpio_init(s_aux_gpio);
+    adc_select_input(s_aux_chan);
+    s_aux_phase  = AUX_IN;
+    s_aux_result = -1;
+}
+
+bool adc_ring_aux_step(const int16_t *blk, size_t n, uint32_t seq, bool *reinit)
+{
+    *reinit = false;
+
+    switch (s_aux_phase) {
+    case AUX_IN:
+        if (seq < s_aux_edge) return false;        /* finished before the swap */
+        if (seq == s_aux_edge) return true;        /* the mixed one */
+        {
+            int64_t sum = 0;
+            size_t i, from = n > AUX_SETTLE_SAMPLES ? AUX_SETTLE_SAMPLES : 0;
+            for (i = from; i < n; i++) sum += blk[i];
+            if (n > from && !s_aux_cancel)
+                s_aux_result = (int32_t)(sum / (int64_t)(n - from)) + ADC_MIDPOINT;
+        }
+        /* Back on the pad. The pin is left in analogue mode: the CYW43
+         * driver reclaims it as its SPI clock at the head of its next
+         * transfer (power.c). */
+        adc_select_input(ADC_INPUT);
+        s_aux_edge  = s_blocks;
+        s_aux_phase = AUX_OUT;
+        return true;
+
+    case AUX_OUT:
+        if (seq < s_aux_edge) return true;         /* still the other channel */
+        *reinit = true;
+        aux_finish(s_aux_cancel ? -1 : s_aux_result);
+        return seq == s_aux_edge;                  /* the mixed one; a later one is clean */
+
+    case AUX_IDLE:
+    default:
+        return false;
+    }
 }

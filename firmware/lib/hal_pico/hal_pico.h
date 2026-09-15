@@ -27,6 +27,8 @@
 #define HANDOFF_PIN_TX      2    /* GP2 -> R1 -> pad,  design §6.3  */
 #define HANDOFF_PIN_ADC     26   /* GP26 = ADC0,       design §10.2 */
 #define HANDOFF_ADC_CHANNEL 0
+#define HANDOFF_PIN_VSYS    29   /* GP29 = ADC3, VSYS/3 — and the CYW43 SPI clock */
+#define HANDOFF_VSYS_CHANNEL 3
 
 /*
  * How far behind the ADC hal_rx_chips() can run: one DMA block. Core 1 only
@@ -95,9 +97,29 @@ uint32_t hal_pico_carrier_hz(void);
  * hardware state captured at the last one. Should be zero; see hal_pico.c. */
 uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last);
 
-/* Chips produced by core 1 since start, and Goertzel windows scored. */
+/* Chips produced by core 1 since start, Goertzel windows scored, and the
+ * ring's measured sample rate. chips and sps are the pair that caught the
+ * ADC being taken from the ring (a frozen count over a decaying rate) and
+ * the pair that prove it is not: both belong on any heartbeat. */
 uint32_t hal_pico_chips(void);
 uint32_t hal_pico_windows(void);
+uint32_t hal_pico_sps(void);
+
+/*
+ * VSYS on ADC3, measured inside the ring: core 1 swaps the converter's
+ * input between blocks and back, the block counter and the sample clock
+ * run through it, and the detector is rebuilt afterwards
+ * (adc_ring_aux_step). Blocks — up to HAL_PICO_VSYS_WAIT_US — until core 1
+ * has answered; the link is blind for the three blocks it borrows, ~12 ms,
+ * so the caller chooses a moment when nothing is in flight.
+ *
+ * The caller must hold the CYW43 lock and have woken the chip: GP29 is its
+ * SPI clock, and no transfer may overlap the window in which the pin is
+ * analogue. power.c is the one caller. Returns 0 if core 1 did not answer
+ * in time; the request is then cancelled and core 1 finishes it on its own.
+ */
+#define HAL_PICO_VSYS_WAIT_US 50000u
+uint16_t hal_pico_read_vsys_mv(void);
 
 /*
  * M13 instrumentation. The chip stream with each chip's place on the ADC
