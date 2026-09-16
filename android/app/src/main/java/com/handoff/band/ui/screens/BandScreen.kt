@@ -19,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -48,9 +49,24 @@ import com.handoff.band.ui.components.SettingsRow
 import com.handoff.band.ui.theme.semantic
 
 /**
- * The Band screen: name, connection, battery, firmware, your card, and the
- * two ways to let go of it. One band — the screen shows one, which is the
- * statement; forgetting it is how you swap (§6).
+ * The Band screen: name, connection, your card, battery, the two things you
+ * ask of the band, what it is running, and the two ways to let go of it. One
+ * band — the screen shows one, which is the statement; forgetting it is how
+ * you swap (§6).
+ *
+ * The rows are in the order they matter to a wearer: the card is what the
+ * band is for, the battery decides whether it works today, Find my band is
+ * the thing you need the moment you need it, Vibrate is set once, and the
+ * firmware version is there to be read, never acted on.
+ *
+ * Vibrate was in Settings, which was the wrong page for it: it is not a
+ * setting of this app but a switch on the band, and it belongs beside the
+ * band's other switches. It reflects the band's own truth rather than the
+ * phone's memory of it — [hapticOn] comes off `status`'s flags, and the band
+ * persists whatever the switch sends through [onSetHaptic]
+ * (`BLE_CTRL_HAPTIC`), so a band that reboots is back in step within a second
+ * of reconnecting (review O5). A disconnected band cannot be told anything,
+ * so the switch says so instead of pretending.
  *
  * Reachable only for a paired band (review item 12) — the status line on
  * home is a "Pair a band" button when there isn't one, and never opens here.
@@ -65,10 +81,12 @@ fun BandScreen(
     cardSet: Boolean,
     cardSummary: String,
     firmware: String?,
+    hapticOn: Boolean,
     notFoundAt: Long?,
     cardSaved: Notice?,
     onDisconnect: () -> Unit,
     onIdentify: () -> Unit,
+    onSetHaptic: (Boolean) -> Unit,
     onForget: () -> Unit,
     onCard: () -> Unit,
     onBack: () -> Unit,
@@ -117,18 +135,27 @@ fun BandScreen(
                         subtitle = cardSummary, onClick = onCard)
             SettingsRow("Battery", subtitle = band.battery.label, chevron = false,
                         leading = { BatteryIcon(band.battery) })
-            SettingsRow("Firmware", icon = HandoffIcons.Chip,
-                        subtitle = firmware ?: "Not reported", chevron = false)
 
             // Find my band: the band answers with its own LED and motor
             // (BLE_CTRL_IDENTIFY), so there is nothing to confirm here. Only
             // a connected band can be asked; the row says so otherwise.
             val connected = band.connection == BandView.Connection.CONNECTED
-            SettingsRow("Find my band", icon = HandoffIcons.Vibrate,
+            SettingsRow("Find my band", icon = HandoffIcons.Locate,
                         subtitle = if (connected) "Flashes and buzzes the band"
                                    else "Connect the band first",
                         onClick = if (connected) onIdentify else null,
                         chevron = false)
+            SettingsRow("Vibrate", icon = HandoffIcons.Vibrate,
+                        subtitle = if (connected) "Buzzes on a card shared or received"
+                                   else "Connect the band first",
+                        chevron = false,
+                        trailing = {
+                            Switch(checked = hapticOn, onCheckedChange = onSetHaptic,
+                                   enabled = connected)
+                        })
+
+            SettingsRow("Firmware", icon = HandoffIcons.Chip,
+                        subtitle = firmware ?: "Not reported", chevron = false)
 
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(24.dp))

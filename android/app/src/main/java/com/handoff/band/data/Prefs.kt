@@ -22,6 +22,15 @@ class Prefs private constructor(context: Context) {
     /** Newest first is the order you want right after a conference (§5). */
     enum class Sort { NEWEST, AZ }
 
+    /**
+     * The app's language. Presentational for now: every string in the app is
+     * still hardcoded English in Kotlin, so nothing reads this and picking a
+     * language changes nothing on screen. It is remembered so the row holds
+     * what was chosen; making it real means lifting the UI strings into
+     * `strings.xml`, translating them, and applying a per-app locale.
+     */
+    enum class Language { SYSTEM, ENGLISH, HINDI, SPANISH, GERMAN, FRENCH, JAPANESE }
+
     private val sp = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
     private val uiMode = context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
 
@@ -132,10 +141,37 @@ class Prefs private constructor(context: Context) {
         _sort.value = s
     }
 
+    private val _language = MutableStateFlow(
+        sp.getString(KEY_LANGUAGE, null)?.let { runCatching { Language.valueOf(it) }.getOrNull() }
+            ?: Language.SYSTEM
+    )
+    val language: StateFlow<Language> = _language
+
+    fun setLanguage(l: Language) {
+        sp.edit { putString(KEY_LANGUAGE, l.name) }
+        _language.value = l
+    }
+
+    /**
+     * "Allow app analytics", off until it is switched on. Nothing in the app
+     * collects anything today — there is no analytics SDK here and no network
+     * call that could carry one — so this is the consent, kept ahead of the
+     * thing it would gate rather than after it.
+     */
+    private val _analytics = MutableStateFlow(sp.getBoolean(KEY_ANALYTICS, false))
+    val analytics: StateFlow<Boolean> = _analytics
+
+    fun setAnalytics(on: Boolean) {
+        sp.edit { putBoolean(KEY_ANALYTICS, on) }
+        _analytics.value = on
+    }
+
     companion object {
         private const val FILE = "handoff.prefs"
         private const val KEY_THEME = "theme"
         private const val KEY_SORT = "sort"
+        private const val KEY_LANGUAGE = "language"
+        private const val KEY_ANALYTICS = "analytics"
         private const val KEY_BAND_OFF = "band_off"
         private const val KEY_OWN_CARD = "own_card"
         private const val KEY_PUSHED = "pushed_card"

@@ -138,6 +138,40 @@ object HandoffIcons {
             "M19.5 9v2M19.5 13v2M22 10.5v3")
     }
 
+    /**
+     * Concentric arcs around a dot — "Find my band". The band answers with
+     * its own LED and motor, so the glyph is a thing radiating, not the
+     * motor itself: [Vibrate] is the switch one row below it now.
+     */
+    val Locate: ImageVector by lazy {
+        stroked("Locate", 1.75f,
+            "M12 10.2a1.8 1.8 0 1 1 0 3.6a1.8 1.8 0 0 1 0 -3.6z",
+            "M8.4 8.4a5 5 0 0 0 0 7.2M15.6 8.4a5 5 0 0 1 0 7.2",
+            "M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8")
+    }
+
+    /** A bell — the Notifications row, which leaves for Android's settings. */
+    val Bell: ImageVector by lazy {
+        stroked("Bell", 1.75f,
+            "M12 3.5a5.5 5.5 0 0 0 -5.5 5.5v3.3l-1.5 3.2h14l-1.5 -3.2v-3.3a5.5 5.5 0 0 0 -5.5 -5.5z",
+            "M9.9 18.5a2.1 2.1 0 0 0 4.2 0")
+    }
+
+    /** A globe with a meridian — the Language row. */
+    val Globe: ImageVector by lazy {
+        stroked("Globe", 1.75f,
+            "M12 3.5a8.5 8.5 0 1 1 0 17a8.5 8.5 0 0 1 0 -17z",
+            "M3.5 12h17",
+            "M12 3.5a5 8.5 0 0 1 0 17a5 8.5 0 0 1 0 -17z")
+    }
+
+    /** Three bars on a baseline — the analytics row. */
+    val Chart: ImageVector by lazy {
+        stroked("Chart", 1.75f,
+            "M4 19.5h16",
+            "M7.5 19.5v-5.5M12 19.5v-10M16.5 19.5v-7")
+    }
+
     /** A chip with pins on four sides — the Firmware row. */
     val Chip: ImageVector by lazy {
         stroked("Chip", 1.6f,

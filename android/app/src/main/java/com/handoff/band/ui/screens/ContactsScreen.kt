@@ -303,6 +303,17 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, onClose: () -> U
     LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
+/**
+ * The two orders, named for the toolbar button's content description. Settings
+ * used to carry a "Sort order" row as well; it said the same thing twice, and
+ * the control that sorts the list belongs over the list.
+ */
+val Prefs.Sort.label: String
+    get() = when (this) {
+        Prefs.Sort.NEWEST -> "Newest first"
+        Prefs.Sort.AZ -> "A to Z"
+    }
+
 /** Name and organisation, because "who was that person from PCBWay" is the real question. */
 fun matches(h: Handshake, query: String): Boolean {
     val q = query.trim()

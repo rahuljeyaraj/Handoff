@@ -41,34 +41,43 @@ import com.handoff.band.ui.components.SectionHeader
 import com.handoff.band.ui.components.SettingsRow
 
 /**
- * Settings: Contacts · Band · Appearance · About · Advanced.
+ * Settings: the four things about the app itself, then About.
  *
- * Your contact card and the band's own screen are one tap from home (the
- * nudge/Band row and the status line), so this screen does not repeat them
- * (review item 11). "Save to phone automatically" is gone for good — it
- * needed WRITE_CONTACTS and a provider insert, which the brief rules out
- * (review item 10).
+ * Nothing here belongs to a contact or to the band. Sort order went back to
+ * the list it sorts — the toolbar control on home is the only one now — and
+ * Vibrate went to the Band screen, which is where the band's own switches
+ * live. Your contact card and the band are both one tap from home, so this
+ * screen does not repeat them either (review item 11). "Save to phone
+ * automatically" is gone for good: it needed WRITE_CONTACTS and a provider
+ * insert, which the brief rules out (review item 10).
  *
- * Vibrate reflects the band's own truth rather than the phone's memory of
- * it: [hapticOn] comes off `status`'s flags, and the band persists whatever
- * the switch sends through [onSetHaptic] (`BLE_CTRL_HAPTIC`), so a band that
- * reboots is back in step within a second of reconnecting (review O5).
+ * The rows are in the order a wearer needs them. Notifications first —
+ * missing the notice that a card arrived is the one setting that loses
+ * something — then Theme, which is the one people actually change; Language
+ * and analytics are set once, if ever, and sit below.
+ *
+ * Notifications opens Android's own screen for this app rather than
+ * mirroring its switches: the app posts two kinds of notice (the foreground
+ * service's, and a handshake's) and the system is where they are turned
+ * down. [language] and [analyticsOn] are remembered but do nothing yet —
+ * see `Prefs.Language` and `Prefs.analytics` for what each one still needs.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     theme: Prefs.Theme,
-    sort: Prefs.Sort,
+    language: Prefs.Language,
+    analyticsOn: Boolean,
     appVersion: String,
-    hapticOn: Boolean,
     onTheme: (Prefs.Theme) -> Unit,
-    onSort: (Prefs.Sort) -> Unit,
-    onSetHaptic: (Boolean) -> Unit,
+    onLanguage: (Prefs.Language) -> Unit,
+    onAnalytics: (Boolean) -> Unit,
+    onNotifications: () -> Unit,
     onAdvanced: () -> Unit,
     onBack: () -> Unit,
 ) {
     var themeDialog by remember { mutableStateOf(false) }
-    var sortDialog by remember { mutableStateOf(false) }
+    var languageDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -85,17 +94,17 @@ fun SettingsScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
-            SectionHeader("Contacts")
-            SettingsRow("Sort order", icon = HandoffIcons.Sort, subtitle = sort.label,
-                        onClick = { sortDialog = true })
-
-            SectionHeader("Band")
-            SettingsRow("Vibrate", icon = HandoffIcons.Vibrate, chevron = false,
-                        trailing = { Switch(checked = hapticOn, onCheckedChange = onSetHaptic) })
-
-            SectionHeader("Appearance")
+            SectionHeader("App")
+            SettingsRow("Notifications", icon = HandoffIcons.Bell,
+                        subtitle = "Alerts and the ongoing band notice",
+                        onClick = onNotifications)
             SettingsRow("Theme", icon = HandoffIcons.Theme, subtitle = theme.label,
                         onClick = { themeDialog = true })
+            SettingsRow("Language", icon = HandoffIcons.Globe, subtitle = language.label,
+                        onClick = { languageDialog = true })
+            SettingsRow("Allow app analytics", icon = HandoffIcons.Chart,
+                        subtitle = "Anonymous usage stats", chevron = false,
+                        trailing = { Switch(checked = analyticsOn, onCheckedChange = onAnalytics) })
 
             SectionHeader("About")
             SettingsRow("App version", icon = Icons.Filled.Info, subtitle = appVersion,
@@ -115,24 +124,30 @@ fun SettingsScreen(
                      onPick = { onTheme(it); themeDialog = false },
                      onDismiss = { themeDialog = false })
     }
-    if (sortDialog) {
-        ChoiceDialog("Sort order", Prefs.Sort.entries, sort, { it.label },
-                     onPick = { onSort(it); sortDialog = false },
-                     onDismiss = { sortDialog = false })
+    if (languageDialog) {
+        ChoiceDialog("Language", Prefs.Language.entries, language, { it.label },
+                     onPick = { onLanguage(it); languageDialog = false },
+                     onDismiss = { languageDialog = false })
     }
 }
-
-val Prefs.Sort.label: String
-    get() = when (this) {
-        Prefs.Sort.NEWEST -> "Newest first"
-        Prefs.Sort.AZ -> "A to Z"
-    }
 
 val Prefs.Theme.label: String
     get() = when (this) {
         Prefs.Theme.SYSTEM -> "System default"
         Prefs.Theme.LIGHT -> "Light"
         Prefs.Theme.DARK -> "Dark"
+    }
+
+/** Each language in its own script, the way every other app lists them. */
+val Prefs.Language.label: String
+    get() = when (this) {
+        Prefs.Language.SYSTEM -> "System default"
+        Prefs.Language.ENGLISH -> "English"
+        Prefs.Language.HINDI -> "हिन्दी"
+        Prefs.Language.SPANISH -> "Español"
+        Prefs.Language.GERMAN -> "Deutsch"
+        Prefs.Language.FRENCH -> "Français"
+        Prefs.Language.JAPANESE -> "日本語"
     }
 
 @Composable
@@ -148,7 +163,7 @@ private fun <T> ChoiceDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 for (t in options) {
                     Row(
                         Modifier.fillMaxWidth().clickable { onPick(t) }.padding(vertical = 8.dp),

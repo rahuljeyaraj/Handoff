@@ -2,7 +2,10 @@ package com.handoff.band.ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -88,6 +91,8 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     val view = bandView(state, address, bandName, bandOff)
     val theme by prefs.theme.collectAsState()
     val sort by prefs.sort.collectAsState()
+    val language by prefs.language.collectAsState()
+    val analytics by prefs.analytics.collectAsState()
 
     val ownCard by prefs.ownCard.collectAsState()
     val cardSet = ownCard != null
@@ -382,12 +387,13 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 theme = theme,
-                sort = sort,
+                language = language,
+                analyticsOn = analytics,
                 appVersion = appVersion(context),
-                hapticOn = view.hapticOn,
                 onTheme = prefs::setTheme,
-                onSort = prefs::setSort,
-                onSetHaptic = { on -> band.service?.control(Gatt.haptic(on)) },
+                onLanguage = prefs::setLanguage,
+                onAnalytics = prefs::setAnalytics,
+                onNotifications = { openNotificationSettings(context) },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },
                 onBack = { nav.popBackStack() },
             )
@@ -406,6 +412,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 cardSet = cardSet,
                 cardSummary = cardSummary,
                 firmware = view.firmware,
+                hapticOn = view.hapticOn,
                 notFoundAt = state?.notFoundAt,
                 cardSaved = cardSaved,
                 onDisconnect = {
@@ -417,6 +424,7 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                     }
                 },
                 onIdentify = { band.service?.control(Gatt.identify()) },
+                onSetHaptic = { on -> band.service?.control(Gatt.haptic(on)) },
                 // Pops back to the list (review item 12): with the unpaired
                 // Band screen gone, there is nothing left here to show once
                 // the band is forgotten. The service resets the band first
@@ -480,6 +488,25 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
             AdvancedScreen(state = state, ownCard = ownCard, onBack = { nav.popBackStack() })
         }
     }
+}
+
+/**
+ * Android's notification screen for this app — the channels themselves, not a
+ * copy of them here. The app posts two kinds of notice, the service's ongoing
+ * one and a handshake's, and the system is where either is turned down.
+ *
+ * ACTION_APP_NOTIFICATION_SETTINGS has been there since 26, which is our
+ * minimum, but an OEM launcher can still have no activity for it; the app
+ * details page is the fallback, and it is one tap from the notifications
+ * there.
+ */
+private fun openNotificationSettings(context: android.content.Context) {
+    val notifications = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        .setData(Uri.fromParts("package", context.packageName, null))
+    runCatching { context.startActivity(notifications) }
+        .recoverCatching { context.startActivity(details) }
 }
 
 private fun appVersion(context: android.content.Context): String =
