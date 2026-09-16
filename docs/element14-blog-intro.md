@@ -81,13 +81,13 @@ He held the band in one hand and the phone in the other. The phone gave a small 
 
 "Next you set up your contact card in it."
 
-He tapped *Set it up* and looked at the form. Name. Phone. Email. Organisation. Title.
+He tapped `Set it up` and looked at the form. Name. Phone. Email. Organisation. Title.
 
 "Do I have to put all the details in here?"
 
 "Only what you'd put on a card. That's all it is, really. It's your card. If you'd rather not give out your personal number, put the work one in. Leave anything blank you like."
 
-He keyed in his details and tapped *Save*. In his hand the band blinked green, twice, quick.
+He keyed in his details and tapped `Save`. In his hand the band blinked green, twice, quick.
 
 "Green's good. That's your details saved on the band. Pop it on."
 
@@ -95,7 +95,7 @@ He put it on. Left wrist, out of habit, and glanced at her.
 
 "Either one," she said. "Doesn't matter."
 
-He looked at the phone. An empty page. *No handshakes yet.*
+He looked at the phone. An empty page. `No handshakes yet`.
 
 ### 3 First use
 
@@ -109,7 +109,7 @@ It was an ordinary handshake: warm, firm, a second long. The band on his wrist f
 
 "Check your phone."
 
-Her name was there. He tapped it. *Met today, 09:14 am.* Under it, her number and her email.
+Her name was there. `Savithri Raghavan`. He tapped it. `Met today, 09:14 am`, and under it her number and her email.
 
 "And you've got me?"
 
@@ -127,7 +127,9 @@ He was still looking at her phone. "Very."
 
 He thanked her and walked on towards the expo floor, still putting the puzzle together in his head.
 
-### 4 Contacts and notes
+### 4 The Handoff app
+
+#### 4.1 Contacts and notes
 
 The morning went by in a blur.
 
@@ -135,83 +137,84 @@ The keynote first, in the big hall, where he got a seat near the front and a han
 
 By lunch he had shaken hands with more people than he could count. The band on his wrist had done its little white flicker every time, and every time a name had landed in the Handoff app.
 
-He had fallen into a routine without noticing. Walk away from the stall. Open the app. There they were, at the top of the list. Tap the name. A name alone would mean nothing by tomorrow, so he changed it. *Priya* became *Priya, Zephyr talk, power profiling*. Then *Add a note*, and two lines while it was still fresh: what they were working on, what he had promised to send, when they had agreed to talk again.
+He had fallen into a routine without noticing. Walk away from the stall. Open the app. There they were, at the top of the list. Tap the name. A name alone would mean nothing by tomorrow, so he changed it. `Vikram Sharma` became `Vikram Sharma (Vivado License)`. Then `Add a note`, and two lines while it was still fresh: what they were working on, what he had promised to send, when they had agreed to talk again.
 
 Fifteen seconds, and on to the next stall.
 
-The best part was what it *didn't* do. None of it touched his phone's contacts. Fifty new people would have buried his mother between two firmware vendors. They all stayed in the Handoff app, where they belonged. And the three or four who mattered, a hiring manager, a supplier, a student whose project he wanted to follow, he tapped *Save to phone contacts*, and they were in his phone book like anyone else. One press. No copying numbers.
+By design, the Handoff app never polluted his phone contacts. They all stayed in the app, where they belonged. And the three or four who mattered, a hiring manager, a supplier, a student whose project he wanted to follow, he tapped `Save to phone contacts`, and they were in his phone book like anyone else. One press. No copying numbers.
 
-Around eleven he went back to the desk to ask where the workshop had moved to, and Savithri shook his hand again on his way out. He checked the app, half expecting a second Savithri. There wasn't one. The entry he had already renamed to *Savithri, Reception* had simply moved to the top of the list, note and all. The app matches people by their number, not their name. Shake the same hand twice and you get one person, not two.
+Around eleven he went back to the front desk to ask where the workshop had moved to, and Savithri shook his hand again on his way out. He checked the app, half expecting a second Savithri. There wasn't one. The entry he had already renamed to `Savithri Raghavan (front desk)` had simply moved to the top of the list, note and all. The app matches people by their number and email, not their name. Shake the same hand twice and you get one person, not two.
 
-### 5 The Handoff app
+#### 4.2 The home page
 
-He found the coffee lounge at two, got a hot cup, and took a chair in the corner. The first quiet ten minutes he'd had since breakfast.
+He found the coffee lounge at two, got a hot cup, and took a chair in the corner. The first quiet ten minutes he had had since breakfast.
 
 Time to look at the thing properly.
 
-#### 5.1 The home page
+The UI was simple. A band info card at the top of the page, showing the band's name, `Handoff band 93D1`, with `Connected` under it. On the right, a small green card icon showing that his card was saved on it, and a battery with three green bars.
 
-A rounded panel sat at the top, taller than the rows under it, so you couldn't miss it. The band's name, *Handoff band 93D1*, in large type, and under it *Connected*. To the right, a small green card icon, and the battery, three bars, all green.
+Below it, the people. Everyone he had met, newest at the top, with the organisation and the number under each name, and the time he met them on the right.
 
-Everything he needed to know, in one panel. Band's on, card's in, battery's fine.
+Four buttons along the top, beside the Handoff wordmark:
 
-Below it, the list. Everyone he had met, newest at the top, with the organisation under each name.
+* `Create contact`, for one typed in by hand.
+* `Search`, which looks through names, organisations and notes at once.
+* `Sort`, flipping the list between `Newest first` and `A to Z`.
+* `Settings`.
 
-Two buttons in the top bar. One flipped the order between *Newest first* and *A to Z*. The other was search. He typed *zeph* and the list shrank to two names. He had already forgotten one of them, and there she was.
+#### 4.3 The band page
 
-#### 5.2 The band page
+He pressed the band info card. It took him to a page of its own.
 
-The panel at the top was a button too. He pressed it.
+* `Your contact card`, his own contact details.
+* `Battery`. It read `Full`.
+* `Find my band`, which flashes and buzzes the band.
+* `Vibrate`, a switch, already on: `Buzzes on a card shared or received`.
+* `Firmware`, a version number.
 
-*Your contact card.* *Battery*, and beside it, *Full*. *Firmware*, a version number. And *Find my band*, with *Flashes and buzzes the band* under it.
+He tried `Find my band`. On his wrist the band lit up and shivered.
 
-He tried it. On his wrist the band lit up and shivered.
+Useful at home, he thought, when it had slipped down the side of the sofa. Here, in a hall with four thousand people in it, if the band came off it was gone for good.
 
-Useful at home, he thought, when it had slipped down the side of the sofa. Here, in a hall with four thousand people in it, if the band came off it was gone for good. But then, so was the phone.
+At the bottom, `Disconnect`. Under it, in red, `Forget this band`. He left both alone.
 
-At the bottom, in red, *Forget this band*. He left that alone.
+#### 4.4 Your card
 
-#### 5.3 Your card
+He tapped `Your contact card`. There it was, as he had typed it that morning, with a small tick under his name: `On Handoff band 93D1`. Two icons in the top bar, a pencil to edit and a bin to delete the card.
 
-He tapped *Your contact card*. His card, as he had typed it that morning, and a small tick under it: *On Handoff band 93D1*. Two buttons: *Edit your card* and *Delete my contact card*.
+He pressed the bin.
 
-He wanted to see what delete did, so he pressed it.
+`Delete your contact card?` the app asked. `The band will stop sharing your contact. It will still receive contacts from others.`
 
-*Delete your contact card?* the app asked. *The band will stop sharing your contact. It will still receive contacts from others.*
+He tapped `Delete`. Back on the home page the green card icon had gone red, with a line through it. No card on the band.
 
-A quiet mode, then, for the days you'd rather listen than talk. He tapped *Delete*.
+He set it up again. Name, phone, email, organisation, title, the same as the morning. This time, at the phone number, he tapped the label. `Mobile`, `Work`, `Home`, `Main`, and at the bottom, `Custom`.
 
-Back on the home page the green card icon had gone red, with a line through it. No card on the band.
+He couldn't resist. He picked `Custom` and typed IRQ.
 
-He set it up again. Name, phone, email, organisation, title, the same as the morning. This time, at the phone number, he tapped the label. *Mobile*, *Work*, *Home*, *Main*, and at the bottom, *Custom*.
+Now the people who shook his hand would get a number labelled `IRQ`. If they knew what an interrupt request was, they'd smile. If they didn't, they weren't his kind of people anyway.
 
-He couldn't resist. He picked *Custom* and typed **IRQ**.
+`Save`. The band blinked green, twice, and the icon on the home page went green again.
 
-Now the people who shook his hand would get a number labelled *IRQ*. If they knew what an interrupt request was, they'd smile. If they didn't, they weren't his kind of people anyway.
+#### 4.5 Settings
 
-*Save*. The band blinked green, twice, and the icon on the home page went green again.
+Settings was two short groups.
 
-#### 5.4 Settings
+Under `App`: `Notifications`, `Theme`, `Language`, and `Allow app analytics`. Under `About`: the app version.
 
-The settings page was short. Three things.
+He opened `Theme` and picked `Dark`. The lounge was dim and the white page was a lantern.
 
-*Sort order*, the same choice as on the home page.
+He sat back. The whole app had taken five minutes to walk through, and there had been nothing in it he needed to look up. That, he had learned over the years, was harder to build than it looked.
 
-*Vibrate*. Whether the band buzzed when something happened: a handshake landing, the phone connecting. He left it on. The buzz was how he had known, all morning, without looking.
-
-*Theme*. *System default*, *Light*, *Dark*. He picked dark. The lounge was dim and the white page was a lantern.
-
-He sat back. The whole Handoff app had taken ten minutes to walk through, and there had been nothing in it he needed to look up. That, he had learned over the years, was harder to build than it looked.
-
-### 6 The plate on the back
+### 5 The plate on the back
 
 The coffee was half gone and the morning's question was still open. He took the band off and turned it over.
 
 A flat metal plate on the back of the case, which gets pressed to the skin. Of course. Two people, two plates, and the handshake closing the circuit between them: a signal sent through his body and picked up on the other side. A galvanic contact, skin to metal.
 
-He tilted it to the light. The plate had a thin clear coating over it. Sealed, edge to edge. No path for a current, then, which ruled out his first theory.
+He tilted it to the light. The plate had a thin clear coating over it. Sealed, edge to edge. No path for a current, which ruled out his first theory.
 
-So the plate wasn't a contact. It was one half of a capacitor. The skin was the other half, and the coating was the dielectric. The band was coupling into him without ever touching him, and the handshake was coupling him into the person he was shaking hands with.
+So the plate wasn't a contact. It was one half of a capacitor. The skin was the other half, and the coating was the dielectric. The metal never touched him, and it did not have to. The band was coupling into his skin through the coating, and the handshake was coupling him into the person whose hand he held.
 
 Capacitive body-coupled communication.
 
