@@ -64,9 +64,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Handoff">
 
+        <!--
+          Starts in the splash theme (Theme.Handoff.Starting) and switches to
+          Theme.Handoff in onCreate. uiMode is handled in-process: the theme
+          setting is applied with UiModeManager so the splash matches it, and
+          that must not recreate the activity the wearer is choosing it from.
+        -->
         <activity
             android:name=".ui.MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:theme="@style/Theme.Handoff.Starting"
+            android:configChanges="uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -1,6 +1,8 @@
 package com.handoff.band.data
 
+import android.app.UiModeManager
 import android.content.Context
+import android.os.Build
 import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +23,7 @@ class Prefs private constructor(context: Context) {
     enum class Sort { NEWEST, AZ }
 
     private val sp = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    private val uiMode = context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
 
     private val _theme = MutableStateFlow(
         sp.getString(KEY_THEME, null)?.let { runCatching { Theme.valueOf(it) }.getOrNull() }
@@ -28,9 +31,29 @@ class Prefs private constructor(context: Context) {
     )
     val theme: StateFlow<Theme> = _theme
 
+    init { applyNightMode(_theme.value) }
+
     fun setTheme(t: Theme) {
         sp.edit { putString(KEY_THEME, t.name) }
         _theme.value = t
+        applyNightMode(t)
+    }
+
+    /**
+     * Compose reads [theme] directly, so the app itself never needed the
+     * platform to know. The launch screen does: Android 12 draws it before
+     * any of our code runs, from the resources of whatever night mode the
+     * process is in, and without this a wearer who chose Dark on a light
+     * phone got a light splash ahead of a dark app. The app-level override
+     * is persisted by the system and applies from the next launch.
+     */
+    private fun applyNightMode(t: Theme) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        uiMode.setApplicationNightMode(when (t) {
+            Theme.SYSTEM -> UiModeManager.MODE_NIGHT_AUTO
+            Theme.LIGHT -> UiModeManager.MODE_NIGHT_NO
+            Theme.DARK -> UiModeManager.MODE_NIGHT_YES
+        })
     }
 
     /**

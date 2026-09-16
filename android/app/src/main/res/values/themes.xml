@@ -10,4 +10,16 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <!-- What the launcher shows while the process starts. Android 12 always
+         draws a splash of its own and cannot place text under its icon, and
+         the wearer did not want a page of the hands alone ahead of the real
+         one, so this shows the bare surface colour: no icon at all. The
+         first frame then brings in the handshake and the wordmark together
+         (SplashOverlay). -->
+    <style name="Theme.Handoff.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FCF9F6</item>
+        <item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+        <item name="postSplashScreenTheme">@style/Theme.Handoff</item>
+    </style>
 </resources>

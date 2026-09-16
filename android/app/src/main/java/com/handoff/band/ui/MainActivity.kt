@@ -1,18 +1,21 @@
 package com.handoff.band.ui
 
 import android.Manifest
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.Pairing
@@ -32,6 +35,10 @@ class MainActivity : ComponentActivity() {
     ) { /* the Band screen reports what is still missing */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before super.onCreate, as the library requires. The system splash
+        // is a blank surface (Theme.Handoff.Starting); dropping it the instant
+        // our first frame exists lets SplashOverlay fade in on the same colour.
+        installSplashScreen().setOnExitAnimationListener { it.remove() }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
@@ -46,12 +53,26 @@ class MainActivity : ComponentActivity() {
             val theme by Prefs.get(this).theme.collectAsState()
             HandoffTheme(theme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    CompositionLocalProvider(LocalBand provides band) {
-                        HandoffNavHost()
+                    Box {
+                        CompositionLocalProvider(LocalBand provides band) {
+                            HandoffNavHost()
+                        }
+                        SplashOverlay()
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Only uiMode reaches here (manifest). enableEdgeToEdge picks the status
+     * bar icon colour from the configuration at the time it is called, so
+     * a theme change made in Settings re-evaluates it instead of waiting for
+     * the next launch.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        enableEdgeToEdge()
     }
 
     override fun onDestroy() {

@@ -6,4 +6,10 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <style name="Theme.Handoff.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#141413</item>
+        <item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+        <item name="postSplashScreenTheme">@style/Theme.Handoff</item>
+    </style>
 </resources>
