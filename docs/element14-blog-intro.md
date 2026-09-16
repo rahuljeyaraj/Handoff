@@ -209,7 +209,7 @@ The coffee was half gone and the morning's question was still open. He took the 
 
 A flat metal plate on the back of the case, which gets pressed to the skin. Of course. Two people, two plates, and the handshake closing the circuit between them: a signal sent through his body and picked up on the other side. A galvanic contact, skin to metal.
 
-Except it wasn't. He tilted it to the light. The plate had a thin clear coating over it, hard and smooth, made to take a year of wrists without wearing through. Metal underneath, but nothing could touch it. There was no way for a current to get out.
+Except it wasn't. He tilted it to the light. The plate had a thin clear coating over it. Sealed, edge to edge. No path for a current, then.
 
 So the plate wasn't a contact. It was one half of a capacitor. The skin was the other half, and the coating was the dielectric. The band was coupling into him without ever touching him, and the handshake was coupling him into the person he was shaking hands with.
 
