@@ -35,7 +35,7 @@ You let go, and the conversation can carry on next week. The handshake that clos
 
 The first message ever sent through a handshake was a phone number. History made.
 
-### What Handoff does
+### Setting up the band
 
 The registration desk at the expo. The queue moved quickly, and then it was his turn. The woman behind the desk looked up with a warm smile, as if she had been expecting him.
 
@@ -54,8 +54,6 @@ It was a band. A small orange case, on a dark strap.
 He looked at her, then at the band. "Just from the handshake."
 
 "Just from the handshake." She was clearly enjoying his face. "I know. Best thing at the show."
-
-### Setting up the band
 
 #### Pairing with the phone
 
@@ -99,11 +97,11 @@ He put it on. Left wrist, out of habit, and glanced at her.
 
 He looked at the phone. An empty page. *No handshakes yet.*
 
-### The first handshake
+### First use
 
 "So you're saying I just shake hands. How do I know it's actually worked?"
 
-"Oh, you'll know." She came out from behind the desk, and held out her hand with a broad smile. "I'm Savithri, by the way. Lovely to meet you, Rohit."
+"Oh, you'll know." She came out from behind the desk and held out her hand with a broad smile. "I'm Savithri, by the way. Lovely to meet you, Rohit."
 
 He took it.
 
@@ -123,10 +121,8 @@ He was still looking at her phone. "Very."
 
 "Told you. Best thing at the show."
 
-### Battery
-
 "Will it last the whole event? Do I need to charge it?"
 
 "No." She pointed at the battery beside the band's name on his screen — three bars, all green. "That's plenty. If it ever goes red, come and find me and I'll swap it. But it won't."
 
-He thanked her and walked on towards the expo floor, still turning it over in his head. It had to be the touch itself — nothing over the air could be that selective. Then he remembered the flat plate on the underside of the case, insulated, sitting flush against his skin. Of course. Capacitive. The signal had gone through him.
+He thanked her and walked on towards the expo floor, still putting the puzzle together in his head.
