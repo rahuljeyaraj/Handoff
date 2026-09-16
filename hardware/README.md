@@ -19,6 +19,7 @@ the schematic implements its §6/§7 netlist with the changes listed under
 | `tools/gen_sw_footprint.py` | writes `handoff.pretty/SW_Slide_SS-12F23G5`, geometry measured on the physical part |
 | `tools/gen_mount_footprint.py` | writes `handoff.pretty/MountingHole_3.4mm_M3_Boss6mm`: 3.4 mm unplated drill plus the 6 mm boss keep-out. The name follows the boss diameter, so the board cannot point at a footprint that is no longer the one described |
 | `tools/gen_sod123fl_footprint.py` | writes `handoff.pretty/D_SOD-123FL` for D1/D3, from the PMEG3020ER-TP outline drawing; `--prove` puts it on `build/fp_test.kicad_pcb`, runs DRC and renders it |
+| `tools/gen_assembly.py` / `../docs/hardware-bringup/` | the two assembly drawings (each face, fab references, numbered pads, bottom mirrored) that `docs/hardware-bringup.md` is read against |
 | `tools/gen_bom.py` / `bom.csv` | the committed BOM: kicad-cli's export plus the **Package** column it cannot produce, derived from each footprint in one place. Called by `gen_schematic.py` after its BOM check |
 | `tools/gen_floorplan.py` / `floorplan.svg` | the floor plan: which block sits where in the enclosure, and why. Placement only, no tracks — the **pre-layout** input. **Superseded by the board**: it still draws E1–E10 inboard of their pins, `JP1-JP7`, `TP12`/`TP13` and the 4.5 mm hole positions, none of which exist. Read `gen_pcb.py`'s `PLACE` table for where things actually are |
 | `tools/gen_pcb.py` / `handoff.kicad_pcb` | **the source of the board.** Builds it from the schematic's netlist and the floor plan, then proves it with `kicad-cli`: DRC, schematic parity pin for pin, an independent short check, a ground-pour island check, and every pad against every mounting boss. Writes the fab pack last. Edit this, not the `.kicad_pcb` |
@@ -317,10 +318,11 @@ firmware call on WL_GPIO1 (see README). Nothing on the board.
 **Firmware notes that come from the board**
 
 - GP11: `gpio_set_input_enabled(11, false)` whenever it is high-Z (E9, above).
-  **The firmware still says GP2** (`HANDOFF_PIN_TX`, `CARRIER_PIN`): the board
-  moved TX to GP11 (`review.md`'s deviation table) and GP2 is a no-connect, so
-  a carrier generated on GP2 reaches nothing. One constant, in
-  `firmware/lib/hal_pico/hal_pico.h` and `pio_carrier.c`.
+  **The transmit pin is a build option** (`HANDOFF_TX_PIN`, default 2 for the
+  breadboard benches): the board moved TX to GP11 (`review.md`'s deviation
+  table) and GP2 is a no-connect, so an image built without `--tx-pin 11`
+  drives nothing. `scripts/bringup.py` always builds for 11, into
+  `build-pcb/`; see `docs/hardware-bringup.md`.
   Never idle GP11 as a driven output between shouts — a driven low leaves the
   R1+R2 (2 MΩ) / R3 (1 MΩ) divider holding the node at 1.1 V, which is 0.55 V
   below VREF and still puts stage 1 on the low rail.

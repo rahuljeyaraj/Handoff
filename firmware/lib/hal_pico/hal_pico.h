@@ -24,7 +24,15 @@
  * the drivers, because the netlist in design §7 is the authority and one file
  * should be diffable against it.
  */
-#define HANDOFF_PIN_TX      2    /* GP2 -> R1 -> pad,  design §6.3  */
+/*
+ * The transmit pin is a build option: HANDOFF_TX_PIN in firmware/CMakeLists.txt
+ * (scripts/build.py --tx-pin). The breadboard benches of M3-M14 were wired
+ * on GP2; the PCB routes TX to GP11 (hardware/README.md, deviation table),
+ * and scripts/bringup.py always builds for that.
+ */
+#ifndef HANDOFF_PIN_TX
+#define HANDOFF_PIN_TX      2    /* GP2 (bench) or GP11 (PCB) -> R1 -> pad, design §6.3 */
+#endif
 #define HANDOFF_PIN_ADC     26   /* GP26 = ADC0,       design §10.2 */
 #define HANDOFF_ADC_CHANNEL 0
 #define HANDOFF_PIN_VSYS    29   /* GP29 = ADC3, VSYS/3 — and the CYW43 SPI clock */

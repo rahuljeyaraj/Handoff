@@ -21,9 +21,10 @@
 #include "pico/stdlib.h"
 
 #include "config.h"
+#include "hal_pico.h"
 #include "pio_carrier.pio.h"
 
-#define CARRIER_PIN 2
+#define CARRIER_PIN HANDOFF_PIN_TX
 
 /* carrier_out is out-pins then out-pindirs with a one-cycle delay: three cycles a slot. */
 _Static_assert(HANDOFF_PIO_SLOT_CYCLES == 3, "pio_carrier.pio is written for 3-cycle slots");

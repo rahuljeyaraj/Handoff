@@ -46,6 +46,13 @@ add_library(handoff_lib STATIC
 pico_generate_pio_header(handoff_lib
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/hal_pico/pio_carrier.pio)
 
+# Which GPIO drives the electrode. The M3-M14 benches were wired on GP2; the
+# PCB routes TX to GP11 and nothing to GP2, so a carrier on the wrong pin
+# reaches nothing. scripts/build.py --tx-pin sets this; scripts/bringup.py
+# always passes 11.
+set(HANDOFF_TX_PIN 2 CACHE STRING "GPIO that drives the pad: 2 on the breadboard benches, 11 on the PCB")
+target_compile_definitions(handoff_lib PUBLIC HANDOFF_PIN_TX=${HANDOFF_TX_PIN})
+
 target_include_directories(handoff_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/hal
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/dsp
@@ -122,6 +129,7 @@ pico_btstack_make_gatt_header(handoff_ble PUBLIC
 # One flashable image per milestone. See each app's own header comment for what
 # it proves and — as the development plan insists — what it cannot.
 add_subdirectory(apps/blink)      # M0  done
+add_subdirectory(apps/bringup)    # PCB bring-up, docs/hardware-bringup.md
 add_subdirectory(apps/txgen)      # M3
 add_subdirectory(apps/adcbench)   # M4
 add_subdirectory(apps/loopback)   # M5

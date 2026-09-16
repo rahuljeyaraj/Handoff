@@ -142,6 +142,9 @@ def main() -> int:
                         help="build only this target (default: everything)")
     parser.add_argument("--flash-target", default="blink", metavar="NAME",
                         help="which .uf2 to flash with --flash (default: blink)")
+    parser.add_argument("--tx-pin", default=2, type=int, metavar="GP",
+                        help="GPIO that drives the electrode: 2 on the breadboard "
+                             "benches (default), 11 on the PCB")
     parser.add_argument("--build-dir", default="build", metavar="DIR",
                         help="build directory, relative to the repo root "
                              "(default: build)")
@@ -175,6 +178,9 @@ def main() -> int:
         cmake, "-S", REPO_ROOT, "-B", build_dir, "-G", "Ninja",
         "-DCMAKE_MAKE_PROGRAM=" + str(ninja),
         "-DCMAKE_BUILD_TYPE=" + args.config,
+        # Always passed, so a build directory never keeps a stale pin in its
+        # CMake cache from an earlier run with a different --tx-pin.
+        "-DHANDOFF_TX_PIN=" + str(args.tx_pin),
     ]
 
     # Point the SDK at the prebuilt picotool and pioasm, so it does not try to
@@ -187,7 +193,7 @@ def main() -> int:
     if (pioasm_dir / "pioasmConfig.cmake").is_file():
         configure.append("-Dpioasm_DIR=" + str(pioasm_dir))
 
-    step("Configuring (" + args.config + ")")
+    step("Configuring (" + args.config + ", TX on GP" + str(args.tx_pin) + ")")
     run(configure, env=env)
 
     step("Building")
