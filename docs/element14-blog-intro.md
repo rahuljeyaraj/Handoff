@@ -151,7 +151,7 @@ Time to look at the thing properly.
 
 #### 5.1 The home page
 
-A rounded panel sat at the top, taller than the rows under it, so you couldn't miss it. The band's name, *Handoff band 7A3F*, in large type, and under it *Connected*. To the right, a small green card icon, and the battery, three bars, all green.
+A rounded panel sat at the top, taller than the rows under it, so you couldn't miss it. The band's name, *Handoff band 93D1*, in large type, and under it *Connected*. To the right, a small green card icon, and the battery, three bars, all green.
 
 Everything he needed to know, in one panel. Band's on, card's in, battery's fine.
 
@@ -173,7 +173,7 @@ At the bottom, in red, *Forget this band*. He left that alone.
 
 #### 5.3 Your card
 
-He tapped *Your contact card*. His card, as he had typed it that morning, and a small tick under it: *On Handoff band 7A3F*. Two buttons: *Edit your card* and *Delete my contact card*.
+He tapped *Your contact card*. His card, as he had typed it that morning, and a small tick under it: *On Handoff band 93D1*. Two buttons: *Edit your card* and *Delete my contact card*.
 
 He wanted to see what delete did, so he pressed it.
 
