@@ -35,7 +35,7 @@ You let go, and the conversation can carry on next week. The handshake that clos
 
 The first message ever sent through a handshake was a phone number. History made.
 
-### 2 Setting up the band
+### 2 The setup
 
 The registration desk at the expo. The queue moved quickly, and then it was his turn. The woman behind the desk looked up with a warm smile, as if she had been expecting him.
 
@@ -97,7 +97,9 @@ He put it on. Left wrist, out of habit, and glanced at her.
 
 He looked at the phone. An empty page. `No handshakes yet`.
 
-### 3 First use
+### 3 Swapping contacts
+
+#### 3.1 First use
 
 "So you're saying I just shake hands. How do I know it's actually worked?"
 
@@ -127,9 +129,7 @@ He was still looking at her phone. "Very."
 
 He thanked her and walked on towards the expo floor, still putting the puzzle together in his head.
 
-### 4 The Handoff app
-
-#### 4.1 Contacts and notes
+#### 3.2 Contacts and notes
 
 The morning went by in a blur.
 
@@ -145,11 +145,13 @@ By design, the Handoff app never polluted his phone contacts. They all stayed in
 
 Around eleven he went back to the front desk to ask where the workshop had moved to, and Savithri shook his hand again on his way out. He checked the app, half expecting a second Savithri. There wasn't one. The entry he had already renamed to `Savithri Raghavan (front desk)` had simply moved to the top of the list, note and all. The app matches people by their number and email, not their name. Shake the same hand twice and you get one person, not two.
 
-#### 4.2 The home page
+### 4 The companion app
 
 He found the coffee lounge at two, got a hot cup, and took a chair in the corner. The first quiet ten minutes he had had since breakfast.
 
 Time to look at the thing properly.
+
+#### 4.1 Home page
 
 The UI was simple. A band info card at the top of the page, showing the band's name, `Handoff band 93D1`, with `Connected` under it. On the right, a small green card icon showing that his card was saved on it, and a battery with three green bars.
 
@@ -162,7 +164,7 @@ Four buttons along the top, beside the Handoff wordmark:
 * `Sort`, flipping the list between `Newest first` and `A to Z`.
 * `Settings`.
 
-#### 4.3 The band page
+#### 4.2 Band page
 
 He pressed the band info card. It took him to a page of its own.
 
@@ -178,7 +180,7 @@ Useful at home, he thought, when it had slipped down the side of the sofa. Here,
 
 At the bottom, `Disconnect`. Under it, in red, `Forget this band`. He left both alone.
 
-#### 4.4 Your card
+#### 4.3 Card page
 
 He tapped `Your contact card`. There it was, as he had typed it that morning, with a small tick under his name: `On Handoff band 93D1`. Two icons in the top bar, a pencil to edit and a bin to delete the card.
 
@@ -196,7 +198,7 @@ Now the people who shook his hand would get a number labelled `IRQ`. If they kne
 
 `Save`. The band blinked green, twice, and the icon on the home page went green again.
 
-#### 4.5 Settings
+#### 4.4 Settings page
 
 Settings was two short groups.
 
@@ -206,7 +208,9 @@ He opened `Theme` and picked `Dark`. The lounge was dim and the white page was a
 
 He sat back. The whole app had taken five minutes to walk through, and there had been nothing in it he needed to look up. That, he had learned over the years, was harder to build than it looked.
 
-### 5 The plate on the back
+### 5 The how
+
+#### 5.1 Plate on the back
 
 The coffee was half gone and the morning's question was still open. He took the band off and turned it over.
 
