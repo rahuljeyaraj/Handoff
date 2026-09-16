@@ -97,9 +97,9 @@ He put it on. Left wrist, out of habit, and glanced at her.
 
 He looked at the phone. An empty page. `No handshakes yet`.
 
-### 3 Swapping contacts
+### 3 The handshake
 
-#### 3.1 First use
+#### 3.1 First contact
 
 "So you're saying I just shake hands. How do I know it's actually worked?"
 
@@ -129,7 +129,7 @@ He was still looking at her phone. "Very."
 
 He thanked her and walked on towards the expo floor, still putting the puzzle together in his head.
 
-#### 3.2 Contacts and notes
+#### 3.2 Keeping track
 
 The morning went by in a blur.
 
