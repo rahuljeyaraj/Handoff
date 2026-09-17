@@ -164,7 +164,7 @@ Four buttons along the top, beside the Handoff wordmark:
 * `Sort`, flipping the list between `Newest first` and `A to Z`.
 * `Settings`.
 
-#### 4.2 Band page
+#### 4.2 Band info page
 
 He pressed the band info card. It took him to a page of its own.
 
@@ -188,15 +188,15 @@ He pressed the bin.
 
 `Delete your contact card?` the app asked. `The band will stop sharing your contact. It will still receive contacts from others.`
 
-He tapped `Delete`. Back on the home page the green card icon had gone red, with a line through it. No card on the band.
+He tapped `Delete`. Back on the band info page the green card icon had gone red, with a line through it. No card saved on the band.
 
 He set it up again. Name, phone, email, organisation, title, the same as the morning. This time, at the phone number, he tapped the label. `Mobile`, `Work`, `Home`, `Main`, and at the bottom, `Custom`.
 
-He couldn't resist. He picked `Custom` and typed IRQ.
+He couldn't resist. He picked `Custom` and typed `IRQ`.
 
 Now the people who shook his hand would get a number labelled `IRQ`. If they knew what an interrupt request was, they'd smile. If they didn't, they weren't his kind of people anyway.
 
-`Save`. The band blinked green, twice, and the icon on the home page went green again.
+`Save`. The band blinked green, twice, and the icon on the band info page went green again.
 
 #### 4.4 Settings page
 
