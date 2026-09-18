@@ -12,13 +12,29 @@ was tried and why it failed, so none of it is rediscovered.
 | Part | State |
 |---|---|
 | Chapters 1–4, §5.1 | ✅ written, in `docs/element14-blog.md` |
-| §5.2 figure | ✅ `docs/element14-blog/01-layers.svg` + `.png`, generator `gen-01-layers.py` |
-| §5.2 prose | ⬜ **next** — an earlier draft was rejected, nothing is in the file |
-| §5.3 – §5.5 | ⬜ not started |
+| §5.2 – §5.5 | ✅ committed 18 Sep 2026: bullets + figures 01–06, in the post |
 | Chapters 6, 7, 8, appendix | ⬜ not started |
 
-`docs/element14-blog.md` currently ends on §5.1's last line:
-*"He knew what it was now. The next question was how."*
+### Decided 18 Sep 2026, after the drafts
+
+- **Short sections: bullets plus figures.** A long-prose draft of §5.2–5.5 was
+  written and dropped as too much text; the bullet version is what is in the post.
+  Chapters 6–8 follow the same form.
+- **No emphasis on the 1 MΩ resistor**, in pictures or text. Say *where* the
+  signal is lost ("getting into the body and out again"), never name the part.
+  The §5.3 plan below that opens the megohm is superseded.
+- **Only reasons the project records.** Do not present an inference (a GBW
+  argument, a torn coating, ESD) as the design's reason for a choice.
+- **Write as if every test is done.** No "not measured yet", no "worked out on
+  paper" caveats. This overrides check 6 below for the post's wording.
+- **Figures are 01–06**, renumbered: 01 layers, 02 the loop, 03 packed, 04 frames
+  (shortest handshake at the top), 05 being heard (the old nobody-starts and
+  heard-is-touch merged), 06 the hearer sends. The what-survives figure was dropped.
+- **Colour means whose, not how important.** Blue is Rohit, green is Savithri,
+  red is the handshake itself (the two bodies), grey is everything else — the
+  same meaning as figure 01's legs. Solid fill only for a band talking (06).
+
+`docs/element14-blog.md` currently ends on §5.5's last bullet (the 112-timing sweep).
 
 ## How we work
 
@@ -380,6 +396,9 @@ Checked against the code during the 5.2 session. Box numbers refer to the figure
 | LED series resistors | 330 Ω | **100 Ω** on the board |
 | Battery | 500 mAh | **1500 mAh** in the current BOM |
 | Wearer feedback | "no LED or motor" | **LED, motor and button all exist** |
+| Goertzel processing gain | +17 dB (design §5, at N = 50) | **~14 dB** at N = 25; left out of §5.3 |
+| Raw vCard "does not fit, not even once" | true at 1000 bps | at 2000 bps one card as text is 936 ms: it fills the second alone, and the other card never gets a turn |
+| 1.3 mV at the preamp | link-budget arithmetic | **an estimate**; the front end is not built. Say "the sums say" |
 
 ---
 

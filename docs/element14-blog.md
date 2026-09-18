@@ -223,3 +223,93 @@ So the plate wasn't a contact. It was one half of a capacitor. The skin was the 
 Capacitive body-coupled communication.
 
 He put the band back on, and finished the coffee. He knew *what* it was now. The next question was *how*.
+
+#### 5.2 One card's journey
+
+![One card's journey](element14-blog/01-layers.png)
+
+*Rohit's card on its way to Savithri. Hers makes the same trip the other way, at the same time.*
+
+* Follow the numbers, 1 to 22.
+* **Blue**, at the desk: Rohit's phone gives his card to his band.
+* **Red**, the handshake: his band sends it through the two of them, into hers.
+* **Green**, a moment later: her band passes it to her phone.
+* The small word in each box is the layer's name. The sentence under it is what happens.
+* Grey is Bluetooth. It works, so it is left alone.
+* Red had to be designed from nothing. Two boxes to come back to:
+  * **Box 7** throws away what every card has in common, and **box 18** puts it back. Why?
+  * **Box 9** heard a shout, and sent. Who shouted?
+
+Everything in red comes from three facts:
+
+1. The wire is a person.
+2. A handshake is about a second long.
+3. Nobody announces it.
+
+#### 5.3 The wire is a person
+
+The wire is somebody, so it must be safe. And it is a terrible wire, so little gets through.
+
+![The loop a handshake makes](element14-blog/02-the-loop.png)
+
+*The loop a handshake makes. The only thing that touches is the two hands.*
+
+* **The plate never touches skin.** It is half a capacitor, and reaches the body through an electric field, not through metal on skin.
+* **The room carries the signal back.** Nobody holds a second wire, so each band's outer face couples to the floor and walls.
+* That is the weakest step. Rubber soles on a dry floor thin it out.
+* **Battery only.** A band is never worn while it is plugged in.
+
+* **Most of the signal is lost** getting into the body and out again. About one part in 2,500 survives.
+* **So, two amplifiers of ×11** make it big enough to read.
+* **No mixer, no oscillator.** The software asks one question: *is the tone there right now?* Noise at other pitches is never counted.
+* **200 kHz**, as high as the converter can see. A higher tone crosses the room more easily.
+* **On and off.** The tone is switched, and the pattern is the data. The two bands never need to agree on timing.
+
+#### 5.4 The card is too big
+
+* A vCard is nearly half common parts: `BEGIN:VCARD`, `TEL;TYPE=CELL`, `END:VCARD`.
+* The link is slow. Sent as text, Rohit's card alone takes the whole second. Savithri's never gets a turn.
+
+![The same card, as text and packed](element14-blog/03-packed.png)
+
+*A card like Rohit's, as text and packed.*
+
+* **Packed:** labels become one-byte tags, digits go two to a byte, common email domains become one byte. 169 bytes becomes 79, and both cards fit.
+* **Packed once, at the desk.** The band stores only the packed card, so a handshake has nothing left to do but send.
+* **Savithri's band rebuilds it** into a proper vCard before her phone sees it.
+
+![Cut by importance](element14-blog/04-frames.png)
+
+*Sent most important first. Nothing is ever asked for twice.*
+
+* **Most important first:** name and number, then email, then the rest.
+* **Never half a field.** Every frame reads on its own, so a number never arrives with the wrong label.
+* **No asking again.** There is no time. A damaged frame fails its checksum and is dropped.
+
+#### 5.5 Nothing says go
+
+![Being heard is the touch](element14-blog/05-being-heard.png)
+
+* The band has no button for this, no accelerometer, no touch sensor.
+* **Listening first fails.** Before the hands meet, the other band cannot be heard at all, so quiet means nothing.
+* If every band waits to hear someone, no band ever speaks.
+
+* **Being heard is the touch.** There is no channel until the hands meet. Hearing another band means they have.
+* **So every band shouts**, out of step with every other:
+  * a short, flat "I am here" shout
+  * a moment for its amplifier to recover
+  * listen, for a random time
+  * and round again
+* It listens most of the time, so a shout almost always lands.
+
+![The hearer sends](element14-blog/06-hearer-sends.png)
+
+*09:14 at the front desk.*
+
+* **The hearer sends.** Only the band that heard the shout knows a handshake has started, so it is the one that acts.
+* **The shouter receives.** As far as it knows it shouted into an empty room, and it is listening when the card arrives.
+* **Nothing to decide.** A band is deaf while it shouts, and a band that has heard a shout does not shout. So only the first shout can be heard, and only by the other band.
+* Two shouts at the same instant: neither is heard, and both go round again with fresh random times.
+* **Why not skip the shout, and send the card blind?** A band that is sending is deaf. Two blind senders talk over each other, and both cards are lost.
+* **One pad, one direction.** The band taking its turn waits twice the recovery time, so the other end is certainly listening.
+* Simulated across all 112 timings two bands can have: exactly one sender, every time.

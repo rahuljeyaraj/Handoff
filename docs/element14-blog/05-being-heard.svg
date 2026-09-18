@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="755" viewBox="0 0 1600 755" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="755" fill="#ffffff"/>
+  <text x="556.9" y="77.0" text-anchor="middle" font-size="41" fill="#2e7d32" font-weight="700">Savithri's band</text>
+  <text x="973.7" y="77.0" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">Between them</text>
+  <text x="1390.6" y="77.0" text-anchor="middle" font-size="41" fill="#2f5fae" font-weight="700">Rohit's band</text>
+  <rect x="36.0" y="109.8" width="277.5" height="198.4" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="174.7" y="196.3" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">Both wait</text>
+  <text x="174.7" y="250.4" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">to hear first</text>
+  <rect x="383.5" y="109.8" width="346.8" height="198.4" rx="10" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="556.9" y="169.2" text-anchor="middle" font-size="41" fill="#2b2b2b">Listens,</text>
+  <text x="556.9" y="223.3" text-anchor="middle" font-size="41" fill="#2b2b2b">waiting to</text>
+  <text x="556.9" y="277.5" text-anchor="middle" font-size="41" fill="#2b2b2b">hear someone.</text>
+  <rect x="800.3" y="109.8" width="346.8" height="198.4" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5" stroke-dasharray="12 9"/>
+  <text x="973.7" y="169.2" text-anchor="middle" font-size="41" fill="#2b2b2b">Hands meet.</text>
+  <text x="973.7" y="223.3" text-anchor="middle" font-size="41" fill="#2b2b2b">Silence. Nobody</text>
+  <text x="973.7" y="277.5" text-anchor="middle" font-size="41" fill="#2b2b2b">ever speaks.</text>
+  <rect x="1217.2" y="109.8" width="346.8" height="198.4" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="1390.6" y="169.2" text-anchor="middle" font-size="41" fill="#2b2b2b">Listens,</text>
+  <text x="1390.6" y="223.3" text-anchor="middle" font-size="41" fill="#2b2b2b">waiting to</text>
+  <text x="1390.6" y="277.5" text-anchor="middle" font-size="41" fill="#2b2b2b">hear someone.</text>
+  <rect x="36.0" y="342.2" width="277.5" height="144.2" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="174.7" y="401.6" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">One shouts,</text>
+  <text x="174.7" y="455.7" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">apart</text>
+  <rect x="383.5" y="342.2" width="346.8" height="144.2" rx="10" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="556.9" y="401.6" text-anchor="middle" font-size="41" fill="#2b2b2b">Shouts</text>
+  <text x="556.9" y="455.7" text-anchor="middle" font-size="41" fill="#2b2b2b">“I am here”.</text>
+  <rect x="800.3" y="342.2" width="346.8" height="144.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5" stroke-dasharray="12 9"/>
+  <text x="973.7" y="401.6" text-anchor="middle" font-size="41" fill="#2b2b2b">The tone</text>
+  <text x="973.7" y="455.7" text-anchor="middle" font-size="41" fill="#2b2b2b">never arrives.</text>
+  <rect x="1217.2" y="342.2" width="346.8" height="144.2" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="1390.6" y="401.6" text-anchor="middle" font-size="41" fill="#2b2b2b">Hears nothing.</text>
+  <text x="1390.6" y="455.7" text-anchor="middle" font-size="41" fill="#2b2b2b">Is anyone there?</text>
+  <path d="M738.3 414.3 L776.3 414.3" stroke="#9a9a9a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/>
+  <path d="M776.3 424.2 L776.3 404.4 L792.3 414.3 Z" fill="#9a9a9a"/>
+  <rect x="36.0" y="520.4" width="277.5" height="198.4" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="174.7" y="579.8" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">One shouts,</text>
+  <text x="174.7" y="633.9" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">hand in</text>
+  <text x="174.7" y="688.1" text-anchor="middle" font-size="41" fill="#2b2b2b" font-weight="700">hand</text>
+  <rect x="383.5" y="520.4" width="346.8" height="198.4" rx="10" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="556.9" y="606.9" text-anchor="middle" font-size="41" fill="#2b2b2b">Shouts</text>
+  <text x="556.9" y="661.0" text-anchor="middle" font-size="41" fill="#2b2b2b">“I am here”.</text>
+  <rect x="800.3" y="520.4" width="346.8" height="198.4" rx="10" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="973.7" y="579.8" text-anchor="middle" font-size="41" fill="#2b2b2b">The tone</text>
+  <text x="973.7" y="633.9" text-anchor="middle" font-size="41" fill="#2b2b2b">crosses</text>
+  <text x="973.7" y="688.1" text-anchor="middle" font-size="41" fill="#2b2b2b">both bodies.</text>
+  <rect x="1217.2" y="520.4" width="346.8" height="198.4" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="1390.6" y="579.8" text-anchor="middle" font-size="41" fill="#2b2b2b">Hears it. So</text>
+  <text x="1390.6" y="633.9" text-anchor="middle" font-size="41" fill="#2b2b2b">the hands</text>
+  <text x="1390.6" y="688.1" text-anchor="middle" font-size="41" fill="#2b2b2b">have met.</text>
+  <path d="M738.3 619.6 L776.3 619.6" stroke="#2e7d32" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M776.3 629.5 L776.3 609.7 L792.3 619.6 Z" fill="#2e7d32"/>
+  <path d="M1155.2 619.6 L1193.2 619.6" stroke="#c0392b" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M1193.2 629.5 L1193.2 609.7 L1209.2 619.6 Z" fill="#c0392b"/>
+</svg>
