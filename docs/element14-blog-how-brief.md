@@ -15,8 +15,22 @@ was tried and why it failed, so none of it is rediscovered.
 | Post §5.2 What's inside | ✅ committed 18 Sep 2026: hardware block diagram (figure 09) + why a Pico 2 W |
 | Post §5.3 – §5.6 (this brief's §5.2 – §5.5) | ✅ committed 18 Sep 2026: bullets + figures 01–06 |
 | Chapter 6 | ✅ committed 18 Sep 2026 (`dde2349`): 6.1–6.3, figures 07–08 |
-| **Chapter 7** | ⬜ **next** — plan below, *Chapter 7 — Watch it work* |
-| Chapter 8, appendix | ⬜ not started |
+| Chapter 7 *Watch it work* | ❌ **dropped 18 Sep 2026.** A draft (the 09:14 handshake on a clock, plus the M14 bench numbers) read as chapter 5 repeated with numbers. Do not bring it back |
+| Post §5.5 From tone to bits | ✅ drafted 18 Sep 2026, uncommitted: Goertzel (what it replaces, why not an FFT), Manchester, the frame; figures 10–12. Old §5.5/5.6 are now **§5.6/5.7**. Kept short on purpose: no chip timing, no 25-vs-50 window, no moving threshold |
+| Chapter 7 *The airport* (was 8) | ⬜ **next** |
+| Appendix | ⬜ not started |
+
+### Found drafting chapter 7 (18 Sep 2026) — the code against the post
+
+- **Two frames a turn** (`link_sm.c` `frames_per_turn = 2`). Figure 08 draws one
+  frame each, alternating; it needs a redraw to two-frame turns.
+- **Two 3-frame cards take ~1.7 s** to finish both ways, with the "got yours"
+  acknowledgements (R1 R2 | S1 S2 | R3 R1 | S3 S1 | R2 R3). §3.1 and §5.3 say a
+  handshake is about a second.
+- **A cut-short handshake never reaches the phone.** `handoff.c` `on_done()`
+  forwards the card only on COMPLETE. §6.2 and figure 04 promise a brief touch
+  still gets a name and number.
+- The M14 bench run (105/105, 0.89 s) used **one-frame test cards**. Say so if it is ever quoted.
 
 ### Decided 18 Sep 2026, after the drafts
 
@@ -43,7 +57,7 @@ was tried and why it failed, so none of it is rediscovered.
   below: its §5.2 is the post's §5.3, and so on. Figure 09 is numbered by when it
   was drawn, not where it sits.
 
-`docs/element14-blog.md` currently ends on §6.3's last bullet (the inductor, left out). The next figure is `10-`. Figure 09 colours by direction (purple into the Pico, orange out of it, teal the Pico, grey not part of the band), the one exception to colour-means-whose.
+`docs/element14-blog.md` currently ends on §6.3's last bullet (the inductor, left out). The next figure is `13-`. Figure 09 colours by direction (purple into the Pico, orange out of it, teal the Pico, grey not part of the band), the one exception to colour-means-whose.
 
 ## How we work
 
@@ -74,8 +88,8 @@ The chapters after "The how" are **chapters of their own, not subsections of 5**
   #### 5.5 The card is too big        written   (this brief's "§5.4")
   #### 5.6 Nothing says go            written   (this brief's "§5.5")
 ### 6 Where the reasoning was wrong   written
-### 7 Watch it work                   next
-### 8 The airport
+### 7 Watch it work                   DROPPED 18 Sep 2026 (numbers recap, no new idea)
+### 8 The airport                     becomes 7 once 7 is gone
 ### Appendix — Build one yourself
 ```
 

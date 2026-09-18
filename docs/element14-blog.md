@@ -286,7 +286,44 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **200 kHz**, as high as the converter can see. A higher tone crosses the room more easily.
 * **On and off.** The tone is switched, and the pattern is the data. The two bands never need to agree on timing.
 
-#### 5.5 The card is too big
+#### 5.5 From tone to bits
+
+Three steps: hear the tone, read each bit, find where the card starts.
+
+![What the Goertzel filter replaces](element14-blog/10-goertzel.png)
+
+*Dashed: the parts the band does not have.*
+
+* **The usual receiver** shifts the tone down with an oscillator and a mixer, then filters and amplifies it again.
+* **It needs two mixers**, I and Q. The two bands run on separate clocks, so the tone arrives at any phase, and one mixer's output fades with the phase.
+* **The band does all of it in software.** The converter samples the tone itself, 500,000 times a second. A **Goertzel filter** turns every 25 samples into one number: how much 200 kHz is there, at any phase.
+* **Four parts gone**, about half the analogue circuit. And with no mixer, there is no mixer offset drifting under the reading.
+
+**Why Goertzel and not an FFT.** Both measure frequencies. An FFT measures all of them, and the band needs one.
+
+* **One answer, not thirteen.** An FFT of 25 samples returns 13 frequencies. Twelve would be thrown away.
+* **Sample by sample.** Goertzel updates two running numbers as each sample lands. There is no block to store, and the answer is ready with the 25th sample.
+* **Any length.** A standard FFT wants 16 or 32 samples. At 32, 200 kHz falls between two frequencies and smears across both. 25 samples hold exactly ten cycles of the tone, so it sits dead on one.
+* **Cheap.** It keeps about a quarter of one core busy.
+
+![Which half is louder](element14-blog/11-two-halves.png)
+
+*The same four bits, through a firm grip and a light one.*
+
+* **Each bit is two halves.** Tone then silence is a 1. Silence then tone is a 0. This is Manchester coding.
+* **How much arrives changes** with grip, posture and shoes. A fixed line reads the firm grip and misses the light one.
+* **So the receiver compares the two halves.** The louder one is the same for any grip.
+* **Every bit changes in the middle**, so the receiver never loses count.
+* **The cost is half the speed:** 2,000 bits a second.
+
+![One frame](element14-blog/12-frame.png)
+
+*One frame, 156 ms. Each part keeps its colour in all three rows.*
+
+* **The start is a landmark, not a count.** Some of the preamble is lost while the receiver wakes up, so it never counts halves. It looks for the one 00, then checks the seven halves after it.
+* **No length field.** A length can itself arrive damaged. Every frame is the same size, and the header says how many frames make the card.
+
+#### 5.6 The card is too big
 
 * A vCard is nearly half common parts: `BEGIN:VCARD`, `TEL;TYPE=CELL`, `END:VCARD`.
 * The link is slow. Sent as text, Rohit's card alone takes the whole second. Savithri's never gets a turn.
@@ -307,7 +344,7 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **Never half a field.** Every frame reads on its own, so a number never arrives with the wrong label.
 * **No asking again.** There is no time. A damaged frame fails its checksum and is dropped.
 
-#### 5.6 Nothing says go
+#### 5.7 Nothing says go
 
 ![Being heard is the touch](element14-blog/05-being-heard.png)
 
@@ -359,7 +396,7 @@ Three decisions that looked right on paper and turned out wrong. Each one change
 
 #### 6.2 Saying it twice
 
-* The card is three frames, most important first (5.5). Frame 1 is the name and the number.
+* The card is three frames, most important first (5.6). Frame 1 is the name and the number.
 * The plan was to send frame 1 every other time: 1, 2, 1, 3, 1, 2... Half the airtime on what matters most.
 * It sounded safe. It was the worst option.
 * A frame takes 156 ms. About six fit in a one-second handshake, shared between the two bands.

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="420" viewBox="0 0 1600 420" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="420" fill="#ffffff"/>
+  <text x="294.4" y="67.0" text-anchor="middle" font-size="31" fill="#2b2b2b" font-weight="700">1</text>
+  <text x="444.5" y="67.0" text-anchor="middle" font-size="31" fill="#2b2b2b" font-weight="700">0</text>
+  <text x="594.6" y="67.0" text-anchor="middle" font-size="31" fill="#2b2b2b" font-weight="700">1</text>
+  <text x="744.7" y="67.0" text-anchor="middle" font-size="31" fill="#2b2b2b" font-weight="700">1</text>
+  <text x="1018.8" y="67.0" text-anchor="middle" font-size="31" fill="#2b2b2b" font-weight="700">The dashed line reads</text>
+  <text x="1390.9" y="67.0" text-anchor="middle" font-size="31" fill="#2b2b2b" font-weight="700">The louder half reads</text>
+  <text x="36.0" y="174.0" text-anchor="start" font-size="31" fill="#2b2b2b" font-weight="700">Firm grip</text>
+  <rect x="219.4" y="98.0" width="600.4" height="130.2" rx="10" fill="#ffffff" stroke="#cfcfcf" stroke-width="2"/>
+  <path d="M369.5 98.0 L369.5 228.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M519.6 98.0 L519.6 228.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M669.7 98.0 L669.7 228.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M294.4 104.0 L294.4 222.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M231.4 117.9 L235.0 208.3 L238.6 117.9 L242.3 208.3 L245.9 117.9 L249.6 208.3 L253.2 117.9 L256.9 208.3 L260.5 117.9 L264.2 208.3 L267.8 117.9 L271.5 208.3 L275.1 117.9 L278.8 208.3 L282.4 117.9" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M306.4 163.1 L357.5 163.1" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M444.5 104.0 L444.5 222.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M456.5 117.9 L460.2 208.3 L463.8 117.9 L467.5 208.3 L471.1 117.9 L474.7 208.3 L478.4 117.9 L482.0 208.3 L485.7 117.9 L489.3 208.3 L493.0 117.9 L496.6 208.3 L500.3 117.9 L503.9 208.3 L507.6 117.9" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M381.5 163.1 L432.5 163.1" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M594.6 104.0 L594.6 222.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M531.6 117.9 L535.2 208.3 L538.9 117.9 L542.5 208.3 L546.2 117.9 L549.8 208.3 L553.4 117.9 L557.1 208.3 L560.7 117.9 L564.4 208.3 L568.0 117.9 L571.7 208.3 L575.3 117.9 L579.0 208.3 L582.6 117.9" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M606.6 163.1 L657.7 163.1" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M744.7 104.0 L744.7 222.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M681.7 117.9 L685.3 208.3 L689.0 117.9 L692.6 208.3 L696.3 117.9 L699.9 208.3 L703.5 117.9 L707.2 208.3 L710.8 117.9 L714.5 208.3 L718.1 117.9 L721.8 208.3 L725.4 117.9 L729.1 208.3 L732.7 117.9" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M756.7 163.1 L807.8 163.1" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M219.4 135.6 L819.8 135.6" stroke="#2b2b2b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14 10"/>
+  <rect x="845.8" y="98.0" width="346.1" height="130.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1018.8" y="153.5" text-anchor="middle" font-size="31" fill="#555555" font-weight="700">1 0 1 1</text>
+  <text x="1018.8" y="194.4" text-anchor="middle" font-size="31" fill="#2b2b2b">Right.</text>
+  <rect x="1217.9" y="98.0" width="346.1" height="130.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1390.9" y="153.5" text-anchor="middle" font-size="31" fill="#555555" font-weight="700">1 0 1 1</text>
+  <text x="1390.9" y="194.4" text-anchor="middle" font-size="31" fill="#2b2b2b">Right.</text>
+  <text x="36.0" y="330.2" text-anchor="start" font-size="31" fill="#2b2b2b" font-weight="700">Light grip</text>
+  <rect x="219.4" y="254.2" width="600.4" height="130.2" rx="10" fill="#ffffff" stroke="#cfcfcf" stroke-width="2"/>
+  <path d="M369.5 254.2 L369.5 384.4" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M519.6 254.2 L519.6 384.4" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M669.7 254.2 L669.7 384.4" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M294.4 260.2 L294.4 378.4" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M231.4 302.8 L235.0 335.8 L238.6 302.8 L242.3 335.8 L245.9 302.8 L249.6 335.8 L253.2 302.8 L256.9 335.8 L260.5 302.8 L264.2 335.8 L267.8 302.8 L271.5 335.8 L275.1 302.8 L278.8 335.8 L282.4 302.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M306.4 319.3 L357.5 319.3" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M444.5 260.2 L444.5 378.4" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M456.5 302.8 L460.2 335.8 L463.8 302.8 L467.5 335.8 L471.1 302.8 L474.7 335.8 L478.4 302.8 L482.0 335.8 L485.7 302.8 L489.3 335.8 L493.0 302.8 L496.6 335.8 L500.3 302.8 L503.9 335.8 L507.6 302.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M381.5 319.3 L432.5 319.3" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M594.6 260.2 L594.6 378.4" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M531.6 302.8 L535.2 335.8 L538.9 302.8 L542.5 335.8 L546.2 302.8 L549.8 335.8 L553.4 302.8 L557.1 335.8 L560.7 302.8 L564.4 335.8 L568.0 302.8 L571.7 335.8 L575.3 302.8 L579.0 335.8 L582.6 302.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M606.6 319.3 L657.7 319.3" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M744.7 260.2 L744.7 378.4" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M681.7 302.8 L685.3 335.8 L689.0 302.8 L692.6 335.8 L696.3 302.8 L699.9 335.8 L703.5 302.8 L707.2 335.8 L710.8 302.8 L714.5 335.8 L718.1 302.8 L721.8 335.8 L725.4 302.8 L729.1 335.8 L732.7 302.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M756.7 319.3 L807.8 319.3" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M219.4 291.8 L819.8 291.8" stroke="#2b2b2b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14 10"/>
+  <rect x="845.8" y="254.2" width="346.1" height="130.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5" stroke-dasharray="10 8"/>
+  <text x="1018.8" y="309.7" text-anchor="middle" font-size="31" fill="#555555" font-weight="700">0 0 0 0</text>
+  <text x="1018.8" y="350.6" text-anchor="middle" font-size="31" fill="#2b2b2b">Wrong.</text>
+  <rect x="1217.9" y="254.2" width="346.1" height="130.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1390.9" y="309.7" text-anchor="middle" font-size="31" fill="#555555" font-weight="700">1 0 1 1</text>
+  <text x="1390.9" y="350.6" text-anchor="middle" font-size="31" fill="#2b2b2b">Right.</text>
+</svg>
