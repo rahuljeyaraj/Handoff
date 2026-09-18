@@ -12,8 +12,11 @@ was tried and why it failed, so none of it is rediscovered.
 | Part | State |
 |---|---|
 | Chapters 1–4, §5.1 | ✅ written, in `docs/element14-blog.md` |
-| §5.2 – §5.5 | ✅ committed 18 Sep 2026: bullets + figures 01–06, in the post |
-| Chapters 6, 7, 8, appendix | ⬜ not started |
+| Post §5.2 What's inside | ✅ committed 18 Sep 2026: hardware block diagram (figure 09) + why a Pico 2 W |
+| Post §5.3 – §5.6 (this brief's §5.2 – §5.5) | ✅ committed 18 Sep 2026: bullets + figures 01–06 |
+| Chapter 6 | ✅ committed 18 Sep 2026 (`dde2349`): 6.1–6.3, figures 07–08 |
+| **Chapter 7** | ⬜ **next** — plan below, *Chapter 7 — Watch it work* |
+| Chapter 8, appendix | ⬜ not started |
 
 ### Decided 18 Sep 2026, after the drafts
 
@@ -34,7 +37,13 @@ was tried and why it failed, so none of it is rediscovered.
   red is the handshake itself (the two bodies), grey is everything else — the
   same meaning as figure 01's legs. Solid fill only for a band talking (06).
 
-`docs/element14-blog.md` currently ends on §5.5's last bullet (the 112-timing sweep).
+- **Renumbered 18 Sep 2026, after chapter 6:** a new **§5.2 What's inside**
+  (figure 09, the band's hardware as one block diagram) went in after §5.1, so
+  the post's §5.2–5.5 are now **§5.3–5.6**. This brief keeps the old numbers
+  below: its §5.2 is the post's §5.3, and so on. Figure 09 is numbered by when it
+  was drawn, not where it sits.
+
+`docs/element14-blog.md` currently ends on §6.3's last bullet (the inductor, left out). The next figure is `10-`. Figure 09 colours by direction (purple into the Pico, orange out of it, teal the Pico, grey not part of the band), the one exception to colour-means-whose.
 
 ## How we work
 
@@ -59,12 +68,13 @@ The chapters after "The how" are **chapters of their own, not subsections of 5**
 ```
 ### 5 The how
   #### 5.1 Plate on the back          written
-  #### 5.2 One card's journey         figure done, prose next   (working title)
-  #### 5.3 The wire is a person
-  #### 5.4 The card is too big
-  #### 5.5 Nothing says go
-### 6 Where the reasoning was wrong
-### 7 Watch it work
+  #### 5.2 What's inside              written (added 18 Sep; not in this brief's old numbering)
+  #### 5.3 One card's journey         written   (this brief's "§5.2")
+  #### 5.4 The wire is a person       written   (this brief's "§5.3")
+  #### 5.5 The card is too big        written   (this brief's "§5.4")
+  #### 5.6 Nothing says go            written   (this brief's "§5.5")
+### 6 Where the reasoning was wrong   written
+### 7 Watch it work                   next
 ### 8 The airport
 ### Appendix — Build one yourself
 ```

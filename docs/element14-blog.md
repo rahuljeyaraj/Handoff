@@ -224,7 +224,28 @@ Capacitive body-coupled communication.
 
 He put the band back on, and finished the coffee. He knew *what* it was now. The next question was *how*.
 
-#### 5.2 One card's journey
+#### 5.2 What's inside
+
+He had met most of it already, from the outside.
+
+![What's inside a band](element14-blog/09-inside.png)
+
+*One band, around its Pico. Purple feeds the Pico, orange is driven by it, and the plate is both. Grey is not part of the band.*
+
+* **One plate, both directions.** The tone goes out through it, and the other band's tone comes in through it.
+* **Two amplifiers** between the plate and the Pico, because what arrives is tiny (5.4).
+* **The rest is for the wearer:** the button Savithri held for five seconds, the light that blinked, the buzz on his wrist.
+
+**Why a Pico 2 W.** One module does every job in the middle box.
+
+* **The tone is a pin.** PIO, the Pico's small programmable I/O engines, switches a pin at exactly 200 kHz on its own. No oscillator, no driver chip, and the processor is free.
+* **The converter reads the tone directly.** It samples 500,000 times a second, fast enough for 200 kHz, so there is no mixer to bring the tone down first.
+* **Two cores.** One listens all the time. The other runs the handshake and Bluetooth.
+* **Bluetooth on board.** The phone link needs no second chip.
+* **A buck-boost converter on board.** A Li-ion cell starts above 3.3 V and ends below it. The Pico takes anything from 1.8 to 5.5 V and makes its own 3.3 V, so the battery needs no regulator.
+* **Small.** 21 × 51 mm, and it plugs into a socket on the band's board.
+
+#### 5.3 One card's journey
 
 ![One card's journey](element14-blog/01-layers.png)
 
@@ -246,7 +267,7 @@ Everything in red comes from three facts:
 2. A handshake is about a second long.
 3. Nobody announces it.
 
-#### 5.3 The wire is a person
+#### 5.4 The wire is a person
 
 The wire is somebody, so it must be safe. And it is a terrible wire, so little gets through.
 
@@ -265,7 +286,7 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **200 kHz**, as high as the converter can see. A higher tone crosses the room more easily.
 * **On and off.** The tone is switched, and the pattern is the data. The two bands never need to agree on timing.
 
-#### 5.4 The card is too big
+#### 5.5 The card is too big
 
 * A vCard is nearly half common parts: `BEGIN:VCARD`, `TEL;TYPE=CELL`, `END:VCARD`.
 * The link is slow. Sent as text, Rohit's card alone takes the whole second. Savithri's never gets a turn.
@@ -286,7 +307,7 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **Never half a field.** Every frame reads on its own, so a number never arrives with the wrong label.
 * **No asking again.** There is no time. A damaged frame fails its checksum and is dropped.
 
-#### 5.5 Nothing says go
+#### 5.6 Nothing says go
 
 ![Being heard is the touch](element14-blog/05-being-heard.png)
 
@@ -320,7 +341,7 @@ Three decisions that looked right on paper and turned out wrong. Each one change
 
 #### 6.1 Off is not low
 
-* The tone is switched on and off (5.3). At first, *off* meant holding the pin at 0 V.
+* The tone is switched on and off (5.4). At first, *off* meant holding the pin at 0 V.
 * Zero is zero. It looked harmless.
 * But a band has one pad, for sending and for listening. The pad is wired to the band's own amplifier.
 * Holding it low pulled that amplifier to the bottom of its range. Every frame did it, over and over.
@@ -338,7 +359,7 @@ Three decisions that looked right on paper and turned out wrong. Each one change
 
 #### 6.2 Saying it twice
 
-* The card is three frames, most important first (5.4). Frame 1 is the name and the number.
+* The card is three frames, most important first (5.5). Frame 1 is the name and the number.
 * The plan was to send frame 1 every other time: 1, 2, 1, 3, 1, 2... Half the airtime on what matters most.
 * It sounded safe. It was the worst option.
 * A frame takes 156 ms. About six fit in a one-second handshake, shared between the two bands.
@@ -358,7 +379,7 @@ Three decisions that looked right on paper and turned out wrong. Each one change
 #### 6.3 The gain that wasn't free
 
 * The pad and the skin make a capacitor. Add one inductor, tuned to 200 kHz, and the two resonate.
-* On paper, **20 to 30 dB** more signal, for one cheap part. Very tempting, with so little getting through (5.3).
+* On paper, **20 to 30 dB** more signal, for one cheap part. Very tempting, with so little getting through (5.4).
 * But a resonance only builds up when little is lost along the way.
 * This link loses a lot on purpose, to keep the wearer safe. The same loss flattens the resonance before it can build.
 * Left out. Written down here so nobody tries it again.
