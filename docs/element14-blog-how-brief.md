@@ -17,7 +17,7 @@ was tried and why it failed, so none of it is rediscovered.
 | Chapter 6 | ✅ committed 18 Sep 2026 (`dde2349`): 6.1–6.3, figures 07–08 |
 | Chapter 7 *Watch it work* | ❌ **dropped 18 Sep 2026.** A draft (the 09:14 handshake on a clock, plus the M14 bench numbers) read as chapter 5 repeated with numbers. Do not bring it back |
 | Post §5.5 From tone to bits | ✅ drafted 18 Sep 2026, uncommitted: Goertzel (what it replaces, why not an FFT), Manchester, the frame; figures 10–12. Old §5.5/5.6 are now **§5.6/5.7**. Kept short on purpose: no chip timing, no 25-vs-50 window, no moving threshold |
-| Chapter 7 *The airport* (was 8) | ⬜ **next** |
+| Chapter 7 *The end* (was 8, The airport) | ✅ committed 18 Sep 2026: Rohit in the taxi, forgot Farhan Ansari's number, finds him in the app, saves him to the phone, WhatsApps him. No engineering detail, no story content in the heading |
 | Appendix | ⬜ not started |
 
 ### Found drafting chapter 7 (18 Sep 2026) — the code against the post

@@ -420,3 +420,44 @@ Three decisions that looked right on paper and turned out wrong. Each one change
 * But a resonance only builds up when little is lost along the way.
 * This link loses a lot on purpose, to keep the wearer safe. The same loss flattens the resonance before it can build.
 * Left out. Written down here so nobody tries it again.
+
+### 7 The end
+
+The taxi pulled onto the flyover, and Rohit let his head fall back against the seat. He had made it. Just.
+
+He was still smiling.
+
+He had only meant to peep in at one last stand on his way out. He had stayed half an hour. The man behind the table, Farhan, had hit the same problem Rohit had been fighting for three weeks, and had got round it a different way. They had leaned over the same board and argued it through, neither giving an inch. Rohit still thought Farhan's fix was wrong. But while he was arguing against it, he had finally seen what he had been missing. It had been in his own drawing all along.
+
+He laughed at himself out loud, and the driver glanced at him in the mirror.
+
+Both from Bengaluru, it turned out. They had come all the way to Hyderabad to meet.
+
+Then he froze for a moment.
+
+He had not got Farhan's number.
+
+He went back through it in his head. The taxi calling. Running to the front desk. Pulling the band off his wrist and pushing it across to Savithri. "Flight!" "Go!"
+
+And before that?
+
+Before that, a quick handshake across the table, half a goodbye, already turning to go. Did the band buzz? He couldn't remember.
+
+He opened the Handoff app. First in the list:
+
+`Farhan Ansari`
+`Met today, 17:02`
+
+Rohit let out a breath. The band was gone. Everything it had carried was still here.
+
+He tapped the name and edited it to `Farhan Ansari (sparring partner)`. Then `Save to phone contacts`.
+
+He opened a DM with him on WhatsApp.
+
+`Hi Farhan, Rohit here. The one who said your fix would never work. Still don't think it will. Coffee next week, and you can try to convince me?`
+
+Two blue ticks. Then `typing…`
+
+`Knew it was you, I did save your number. Once I am back in the city I will raise an IRQ ;)`
+
+His kind of people.
