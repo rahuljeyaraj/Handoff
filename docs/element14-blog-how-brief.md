@@ -11,7 +11,7 @@ On first use, copy this to `docs/element14-blog-how-brief.md` — repo conventio
 
 ## Target
 
-Append to `docs/element14-blog-intro.md`, after the existing §5.1. No changes to
+Append to `docs/element14-blog.md`, after the existing §5.1. No changes to
 chapters 1–4.
 
 ## Voice and format

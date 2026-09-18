@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1223" viewBox="0 0 2200 1223" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="2200" height="1223" fill="#ffffff"/>
+  <rect x="40" y="16" width="706" height="54" rx="9" fill="#2f5fae" stroke="#2f5fae" stroke-width="0"/>
+  <text x="393.0" y="54" text-anchor="middle" font-size="25" fill="#ffffff" font-weight="700" letter-spacing="2">1.  AT THE DESK, ONCE</text>
+  <rect x="754" y="16" width="692" height="54" rx="9" fill="#c0392b" stroke="#c0392b" stroke-width="0"/>
+  <text x="1100.0" y="54" text-anchor="middle" font-size="25" fill="#ffffff" font-weight="700" letter-spacing="2">2.  THE HANDSHAKE, ABOUT A SECOND</text>
+  <rect x="1454" y="16" width="706" height="54" rx="9" fill="#2e7d32" stroke="#2e7d32" stroke-width="0"/>
+  <text x="1807.0" y="54" text-anchor="middle" font-size="25" fill="#ffffff" font-weight="700" letter-spacing="2">3.  MOMENTS LATER</text>
+  <text x="210.0" y="108" text-anchor="middle" font-size="24" fill="#1a1a1a" font-weight="700" letter-spacing="1.5">ROHIT'S PHONE</text>
+  <text x="750" y="108" text-anchor="middle" font-size="24" fill="#1a1a1a" font-weight="700" letter-spacing="1.5">ROHIT'S BAND</text>
+  <text x="1450" y="108" text-anchor="middle" font-size="24" fill="#1a1a1a" font-weight="700" letter-spacing="1.5">SAVITHRI'S BAND</text>
+  <text x="1990.0" y="108" text-anchor="middle" font-size="24" fill="#1a1a1a" font-weight="700" letter-spacing="1.5">SAVITHRI'S PHONE</text>
+  <text x="595.0" y="136" text-anchor="middle" font-size="18" fill="#6a6a6a" font-style="italic">phone side</text>
+  <text x="905.0" y="136" text-anchor="middle" font-size="18" fill="#6a6a6a" font-style="italic">body side</text>
+  <text x="1295.0" y="136" text-anchor="middle" font-size="18" fill="#6a6a6a" font-style="italic">body side</text>
+  <text x="1605.0" y="136" text-anchor="middle" font-size="18" fill="#6a6a6a" font-style="italic">phone side</text>
+  <rect x="40" y="150" width="340" height="84" rx="9" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="210.0" y="187" text-anchor="middle" font-size="21" fill="#2f5fae" font-weight="700">app</text>
+  <text x="210.0" y="211" text-anchor="middle" font-size="21" fill="#2b2b2b">Rohit's card, as he typed it.</text>
+  <circle cx="64" cy="174" r="16" fill="#2f5fae"/>
+  <text x="64" y="180" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">1</text>
+  <rect x="440" y="150" width="620" height="84" rx="9" fill="#f7f7f7" stroke="#6a6a6a" stroke-width="2.5"/>
+  <text x="750.0" y="187" text-anchor="middle" font-size="21" fill="#333333" font-weight="700">app</text>
+  <text x="750.0" y="211" text-anchor="middle" font-size="21" fill="#2b2b2b">Kept on the band until a hand is shaken.</text>
+  <circle cx="464" cy="174" r="16" fill="#2f5fae"/>
+  <text x="464" y="180" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">6</text>
+  <rect x="1140" y="150" width="620" height="84" rx="9" fill="#f7f7f7" stroke="#6a6a6a" stroke-width="2.5"/>
+  <text x="1450.0" y="187" text-anchor="middle" font-size="21" fill="#333333" font-weight="700">app</text>
+  <text x="1450.0" y="211" text-anchor="middle" font-size="21" fill="#2b2b2b">Received. Held until the phone is ready for it.</text>
+  <circle cx="1164" cy="174" r="16" fill="#c0392b"/>
+  <text x="1164" y="180" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">17</text>
+  <rect x="1820" y="150" width="340" height="84" rx="9" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="1990.0" y="187" text-anchor="middle" font-size="21" fill="#2e7d32" font-weight="700">app</text>
+  <text x="1990.0" y="211" text-anchor="middle" font-size="21" fill="#2b2b2b">Rohit appears in Savithri's list.</text>
+  <circle cx="1844" cy="174" r="16" fill="#2e7d32"/>
+  <text x="1844" y="180" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">22</text>
+  <rect x="40" y="264" width="340" height="113" rx="9" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="210.0" y="315" text-anchor="middle" font-size="21" fill="#2f5fae" font-weight="700">presentation</text>
+  <text x="210.0" y="340" text-anchor="middle" font-size="21" fill="#2b2b2b">Written out as vCard text.</text>
+  <circle cx="64" cy="288" r="16" fill="#2f5fae"/>
+  <text x="64" y="294" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">2</text>
+  <rect x="440" y="264" width="310" height="113" rx="9" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="595.0" y="301" text-anchor="middle" font-size="21" fill="#2f5fae" font-weight="700">presentation</text>
+  <text x="595.0" y="326" text-anchor="middle" font-size="21" fill="#2b2b2b">Details read out</text>
+  <text x="595.0" y="354" text-anchor="middle" font-size="21" fill="#2b2b2b">of the vCard.</text>
+  <circle cx="464" cy="288" r="16" fill="#2f5fae"/>
+  <text x="464" y="294" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">5</text>
+  <rect x="750" y="264" width="310" height="113" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="905.0" y="301" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">presentation</text>
+  <text x="905.0" y="326" text-anchor="middle" font-size="21" fill="#2b2b2b">Everything every card has</text>
+  <text x="905.0" y="354" text-anchor="middle" font-size="21" fill="#2b2b2b">in common is left behind.</text>
+  <circle cx="774" cy="288" r="16" fill="#c0392b"/>
+  <text x="774" y="294" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">7</text>
+  <rect x="1140" y="264" width="310" height="113" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="1295.0" y="301" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">presentation</text>
+  <text x="1295.0" y="326" text-anchor="middle" font-size="21" fill="#2b2b2b">Details unpacked</text>
+  <text x="1295.0" y="354" text-anchor="middle" font-size="21" fill="#2b2b2b">from the bytes.</text>
+  <circle cx="1164" cy="288" r="16" fill="#c0392b"/>
+  <text x="1164" y="294" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">16</text>
+  <rect x="1450" y="264" width="310" height="113" rx="9" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="1605.0" y="301" text-anchor="middle" font-size="21" fill="#2e7d32" font-weight="700">presentation</text>
+  <text x="1605.0" y="326" text-anchor="middle" font-size="21" fill="#2b2b2b">The common parts are put</text>
+  <text x="1605.0" y="354" text-anchor="middle" font-size="21" fill="#2b2b2b">back. A real vCard again.</text>
+  <circle cx="1474" cy="288" r="16" fill="#2e7d32"/>
+  <text x="1474" y="294" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">18</text>
+  <rect x="1820" y="264" width="340" height="113" rx="9" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="1990.0" y="315" text-anchor="middle" font-size="21" fill="#2e7d32" font-weight="700">presentation</text>
+  <text x="1990.0" y="340" text-anchor="middle" font-size="21" fill="#2b2b2b">Details read out of the vCard.</text>
+  <circle cx="1844" cy="288" r="16" fill="#2e7d32"/>
+  <text x="1844" y="294" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">21</text>
+  <rect x="40" y="407" width="340" height="113" rx="9" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="210.0" y="444" text-anchor="middle" font-size="21" fill="#2f5fae" font-weight="700">transport</text>
+  <text x="210.0" y="469" text-anchor="middle" font-size="21" fill="#2b2b2b">Cut into numbered</text>
+  <text x="210.0" y="497" text-anchor="middle" font-size="21" fill="#2b2b2b">Bluetooth messages.</text>
+  <circle cx="64" cy="431" r="16" fill="#2f5fae"/>
+  <text x="64" y="437" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">3</text>
+  <rect x="440" y="407" width="310" height="113" rx="9" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="595.0" y="444" text-anchor="middle" font-size="21" fill="#2f5fae" font-weight="700">transport</text>
+  <text x="595.0" y="469" text-anchor="middle" font-size="21" fill="#2b2b2b">The messages stitched</text>
+  <text x="595.0" y="497" text-anchor="middle" font-size="21" fill="#2b2b2b">back into the vCard.</text>
+  <circle cx="464" cy="431" r="16" fill="#2f5fae"/>
+  <text x="464" y="437" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">4</text>
+  <rect x="750" y="407" width="310" height="113" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="905.0" y="444" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">transport</text>
+  <text x="905.0" y="469" text-anchor="middle" font-size="21" fill="#2b2b2b">Cut into frames,</text>
+  <text x="905.0" y="497" text-anchor="middle" font-size="21" fill="#2b2b2b">most important first.</text>
+  <circle cx="774" cy="431" r="16" fill="#c0392b"/>
+  <text x="774" y="437" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">8</text>
+  <rect x="1140" y="407" width="310" height="113" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="1295.0" y="444" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">transport</text>
+  <text x="1295.0" y="469" text-anchor="middle" font-size="21" fill="#2b2b2b">Frames collected, the</text>
+  <text x="1295.0" y="497" text-anchor="middle" font-size="21" fill="#2b2b2b">packed card rebuilt.</text>
+  <circle cx="1164" cy="431" r="16" fill="#c0392b"/>
+  <text x="1164" y="437" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">15</text>
+  <rect x="1450" y="407" width="310" height="113" rx="9" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="1605.0" y="444" text-anchor="middle" font-size="21" fill="#2e7d32" font-weight="700">transport</text>
+  <text x="1605.0" y="469" text-anchor="middle" font-size="21" fill="#2b2b2b">Cut into numbered</text>
+  <text x="1605.0" y="497" text-anchor="middle" font-size="21" fill="#2b2b2b">Bluetooth messages.</text>
+  <circle cx="1474" cy="431" r="16" fill="#2e7d32"/>
+  <text x="1474" y="437" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">19</text>
+  <rect x="1820" y="407" width="340" height="113" rx="9" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="1990.0" y="444" text-anchor="middle" font-size="21" fill="#2e7d32" font-weight="700">transport</text>
+  <text x="1990.0" y="469" text-anchor="middle" font-size="21" fill="#2b2b2b">The messages stitched</text>
+  <text x="1990.0" y="497" text-anchor="middle" font-size="21" fill="#2b2b2b">back into the vCard.</text>
+  <circle cx="1844" cy="431" r="16" fill="#2e7d32"/>
+  <text x="1844" y="437" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">20</text>
+  <rect x="40" y="550" width="340" height="169" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="210.0" y="643" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth MAC</text>
+  <rect x="440" y="550" width="310" height="169" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="595.0" y="643" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth MAC</text>
+  <rect x="750" y="550" width="310" height="169" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="905.0" y="587" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">MAC</text>
+  <text x="905.0" y="611" text-anchor="middle" font-size="21" fill="#2b2b2b">Heard the other band's</text>
+  <text x="905.0" y="640" text-anchor="middle" font-size="21" fill="#2b2b2b">“I am here” shout.</text>
+  <text x="905.0" y="668" text-anchor="middle" font-size="21" fill="#2b2b2b">Waits for silence,</text>
+  <text x="905.0" y="696" text-anchor="middle" font-size="21" fill="#2b2b2b">then sends the card.</text>
+  <circle cx="774" cy="574" r="16" fill="#c0392b"/>
+  <text x="774" y="580" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">9</text>
+  <rect x="1140" y="550" width="310" height="169" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="1295.0" y="601" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">MAC</text>
+  <text x="1295.0" y="625" text-anchor="middle" font-size="21" fill="#2b2b2b">Made its own “I am</text>
+  <text x="1295.0" y="654" text-anchor="middle" font-size="21" fill="#2b2b2b">here” shout. Listens,</text>
+  <text x="1295.0" y="682" text-anchor="middle" font-size="21" fill="#2b2b2b">and the card arrives.</text>
+  <circle cx="1164" cy="574" r="16" fill="#c0392b"/>
+  <text x="1164" y="580" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">14</text>
+  <rect x="1450" y="550" width="310" height="169" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1605.0" y="643" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth MAC</text>
+  <rect x="1820" y="550" width="340" height="169" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1990.0" y="643" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth MAC</text>
+  <rect x="40" y="749" width="340" height="141" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="210.0" y="828" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth link</text>
+  <rect x="440" y="749" width="310" height="141" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="595.0" y="828" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth link</text>
+  <rect x="750" y="749" width="310" height="141" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="905.0" y="800" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">link</text>
+  <text x="905.0" y="825" text-anchor="middle" font-size="21" fill="#2b2b2b">Every frame gets a start</text>
+  <text x="905.0" y="853" text-anchor="middle" font-size="21" fill="#2b2b2b">marker and a checksum.</text>
+  <circle cx="774" cy="773" r="16" fill="#c0392b"/>
+  <text x="774" y="779" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">10</text>
+  <rect x="1140" y="749" width="310" height="141" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="1295.0" y="786" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">link</text>
+  <text x="1295.0" y="810" text-anchor="middle" font-size="21" fill="#2b2b2b">Start marker found,</text>
+  <text x="1295.0" y="839" text-anchor="middle" font-size="21" fill="#2b2b2b">checksum checked.</text>
+  <text x="1295.0" y="867" text-anchor="middle" font-size="21" fill="#2b2b2b">Damaged frames dropped.</text>
+  <circle cx="1164" cy="773" r="16" fill="#c0392b"/>
+  <text x="1164" y="779" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">13</text>
+  <rect x="1450" y="749" width="310" height="141" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1605.0" y="828" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth link</text>
+  <rect x="1820" y="749" width="340" height="141" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1990.0" y="828" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth link</text>
+  <rect x="40" y="920" width="340" height="113" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="210.0" y="985" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth physical</text>
+  <rect x="440" y="920" width="310" height="113" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="595.0" y="985" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth physical</text>
+  <rect x="750" y="920" width="310" height="113" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="905.0" y="957" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">physical</text>
+  <text x="905.0" y="982" text-anchor="middle" font-size="21" fill="#2b2b2b">Bytes become a tone on the</text>
+  <text x="905.0" y="1010" text-anchor="middle" font-size="21" fill="#2b2b2b">skin, switched on and off.</text>
+  <circle cx="774" cy="944" r="16" fill="#c0392b"/>
+  <text x="774" y="950" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">11</text>
+  <rect x="1140" y="920" width="310" height="113" rx="9" fill="#fdeceb" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="1295.0" y="957" text-anchor="middle" font-size="21" fill="#c0392b" font-weight="700">physical</text>
+  <text x="1295.0" y="982" text-anchor="middle" font-size="21" fill="#2b2b2b">The tone is heard, and</text>
+  <text x="1295.0" y="1010" text-anchor="middle" font-size="21" fill="#2b2b2b">read back as bytes.</text>
+  <circle cx="1164" cy="944" r="16" fill="#c0392b"/>
+  <text x="1164" y="950" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">12</text>
+  <rect x="1450" y="920" width="310" height="113" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1605.0" y="985" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth physical</text>
+  <rect x="1820" y="920" width="340" height="113" rx="9" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1990.0" y="985" text-anchor="middle" font-size="21" fill="#707070" font-weight="700">Bluetooth physical</text>
+  <path d="M210.0 238 V247" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M201.0 247 L219.0 247 L210.0 261 Z" fill="#2f5fae"/>
+  <path d="M210.0 381 V390" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M201.0 390 L219.0 390 L210.0 404 Z" fill="#2f5fae"/>
+  <path d="M210.0 524 V533" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M201.0 533 L219.0 533 L210.0 547 Z" fill="#2f5fae"/>
+  <path d="M210.0 723 V732" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M201.0 732 L219.0 732 L210.0 746 Z" fill="#2f5fae"/>
+  <path d="M210.0 894 V903" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M201.0 903 L219.0 903 L210.0 917 Z" fill="#2f5fae"/>
+  <path d="M595.0 916 V907" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M586.0 907 L604.0 907 L595.0 893 Z" fill="#2f5fae"/>
+  <path d="M595.0 745 V736" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M586.0 736 L604.0 736 L595.0 722 Z" fill="#2f5fae"/>
+  <path d="M595.0 546 V537" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M586.0 537 L604.0 537 L595.0 523 Z" fill="#2f5fae"/>
+  <path d="M595.0 403 V394" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M586.0 394 L604.0 394 L595.0 380 Z" fill="#2f5fae"/>
+  <path d="M595.0 260 V251" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M586.0 251 L604.0 251 L595.0 237 Z" fill="#2f5fae"/>
+  <path d="M905.0 238 V247" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M896.0 247 L914.0 247 L905.0 261 Z" fill="#c0392b"/>
+  <path d="M905.0 381 V390" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M896.0 390 L914.0 390 L905.0 404 Z" fill="#c0392b"/>
+  <path d="M905.0 524 V533" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M896.0 533 L914.0 533 L905.0 547 Z" fill="#c0392b"/>
+  <path d="M905.0 723 V732" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M896.0 732 L914.0 732 L905.0 746 Z" fill="#c0392b"/>
+  <path d="M905.0 894 V903" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M896.0 903 L914.0 903 L905.0 917 Z" fill="#c0392b"/>
+  <path d="M1295.0 916 V907" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1286.0 907 L1304.0 907 L1295.0 893 Z" fill="#c0392b"/>
+  <path d="M1295.0 745 V736" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1286.0 736 L1304.0 736 L1295.0 722 Z" fill="#c0392b"/>
+  <path d="M1295.0 546 V537" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1286.0 537 L1304.0 537 L1295.0 523 Z" fill="#c0392b"/>
+  <path d="M1295.0 403 V394" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1286.0 394 L1304.0 394 L1295.0 380 Z" fill="#c0392b"/>
+  <path d="M1295.0 260 V251" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1286.0 251 L1304.0 251 L1295.0 237 Z" fill="#c0392b"/>
+  <path d="M1605.0 238 V247" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1596.0 247 L1614.0 247 L1605.0 261 Z" fill="#2e7d32"/>
+  <path d="M1605.0 381 V390" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1596.0 390 L1614.0 390 L1605.0 404 Z" fill="#2e7d32"/>
+  <path d="M1605.0 524 V533" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1596.0 533 L1614.0 533 L1605.0 547 Z" fill="#2e7d32"/>
+  <path d="M1605.0 723 V732" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1596.0 732 L1614.0 732 L1605.0 746 Z" fill="#2e7d32"/>
+  <path d="M1605.0 894 V903" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1596.0 903 L1614.0 903 L1605.0 917 Z" fill="#2e7d32"/>
+  <path d="M1990.0 916 V907" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1981.0 907 L1999.0 907 L1990.0 893 Z" fill="#2e7d32"/>
+  <path d="M1990.0 745 V736" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1981.0 736 L1999.0 736 L1990.0 722 Z" fill="#2e7d32"/>
+  <path d="M1990.0 546 V537" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1981.0 537 L1999.0 537 L1990.0 523 Z" fill="#2e7d32"/>
+  <path d="M1990.0 403 V394" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1981.0 394 L1999.0 394 L1990.0 380 Z" fill="#2e7d32"/>
+  <path d="M1990.0 260 V251" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1981.0 251 L1999.0 251 L1990.0 237 Z" fill="#2e7d32"/>
+  <path d="M210.0 1037 V1088 H595.0" stroke="#2f5fae" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M595.0 1088 V1051" stroke="#2f5fae" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M586.0 1051 L604.0 1051 L595.0 1037 Z" fill="#2f5fae"/>
+  <text x="402.5" y="1141" text-anchor="middle" font-size="23" fill="#2f5fae" font-weight="700">radio</text>
+  <path d="M905.0 1037 V1088 H1295.0" stroke="#c0392b" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M1295.0 1088 V1051" stroke="#c0392b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1286.0 1051 L1304.0 1051 L1295.0 1037 Z" fill="#c0392b"/>
+  <text x="1100.0" y="1141" text-anchor="middle" font-size="23" fill="#c0392b" font-weight="700">the handshake</text>
+  <text x="1100.0" y="1169" text-anchor="middle" font-size="19" fill="#6a6a6a">two bodies, coupled through skin</text>
+  <path d="M1605.0 1037 V1088 H1990.0" stroke="#2e7d32" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M1990.0 1088 V1051" stroke="#2e7d32" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M1981.0 1051 L1999.0 1051 L1990.0 1037 Z" fill="#2e7d32"/>
+  <text x="1797.5" y="1141" text-anchor="middle" font-size="23" fill="#2e7d32" font-weight="700">radio</text>
+</svg>
