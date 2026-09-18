@@ -731,4 +731,4 @@ Design decisions that were tried and rejected, kept here so they are not repeate
 | Phone client | **Settled: native Android app**, [firmware-architecture.md §11](firmware-architecture.md) |
 | Wristband provisioning (how it learns its own card) | Specified in [firmware-architecture.md §9](firmware-architecture.md) |
 | Role election implementation | Logic tested at development plan M1; hardware binding at M14 |
-| Enclosure and strap | Not designed |
+| Enclosure and strap | Initial design in [hardware/enclosure/](../hardware/enclosure/): two printed halves, 22 mm strap |
