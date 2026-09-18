@@ -313,3 +313,52 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **Why not skip the shout, and send the card blind?** A band that is sending is deaf. Two blind senders talk over each other, and both cards are lost.
 * **One pad, one direction.** The band taking its turn waits twice the recovery time, so the other end is certainly listening.
 * Simulated across all 112 timings two bands can have: exactly one sender, every time.
+
+### 6 Where the reasoning was wrong
+
+Three decisions that looked right on paper and turned out wrong. Each one changed the design.
+
+#### 6.1 Off is not low
+
+* The tone is switched on and off (5.3). At first, *off* meant holding the pin at 0 V.
+* Zero is zero. It looked harmless.
+* But a band has one pad, for sending and for listening. The pad is wired to the band's own amplifier.
+* Holding it low pulled that amplifier to the bottom of its range. Every frame did it, over and over.
+* When the frame ended, the amplifier took **17 ms** to recover. The budget for turning round is **1 ms**.
+* So every frame a band sent left it deaf, just when the other band's frame was due.
+* **Fix: off means let go.** The pin is released, not held. The pad rests in the middle, and the amplifier never notices a frame going out.
+
+![Off is not low](element14-blog/07-off-is-not-low.png)
+
+*What a band does to itself when the tone is off.*
+
+* **One capacitor between the two amplifier stages made smaller**, as a backstop. Any jolt that still gets through is gone in a fraction of a millisecond.
+* The other band gains too. A held-low *off* put a step on the pad thirty times bigger than the tone, and the body carried it across. A released pad sends nothing.
+* Caught by working through the circuit, before the amplifier was built. One change in the firmware, one part on the board.
+
+#### 6.2 Saying it twice
+
+* The card is three frames, most important first (5.4). Frame 1 is the name and the number.
+* The plan was to send frame 1 every other time: 1, 2, 1, 3, 1, 2... Half the airtime on what matters most.
+* It sounded safe. It was the worst option.
+* A frame takes 156 ms. About six fit in a one-second handshake, shared between the two bands.
+* Every repeat of frame 1 is a frame the other band already has. The frame it still needs never goes.
+
+![Saying it twice](element14-blog/08-saying-it-twice.png)
+
+*What the channel carries in a one-second handshake. The two bands take turns, three frames each.*
+
+* Simulated over one-second handshakes:
+  * frame 1 every other time: a complete card **0 %** of the time
+  * each frame once, in turn: a complete card about **half** the time
+* **Fix: plain round robin.** 1, 2, 3, then round again.
+* A brief touch still gets a name and a number. Round robin sends frame 1 first anyway.
+* The order was what kept that promise. The repeating never did.
+
+#### 6.3 The gain that wasn't free
+
+* The pad and the skin make a capacitor. Add one inductor, tuned to 200 kHz, and the two resonate.
+* On paper, **20 to 30 dB** more signal, for one cheap part. Very tempting, with so little getting through (5.3).
+* But a resonance only builds up when little is lost along the way.
+* This link loses a lot on purpose, to keep the wearer safe. The same loss flattens the resonance before it can build.
+* Left out. Written down here so nobody tries it again.

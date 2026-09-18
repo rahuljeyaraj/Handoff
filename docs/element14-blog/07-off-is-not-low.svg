@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="775" viewBox="0 0 1600 775" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="775" fill="#ffffff"/>
+  <rect x="388.2" y="36.0" width="362.6" height="214.2" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="569.5" y="99.5" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">When the</text>
+  <text x="569.5" y="158.9" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">tone is off,</text>
+  <text x="569.5" y="218.2" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">the pin is</text>
+  <rect x="794.8" y="36.0" width="362.6" height="214.2" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="976.1" y="99.5" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">So the</text>
+  <text x="976.1" y="158.9" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">band's own</text>
+  <text x="976.1" y="218.2" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">amplifier is</text>
+  <rect x="1201.4" y="36.0" width="362.6" height="214.2" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="1382.7" y="99.5" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">When the</text>
+  <text x="1382.7" y="158.9" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">frame</text>
+  <text x="1382.7" y="218.2" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">ends, it is</text>
+  <rect x="36.0" y="280.2" width="308.2" height="214.2" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="190.1" y="343.7" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">Held low</text>
+  <text x="190.1" y="403.1" text-anchor="middle" font-size="45" fill="#2b2b2b">as first</text>
+  <text x="190.1" y="462.5" text-anchor="middle" font-size="45" fill="#2b2b2b">designed</text>
+  <rect x="388.2" y="280.2" width="362.6" height="214.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5" stroke-dasharray="10 8"/>
+  <text x="569.5" y="343.7" text-anchor="middle" font-size="45" fill="#555555" font-weight="700">Held at 0 V</text>
+  <text x="569.5" y="403.1" text-anchor="middle" font-size="45" fill="#2b2b2b">Every time</text>
+  <text x="569.5" y="462.5" text-anchor="middle" font-size="45" fill="#2b2b2b">the tone is off.</text>
+  <path d="M756.8 387.3 L772.8 387.3" stroke="#9a9a9a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M772.8 397.2 L772.8 377.4 L788.8 387.3 Z" fill="#9a9a9a"/>
+  <rect x="794.8" y="280.2" width="362.6" height="214.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5" stroke-dasharray="10 8"/>
+  <text x="976.1" y="343.7" text-anchor="middle" font-size="45" fill="#555555" font-weight="700">Pulled down</text>
+  <text x="976.1" y="403.1" text-anchor="middle" font-size="45" fill="#2b2b2b">To the bottom</text>
+  <text x="976.1" y="462.5" text-anchor="middle" font-size="45" fill="#2b2b2b">of its range.</text>
+  <path d="M1163.4 387.3 L1179.4 387.3" stroke="#9a9a9a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M1179.4 397.2 L1179.4 377.4 L1195.4 387.3 Z" fill="#9a9a9a"/>
+  <rect x="1201.4" y="280.2" width="362.6" height="214.2" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5" stroke-dasharray="10 8"/>
+  <text x="1382.7" y="343.7" text-anchor="middle" font-size="45" fill="#555555" font-weight="700">Deaf for 17 ms</text>
+  <text x="1382.7" y="403.1" text-anchor="middle" font-size="45" fill="#2b2b2b">The budget</text>
+  <text x="1382.7" y="462.5" text-anchor="middle" font-size="45" fill="#2b2b2b">is 1 ms.</text>
+  <rect x="36.0" y="524.4" width="308.2" height="214.2" rx="10" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="190.1" y="617.6" text-anchor="middle" font-size="45" fill="#2b2b2b" font-weight="700">Let go</text>
+  <text x="190.1" y="677.0" text-anchor="middle" font-size="45" fill="#2b2b2b">as built</text>
+  <rect x="388.2" y="524.4" width="362.6" height="214.2" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="569.5" y="617.6" text-anchor="middle" font-size="45" fill="#2f5fae" font-weight="700">Released</text>
+  <text x="569.5" y="677.0" text-anchor="middle" font-size="45" fill="#2b2b2b">The pin lets go.</text>
+  <path d="M756.8 631.5 L772.8 631.5" stroke="#2f5fae" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M772.8 641.4 L772.8 621.6 L788.8 631.5 Z" fill="#2f5fae"/>
+  <rect x="794.8" y="524.4" width="362.6" height="214.2" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="976.1" y="587.9" text-anchor="middle" font-size="45" fill="#2f5fae" font-weight="700">Left alone</text>
+  <text x="976.1" y="647.3" text-anchor="middle" font-size="45" fill="#2b2b2b">It stays in</text>
+  <text x="976.1" y="706.7" text-anchor="middle" font-size="45" fill="#2b2b2b">the middle.</text>
+  <path d="M1163.4 631.5 L1179.4 631.5" stroke="#2f5fae" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M1179.4 641.4 L1179.4 621.6 L1195.4 631.5 Z" fill="#2f5fae"/>
+  <rect x="1201.4" y="524.4" width="362.6" height="214.2" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="1382.7" y="587.9" text-anchor="middle" font-size="45" fill="#2f5fae" font-weight="700">Ready at once</text>
+  <text x="1382.7" y="647.3" text-anchor="middle" font-size="45" fill="#2b2b2b">Well inside</text>
+  <text x="1382.7" y="706.7" text-anchor="middle" font-size="45" fill="#2b2b2b">1 ms.</text>
+</svg>
