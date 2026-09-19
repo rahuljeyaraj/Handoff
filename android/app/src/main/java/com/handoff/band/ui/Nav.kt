@@ -218,12 +218,25 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     }
 
     // Home is the list, paired or not: unpaired, its status line is a single
-    // "Pair a band" button into setup, and setup pops back to it when done.
-    NavHost(nav, startDestination = Routes.CONTACTS) {
+    // "Pair a band" button into setup, and setup returns to it when done.
+    // The very first launch opens on setup instead, with a skip on both
+    // steps: pairing is offered, never required.
+    val start = remember {
+        if (address == null && !prefs.setupOffered) Routes.SETUP else Routes.CONTACTS
+    }
+
+    // Setup is either the first launch's root or on top of home. Either way
+    // it goes, and home is what is left underneath — never a second copy.
+    fun leaveSetup() = nav.navigate(Routes.CONTACTS) {
+        popUpTo(Routes.SETUP) { inclusive = true }
+        launchSingleTop = true
+    }
+
+    NavHost(nav, startDestination = start) {
         composable(Routes.SETUP) {
             // A fresh attempt each visit, and a scan that cannot outlive the
             // page.
-            LaunchedEffect(Unit) { step = PairStep.Scanning }
+            LaunchedEffect(Unit) { step = PairStep.Scanning; prefs.setSetupOffered() }
             DisposableEffect(Unit) { onDispose { locating?.cancel(); locating = null } }
             SetupScreen(
                 step = step,
@@ -231,10 +244,10 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
                 onSetUpCard = {
                     // Home underneath, the editor on top: back from the
                     // editor lands on the list, not on setup again.
-                    nav.popBackStack()
+                    leaveSetup()
                     nav.navigate(Routes.CARD)
                 },
-                onSkip = { nav.popBackStack() },
+                onSkip = { leaveSetup() },
             )
         }
 

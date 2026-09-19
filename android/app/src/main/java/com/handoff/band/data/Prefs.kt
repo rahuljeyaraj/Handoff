@@ -79,6 +79,17 @@ class Prefs private constructor(context: Context) {
         _bandOff.value = off
     }
 
+    /**
+     * Setup has been shown once. The first launch opens on it; after that,
+     * paired or skipped, the app opens on home and "Pair a band" is the way
+     * back in.
+     */
+    val setupOffered: Boolean get() = sp.getBoolean(KEY_SETUP_OFFERED, false)
+
+    fun setSetupOffered() {
+        sp.edit { putBoolean(KEY_SETUP_OFFERED, true) }
+    }
+
     /** The wearer's own card, or null when none is set. */
     private val _ownCard = MutableStateFlow(readOwnCard())
     val ownCard: StateFlow<OwnCard?> = _ownCard
@@ -160,6 +171,7 @@ class Prefs private constructor(context: Context) {
         private const val KEY_BAND_OFF = "band_off"
         private const val KEY_OWN_CARD = "own_card"
         private const val KEY_PUSHED = "pushed_card"
+        private const val KEY_SETUP_OFFERED = "setup_offered"
         private val CARD_STRINGS = listOf(".name", ".phones", ".email", ".org", ".title")
 
         @Volatile private var instance: Prefs? = null

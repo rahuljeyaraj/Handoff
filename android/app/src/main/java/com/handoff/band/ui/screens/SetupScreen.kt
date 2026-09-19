@@ -125,7 +125,7 @@ fun SetupScreen(
     Scaffold(snackbarHost = { HandoffSnackbarHost(snackbar) }) { padding ->
         when (step) {
             is PairStep.Connected -> StepTwo(step.name, onSetUpCard, onSkip, Modifier.padding(padding))
-            else -> StepOne(step, snackbar, onCode, Modifier.padding(padding))
+            else -> StepOne(step, snackbar, onCode, onSkip, Modifier.padding(padding))
         }
     }
 }
@@ -147,6 +147,7 @@ private fun StepOne(
     step: PairStep,
     snackbar: SnackbarHostState,
     onCode: (BandCode) -> Unit,
+    onSkip: () -> Unit,
     modifier: Modifier,
 ) {
     var manual by remember { mutableStateOf(false) }
@@ -215,6 +216,13 @@ private fun StepOne(
             TextButton(onClick = { manual = true }, enabled = !busy) {
                 Text("Enter the band code instead")
             }
+        }
+
+        // The band can come later — no band to hand, or one that will not
+        // pair — through "Pair a band" on home. Where step 2 keeps its skip.
+        TextButton(onClick = onSkip, enabled = !busy,
+                   modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 20.dp)) {
+            Text("Skip for now")
         }
     }
 
