@@ -206,6 +206,8 @@ Settings was two short groups.
 
 Under `App`: `Notifications`, `Theme`, `Language`, and `Allow app analytics`. Under `About`: the app version.
 
+The app has no internet permission at all. Every contact he had collected lived on his phone and nowhere else.
+
 He opened `Theme` and picked `Dark`. The lounge was dim and the white page was a lantern.
 
 He sat back. The whole app had taken five minutes to walk through, and there had been nothing in it he needed to look up. That, he had learned over the years, was harder to build than it looked.
@@ -284,6 +286,15 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * That is the weakest step. Rubber soles on a dry floor thin it out.
 * **Battery only.** A band is never worn while it is plugged in. The full safety rules are in appendix A.1.
 
+[TODO when the boards arrive, then delete this note.
+Write: one bullet, "**Touch, not air.**", saying the signal needs skin contact and someone standing close cannot pick it up. Give the real numbers.
+Check (design doc §14.1), received tone level in LSB and whether a card decodes:
+- hands clasped
+- hands 1 cm apart
+- hands 10 cm apart
+- sender's plate off the body, everything else unchanged
+Pass: a card at "clasped", nothing at 10 cm and plate-off.]
+
 * **Most of the signal is lost** getting into the body and out again. About one part in 2,500 survives.
 * **So, two amplifiers of ×11** make it big enough to read.
 * **No mixer, no oscillator.** The software asks one question: *is the tone there right now?* Noise at other pitches is never counted.
@@ -347,6 +358,7 @@ Three steps: hear the tone, read each bit, find where the card starts.
 * **Most important first:** name and number, then email, then the rest.
 * **Never half a field.** Every frame reads on its own, so a number never arrives with the wrong label.
 * **No asking again.** There is no time. A damaged frame fails its checksum and is dropped.
+* **Whatever arrived goes to the phone.** If the hands part after frame 1, Savithri still gets his name and number. Without frame 1 she gets nothing.
 
 #### 5.7 Nothing says go
 
@@ -357,6 +369,7 @@ Three steps: hear the tone, read each bit, find where the card starts.
 * If every band waits to hear someone, no band ever speaks.
 
 * **Being heard is the touch.** There is no channel until the hands meet. Hearing another band means they have.
+* **Any touch counts.** A hug, a pat on the back or hands brushing in a queue swaps cards too. That is fine: a card lands only in the app, never in the phone book, and one tap deletes it.
 * **So every band shouts**, out of step with every other:
   * a short, flat "I am here" shout
   * a moment for its amplifier to recover
@@ -412,7 +425,7 @@ Three decisions that looked right on paper and turned out wrong. Each one change
 
 * Simulated over one-second handshakes:
   * frame 1 every other time: a complete card **0 %** of the time
-  * each frame once, in turn: a complete card about **half** the time
+  * each frame once, in turn: both cards complete **every time**
 * **Fix: plain round robin.** 1, 2, 3, then round again.
 * A brief touch still gets a name and a number. Round robin sends frame 1 first anyway.
 * The order was what kept that promise. The repeating never did.

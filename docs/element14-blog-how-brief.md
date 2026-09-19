@@ -22,14 +22,20 @@ was tried and why it failed, so none of it is rediscovered.
 
 ### Found drafting chapter 7 (18 Sep 2026) — the code against the post
 
-- **Two frames a turn** (`link_sm.c` `frames_per_turn = 2`). Figure 08 draws one
-  frame each, alternating; it needs a redraw to two-frame turns.
-- **Two 3-frame cards take ~1.7 s** to finish both ways, with the "got yours"
-  acknowledgements (R1 R2 | S1 S2 | R3 R1 | S3 S1 | R2 R3). §3.1 and §5.3 say a
-  handshake is about a second.
-- **A cut-short handshake never reaches the phone.** `handoff.c` `on_done()`
-  forwards the card only on COMPLETE. §6.2 and figure 04 promise a brief touch
-  still gets a name and number.
+- ~~**Two frames a turn**~~ **Fixed 19 Sep 2026: the code changed, not the
+  figure.** `frames_per_turn` is now 1, as figure 08 draws. Simulated, two
+  three-frame cards both arrive whole in one second every time (was 50 % at
+  two a turn); `handoff_sweep turn`. Bench, both boards: 30/30 complete, mean
+  1.07 s (was 1.29 s).
+- ~~**Two 3-frame cards take ~1.7 s**~~ Fixed by the same change: both cards
+  are whole after six frames, about 0.95 s.
+- ~~**A cut-short handshake never reaches the phone.**~~ **Fixed 19 Sep 2026.**
+  `on_done()` now forwards a partial card when frame 1 arrived
+  (`frag_rx_partial()`, whole fields only; the band shows it as a success).
+  Bench at a 0.5 s budget: 21/21 partial cards forwarded. **Limit:** frame 1
+  holds name and number only if the two fit in 32 bytes. A long name with a
+  custom phone label spills the number into frame 2 (the bench card "Bench
+  Test" with label "BenchLabel" is 1 byte over). Rohit's card fits.
 - The M14 bench run (105/105, 0.89 s) used **one-frame test cards**. Say so if it is ever quoted.
 
 ### Decided 18 Sep 2026, after the drafts
