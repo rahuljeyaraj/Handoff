@@ -284,6 +284,14 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **The plate never touches skin.** It is half a capacitor, and reaches the body through an electric field, not through metal on skin.
 * **The room carries the signal back.** Nobody holds a second wire, so each band's outer face couples to the floor and walls.
 * That is the weakest step. Rubber soles on a dry floor thin it out.
+
+[TODO when the boards arrive, then delete this note.
+The shoes line above may be backwards. In the usual model, the body leaks signal to the floor, and rubber soles cut that leak, so shoes could make the link stronger.
+Check, received tone level in LSB and whether a card decodes, same two people, same grip:
+- both barefoot
+- both in rubber-soled shoes
+- repeat each three times
+Then keep the line, flip it, or delete it, to match what was measured.]
 * **Battery only.** A band is never worn while it is plugged in. The full safety rules are in appendix A.1.
 
 [TODO when the boards arrive, then delete this note.
@@ -309,10 +317,23 @@ Three steps: hear the tone, read each bit, find where the card starts.
 
 *Dashed: the parts the band does not have.*
 
-* **The usual receiver** shifts the tone down with an oscillator and a mixer, then filters and amplifies it again.
+There are two usual ways to hear a tone that switches on and off.
+
+* **The full receiver** shifts the tone down with an oscillator and a mixer, then filters and amplifies it again.
 * **It needs two mixers**, I and Q. The two bands run on separate clocks, so the tone arrives at any phase, and one mixer's output fades with the phase.
+* **The simple receiver** is a diode and a capacitor, an envelope detector. Or a tone-decoder chip such as the LM567.
 * **The band does all of it in software.** The converter samples the tone itself, 500,000 times a second. A **Goertzel filter** turns every 25 samples into one number: how much 200 kHz is there, at any phase.
-* **Four parts gone**, about half the analogue circuit. And with no mixer, there is no mixer offset drifting under the reading.
+
+**Better than the full receiver:**
+
+* **Four parts gone**, about half the analogue circuit.
+* **No mixer offset** drifting under the reading.
+
+**Better than the simple receiver:**
+
+* **A diode hears every pitch.** Mains hum, phone chargers and lights all count as signal. Goertzel counts only 200 kHz.
+* **The LM567 only says yes or no.** The band needs a number, to tell which half of a bit is louder (below).
+* **The pitch never drifts.** The LM567's pitch is set by a resistor and a capacitor. Goertzel's is set by the crystal clock.
 
 **Why Goertzel and not an FFT.** Both measure frequencies. An FFT measures all of them, and the band needs one.
 

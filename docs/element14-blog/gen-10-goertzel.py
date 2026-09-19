@@ -1,7 +1,8 @@
 # Generates docs/element14-blog/10-goertzel.svg and .png
-# What the Goertzel filter replaces. Top row: the usual receiver, which shifts
+# What the Goertzel filter replaces. Top row: the full receiver, which shifts
 # the tone down with an oscillator and mixers, then filters and amplifies it
-# again (design §4.3). Bottom row: the band's, where the converter samples the
+# again (design §4.3). Middle row: the simple receiver, a diode envelope
+# detector (or an LM567). Bottom row: the band's, where the converter samples the
 # tone itself and a Goertzel filter in software measures it. The parts the band
 # does not have are dashed. Colours follow figure 09: purple feeds the Pico,
 # teal is the Pico (the converter and the software in it).
@@ -16,13 +17,19 @@ AMPS = ("Two amplifiers", "The tone arrives tiny.", IN)
 
 # (heading, five slots of (title, body, style, dashed) or None)
 ROWS = [
-    ("The usual receiver",
+    ("The full receiver",
      [AMPS + (False,),
       ("Oscillator, mixers", "Shift the tone down. Two, as the clocks are not in step.", GONE, True),
       ("Filter", "Keeps only the shifted tone.", GONE, True),
       ("Amplifier", "Boosts it again.", GONE, True),
       ("Converter", "Samples the slow, shifted result.", PICO_C, False)]),
-    ("The band's receiver: four parts fewer",
+    ("The simple receiver",
+     [AMPS + (False,),
+      ("Diode, capacitor", "How loud, at every pitch. Or an LM567: yes or no.", GONE, True),
+      None,
+      ("Converter", "Samples the loudness.", PICO_C, False),
+      None]),
+    ("The band's receiver: one pitch, one number",
      [AMPS + (False,),
       None, None,
       ("Converter", "Fast enough to sample the tone itself.", PICO_C, False),
