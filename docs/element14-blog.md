@@ -55,7 +55,7 @@ It was a band. A small orange case, on a dark strap.
 
 He looked at her, then at the band. "Just from the handshake."
 
-"Just from the handshake." She was clearly enjoying his face. "I know. Everyone does that face."
+"Just from the handshake." She was clearly enjoying his surprise. "I know. Everyone does that face."
 
 #### 2.1 Pairing with the phone
 
