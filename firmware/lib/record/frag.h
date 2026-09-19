@@ -60,6 +60,10 @@ frag_err_t frag_rx_add(frag_rx_t *r, const frame_hdr_t *h,
                        const uint8_t *payload, size_t len);
 bool       frag_rx_complete(const frag_rx_t *r);
 
+/* Fragment `index` has arrived. Fragment 0 is the name and the mobile, so this
+ * is what decides whether a cut-short contact still gives the wearer a card. */
+bool       frag_rx_has(const frag_rx_t *r, uint8_t index);
+
 /* Number of fragments still missing. Drives the status characteristic. */
 uint8_t    frag_rx_missing(const frag_rx_t *r);
 
@@ -70,5 +74,21 @@ uint8_t    frag_rx_missing(const frag_rx_t *r);
  * mechanism behind architecture §8.4's graceful degradation table.
  */
 size_t     frag_rx_blob(const frag_rx_t *r, const uint8_t **blob);
+
+/*
+ * What a contact cut short can safely hand to the phone, as a TLV blob in
+ * `out` (at least FRAME_MAX_FRAGS * HANDOFF_FRAG_PAYLOAD bytes). Returns 0 when
+ * fragment 0 — the name and the mobile — is not usable: no name, no card.
+ *
+ * frag_rx_blob() is not enough here. A field longer than a fragment is a head
+ * that fills its fragment and a TAG_CONT that opens the next one, and with one
+ * half missing the other decodes as something wrong: a continuation appended
+ * to whatever field came before, or an address cut off mid-street. So a head
+ * whose continuation did not arrive is dropped, and so is a continuation whose
+ * head did not. Short, never wrong. A head that exactly fills its fragment and
+ * is followed by a missing one is dropped too — it cannot be told from a split
+ * field, and losing it is the safe side.
+ */
+size_t     frag_rx_partial(const frag_rx_t *r, uint8_t *out, size_t max);
 
 #endif /* HANDOFF_FRAG_H */

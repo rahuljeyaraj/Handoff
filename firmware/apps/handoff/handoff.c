@@ -62,6 +62,8 @@
  *   y [N]     sync pulse on GP15 now, or N of them 3 s apart — only in a
  *             build with HANDOFF_BENCH_SYNC=ON; GP15 is the button otherwise
  *   d [ms]    pause after a handshake before the trigger re-arms (1500)
+ *   k [ms]    contact budget: a short one cuts every handshake off, as
+ *             hands parting would (0 = back to the default)
  *   w         store a bench card named after this board (needs no phone)
  *   r         print the last received card
  *   s         stats           z   zero the stats
@@ -183,7 +185,7 @@ static uint64_t           s_sync_next_us;
 
 typedef struct {
     uint64_t since;
-    uint32_t complete, abort;
+    uint32_t complete, partial, abort;     /* partial: cut short, card sent */
     uint32_t as_sender, as_receiver;
     uint32_t syncs;
     uint32_t dur_max_ms, dur_sum_ms;
@@ -638,26 +640,48 @@ static void arm(uint64_t now)
  * A handshake ended. Decode what came, print it, and hand it to the phone
  * half. Then park until `d` has passed, so the far end — which may be a turn
  * behind us, the two-army problem — finishes before the trigger re-arms.
+ *
+ * A contact cut short still hands over a card if their first frame is in:
+ * that frame is the name and the mobile, and frag_rx_partial() keeps only
+ * whole fields, so what goes to the phone is short but never wrong. The app
+ * merges by number, so a later, longer handshake fills in the rest. Without
+ * the first frame there is no name to file it under, and nothing goes.
  */
 static void on_done(uint64_t now)
 {
+    static uint8_t part_blob[FRAME_MAX_FRAGS * HANDOFF_FRAG_PAYLOAD];
     const uint8_t *blob = NULL;
-    size_t n = link_sm_received(&s_sm, &blob);
+    const bool ok = s_sm.state == LINK_COMPLETE;
+    size_t n;
     compact_rec_t rec;
     uint32_t ms = (uint32_t)((now - s_sm.started_us) / 1000u);
-    bool ok = s_sm.state == LINK_COMPLETE;
+    bool card, part;
 
-    if (ok) s_st.complete++; else s_st.abort++;
+    if (ok) {
+        n = link_sm_received(&s_sm, &blob);
+    } else {
+        n = frag_rx_partial(&s_sm.rx, part_blob, sizeof part_blob);
+        blob = part_blob;
+    }
+
+    s_rx_text_len = 0;
+    card = n && compact_decode(blob, n, &rec) == COMPACT_OK &&
+           vcard_render(&rec, s_rx_text, sizeof s_rx_text, &s_rx_text_len) == COMPACT_OK;
+    if (!card) s_rx_text_len = 0;
+    part = !ok && card;
+
+    if (ok) s_st.complete++; else if (part) s_st.partial++; else s_st.abort++;
     if (s_sm.role == LINK_ROLE_SENDER) s_st.as_sender++;
     else if (s_sm.role == LINK_ROLE_RECEIVER) s_st.as_receiver++;
     s_st.dur_sum_ms += ms;
     if (ms > s_st.dur_max_ms) s_st.dur_max_ms = ms;
-    wear_post(ok ? UI_EV_LINK_COMPLETE : UI_EV_LINK_ABORT);
+    /* To the wearer a partial card is a card: same green, same buzz. */
+    wear_post(ok || part ? UI_EV_LINK_COMPLETE : UI_EV_LINK_ABORT);
 
     printf("done %llu %s #%lu role %s %lu ms sent %lu good %lu bad %lu turns %lu "
            "retries %u frags %u/%u\n",
-           (unsigned long long)now, ok ? "COMPLETE" : "ABORT",
-           (unsigned long)(s_st.complete + s_st.abort), role_name(s_sm.role),
+           (unsigned long long)now, ok ? "COMPLETE" : part ? "PARTIAL" : "ABORT",
+           (unsigned long)(s_st.complete + s_st.partial + s_st.abort), role_name(s_sm.role),
            (unsigned long)ms, (unsigned long)(s_sm.frames_sent - s_arm_sent),
            (unsigned long)(s_sm.frames_rx_good - s_arm_good),
            (unsigned long)(s_sm.frames_rx_bad - s_arm_bad),
@@ -665,9 +689,7 @@ static void on_done(uint64_t now)
            (unsigned)s_sm.retries,
            (unsigned)(s_sm.rx.count - frag_rx_missing(&s_sm.rx)), (unsigned)s_sm.rx.count);
 
-    s_rx_text_len = 0;
-    if (n && compact_decode(blob, n, &rec) == COMPACT_OK &&
-        vcard_render(&rec, s_rx_text, sizeof s_rx_text, &s_rx_text_len) == COMPACT_OK) {
+    if (card) {
         size_t i;
         printf("  got %u bytes:", (unsigned)n);
         /* The card, one line, so the log stays one line per event. */
@@ -677,7 +699,7 @@ static void on_done(uint64_t now)
             putchar(c == '\n' ? '|' : c);
         }
         putchar('\n');
-        if (ok) s_rx_ready = true;          /* the phone bonus, on 93D1 */
+        if (ok || part) s_rx_ready = true;  /* the phone bonus, on 93D1 */
     } else {
         printf("  got %u bytes, not a decodable record\n", (unsigned)n);
     }
@@ -778,12 +800,13 @@ static void poll_link(uint64_t now)
 
 static void print_stats(void)
 {
-    uint32_t n = s_st.complete + s_st.abort;
+    uint32_t n = s_st.complete + s_st.partial + s_st.abort;
 
-    printf("  %6lu s  handshakes %lu: %lu complete %lu abort, as sender %lu receiver %lu; "
-           "syncs %lu\n",
+    printf("  %6lu s  handshakes %lu: %lu complete %lu partial %lu abort, as sender %lu "
+           "receiver %lu; syncs %lu\n",
            (unsigned long)elapsed_s(s_st.since), (unsigned long)n,
-           (unsigned long)s_st.complete, (unsigned long)s_st.abort,
+           (unsigned long)s_st.complete, (unsigned long)s_st.partial,
+           (unsigned long)s_st.abort,
            (unsigned long)s_st.as_sender, (unsigned long)s_st.as_receiver,
            (unsigned long)s_st.syncs);
     printf("           duration mean %lu max %lu ms; shouts %lu frames sent %lu good %lu "
@@ -831,6 +854,7 @@ static void help(void)
     printf("\n  g         link on / off (now %s)\n"
            "  y [N]     sync pulse on GP15, or N of them 3 s apart\n"
            "  d [ms]    pause after a handshake before re-arming (now %lu)\n"
+           "  k [ms]    contact budget, to cut handshakes short (now %lu; 0 = default)\n"
            "  w         store a bench card named after this board\n"
            "  r         print the last received card\n"
            "  s         stats           z  zero\n"
@@ -840,6 +864,7 @@ static void help(void)
            "  b <ms>    press the button for that long\n"
            "  p [mv]    measure VSYS at the next quiet tick, or feed the wearer side a value\n",
            s_link_on ? "on" : "off", (unsigned long)(s_reidle_us / 1000u),
+           (unsigned long)(s_cfg.contact_budget_us / 1000u),
            s_verbose ? "(on)" : "(off)", wear_tracing() ? "(on)" : "(off)");
 }
 
@@ -928,6 +953,17 @@ static void dispatch(const char *line)
     case 'd':
         if (have_arg) s_reidle_us = arg * 1000u;
         printf("    re-arm %lu ms after a handshake\n", (unsigned long)(s_reidle_us / 1000u));
+        break;
+    case 'k':
+        /* Hands parting early, on a bench whose wire never lets go: the
+         * budget is where a cut-short contact ends. 0 puts the default back. */
+        if (have_arg) {
+            link_cfg_t def;
+            link_cfg_pico(&def);
+            s_cfg.contact_budget_us = arg ? arg * 1000u : def.contact_budget_us;
+            s_sm.cfg.contact_budget_us = s_cfg.contact_budget_us;
+        }
+        printf("    contact budget %lu ms\n", (unsigned long)(s_cfg.contact_budget_us / 1000u));
         break;
     case 'w': write_bench_card(); break;
     case 'r': print_received(); break;
@@ -1064,12 +1100,13 @@ int main(void)
                 next_hb += HEARTBEAT_US;
                 /* chips and sps are the pair that showed the ADC being taken
                  * from the ring: a frozen count over a decaying rate. */
-                printf("hb %lu s %s %s ok %lu abort %lu shouts %lu frames %lu/%lu/%lu "
+                printf("hb %lu s %s %s ok %lu part %lu abort %lu shouts %lu frames %lu/%lu/%lu "
                        "cut %lu stalls %lu load %u%% chips %lu sps %lu overruns %lu "
                        "vsys %u\n",
                        (unsigned long)elapsed_s(s_st.since), link_state_name(s_sm.state),
                        s_link_on ? (s_parked ? "parked" : "on") : "off",
-                       (unsigned long)s_st.complete, (unsigned long)s_st.abort,
+                       (unsigned long)s_st.complete, (unsigned long)s_st.partial,
+                       (unsigned long)s_st.abort,
                        (unsigned long)(s_sm.trig.shouts - s_st.shouts_at_zero),
                        (unsigned long)(s_sm.frames_sent - s_st.frames_at_zero),
                        (unsigned long)(s_sm.frames_rx_good - s_st.good_at_zero),

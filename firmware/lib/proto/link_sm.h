@@ -66,9 +66,11 @@ typedef enum {
 #define LINK_MAX_RETRIES 4
 
 typedef struct {
-    /* Frames sent before handing the channel over. One frame is ~150 ms at
-     * HANDOFF_GZ_N 25, so a turn of 2 is about a third of a one-second
-     * contact — swept at M1 alongside the carousel weighting. */
+    /* Frames sent before handing the channel over. One frame is ~156 ms at
+     * HANDOFF_GZ_N 25, so a turn of 1 lets two three-frame cards cross whole
+     * in one second: A1 B1 A2 B2 A3 B3. A turn of 2 lands B3 at the eighth
+     * frame, and a one-second contact completes half as often — measured by
+     * `handoff_sweep turn`. */
     uint8_t  frames_per_turn;
 
     /*

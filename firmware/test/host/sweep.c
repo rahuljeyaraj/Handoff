@@ -8,12 +8,13 @@
  *   payload    fragment payload size, swept against frame loss
  *   carousel   the 0,1,0,2,... weighting, swept against contact duration
  *   guard      windows discarded at each chip boundary
+ *   turn       frames sent before handing the channel over
  *
  * gz_n cannot be swept at runtime — it is a compile-time constant that sizes
  * buffers and is _Static_assert-ed against the carrier — so that one is run by
  * building this twice. scripts/test.py --sweep does it.
  *
- *   handoff_sweep gz_n | payload | carousel | guard | all
+ *   handoff_sweep gz_n | payload | carousel | guard | turn | all
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -225,6 +226,66 @@ static void sweep_carousel(void)
     printf("  cost of ever finishing the card.\n");
 }
 
+/* ---- frames per turn ---------------------------------------------------- */
+
+/* Name and mobile, email, organisation: three fragments, the card the post
+ * draws. k_card above is four. */
+static const char k_card3[] =
+    "BEGIN:VCARD\r\nVERSION:3.0\r\n"
+    "FN:Rohit Menon\r\n"
+    "TEL;TYPE=CELL:+91 98765 43210\r\n"
+    "EMAIL:rohit.menon@gmail.com\r\n"
+    "ORG:Menon Instruments\r\n"
+    "END:VCARD\r\n";
+
+static void sweep_turn_card(const char *card)
+{
+    static const uint64_t durations[] = { 500000, 1000000, 1500000, 2000000 };
+    uint8_t fpt;
+    size_t di;
+
+    {
+        sim_t s;
+        sim_init(&s, card, card, NULL, 1u);
+        printf("  a %u-fragment card\n\n", s.rec_a.count);
+    }
+    printf("  per turn   contact   name+number   whole card\n");
+    printf("  ---------------------------------------------\n");
+
+    for (fpt = 1; fpt <= 3; fpt++) {
+        for (di = 0; di < 4; di++) {
+            int trial, first = 0, whole = 0;
+            const int trials = 48;
+
+            for (trial = 0; trial < trials; trial++) {
+                sim_t s;
+                link_cfg_t cfg;
+
+                link_cfg_default(&cfg);
+                cfg.frames_per_turn = fpt;
+                sim_init(&s, card, card, &cfg, (uint64_t)trial * 313u + fpt + 1u);
+                sim_run(&s, durations[di]);
+
+                first += frag_rx_has(&s.sm_a.rx, 0) + frag_rx_has(&s.sm_b.rx, 0);
+                whole += frag_rx_complete(&s.sm_a.rx) + frag_rx_complete(&s.sm_b.rx);
+            }
+            printf("  %8u  %6lu ms  %10d%%  %10d%%\n", fpt,
+                   (unsigned long)(durations[di] / 1000u),
+                   first * 100 / (2 * trials), whole * 100 / (2 * trials));
+        }
+    }
+    printf("\n");
+}
+
+static void sweep_turn(void)
+{
+    printf("== frames per turn\n\n");
+    printf("  Both ends, both directions: how often each end holds the other's\n");
+    printf("  name and number (fragment 0), and how often the whole card.\n\n");
+    sweep_turn_card(k_card3);
+    sweep_turn_card(k_card);
+}
+
 int main(int argc, char **argv)
 {
     const char *what = (argc > 1) ? argv[1] : "all";
@@ -234,10 +295,11 @@ int main(int argc, char **argv)
     if (all || strcmp(what, "guard") == 0)    { sweep_guard();    printf("\n"); }
     if (all || strcmp(what, "payload") == 0)  { sweep_payload();  printf("\n"); }
     if (all || strcmp(what, "carousel") == 0) { sweep_carousel(); printf("\n"); }
+    if (all || strcmp(what, "turn") == 0)     { sweep_turn();     printf("\n"); }
 
     if (!all && strcmp(what, "gz_n") && strcmp(what, "guard") &&
-        strcmp(what, "payload") && strcmp(what, "carousel")) {
-        fprintf(stderr, "usage: %s [gz_n|guard|payload|carousel|all]\n", argv[0]);
+        strcmp(what, "payload") && strcmp(what, "carousel") && strcmp(what, "turn")) {
+        fprintf(stderr, "usage: %s [gz_n|guard|payload|carousel|turn|all]\n", argv[0]);
         return 2;
     }
     return 0;

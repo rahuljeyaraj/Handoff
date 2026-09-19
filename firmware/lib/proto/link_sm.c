@@ -13,7 +13,7 @@ const char *link_state_name(link_state_t s)
 
 void link_cfg_default(link_cfg_t *c)
 {
-    c->frames_per_turn   = 2;
+    c->frames_per_turn   = 1;
     c->rx_idle_us        = 6u * HANDOFF_TURNAROUND_US;
     /* Twenty frames. Expressed in frames rather than milliseconds because a
      * budget that is generous at one chip rate is a hard cut-off at another —

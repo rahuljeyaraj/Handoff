@@ -102,6 +102,11 @@ bool frag_rx_complete(const frag_rx_t *r)
     return r->started && (r->have & want) == want;
 }
 
+bool frag_rx_has(const frag_rx_t *r, uint8_t index)
+{
+    return r->started && index < r->count && (r->have & (1u << index));
+}
+
 uint8_t frag_rx_missing(const frag_rx_t *r)
 {
     uint8_t i, miss = 0;
@@ -115,4 +120,53 @@ size_t frag_rx_blob(const frag_rx_t *r, const uint8_t **blob)
 {
     if (blob) *blob = r->buf;
     return r->started ? (size_t)r->count * HANDOFF_FRAG_PAYLOAD : 0u;
+}
+
+/* The fragment is one TLV filling the whole payload: the head (or a middle)
+ * of a field that runs on into the next fragment. */
+static bool runs_on(const uint8_t *f)
+{
+    return f[0] != TAG_NOP && 2u + f[1] == HANDOFF_FRAG_PAYLOAD;
+}
+
+size_t frag_rx_partial(const frag_rx_t *r, uint8_t *out, size_t max)
+{
+    const size_t len = (size_t)r->count * HANDOFF_FRAG_PAYLOAD;
+    bool keep[FRAME_MAX_FRAGS];
+    int i;
+
+    if (!r->started || max < len) return 0;
+
+    for (i = 0; i < r->count; i++) keep[i] = (r->have & (1u << i)) != 0;
+
+    /* Back to front, so a chain head-CONT-CONT drops as a whole when its
+     * tail is missing. A fragment that runs on keeps only if the next one is
+     * kept and carries the continuation. */
+    for (i = r->count - 1; i >= 0; i--) {
+        const uint8_t *f = r->buf + (size_t)i * HANDOFF_FRAG_PAYLOAD;
+        if (!keep[i] || !runs_on(f)) continue;
+        if (i + 1 >= r->count || !keep[i + 1] ||
+            r->buf[(size_t)(i + 1) * HANDOFF_FRAG_PAYLOAD] != TAG_CONT)
+            keep[i] = false;
+    }
+
+    memset(out, TAG_NOP, len);
+    for (i = 0; i < r->count; i++) {
+        const uint8_t *f = r->buf + (size_t)i * HANDOFF_FRAG_PAYLOAD;
+        uint8_t *o = out + (size_t)i * HANDOFF_FRAG_PAYLOAD;
+        size_t skip = 0;
+
+        if (!keep[i]) continue;
+        /* A continuation whose head was dropped or never came: blank it,
+         * keep whatever whole fields follow it in the same fragment. One that
+         * fills the fragment is a middle, and orphans the next one too. */
+        if (f[0] == TAG_CONT && (i == 0 || !keep[i - 1])) {
+            skip = 2u + f[1];
+            if (runs_on(f)) { keep[i] = false; continue; }
+        }
+        if (skip < HANDOFF_FRAG_PAYLOAD)
+            memcpy(o + skip, f + skip, HANDOFF_FRAG_PAYLOAD - skip);
+    }
+
+    return keep[0] ? len : 0u;
 }
