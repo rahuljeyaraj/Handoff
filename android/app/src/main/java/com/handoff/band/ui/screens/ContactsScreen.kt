@@ -314,12 +314,16 @@ val Prefs.Sort.label: String
         Prefs.Sort.AZ -> "A to Z"
     }
 
-/** Name and organisation, because "who was that person from PCBWay" is the real question. */
+/**
+ * Name, organisation and the wearer's note, because "who was that person from
+ * PCBWay" and "who did I promise the script to" are the real questions.
+ */
 fun matches(h: Handshake, query: String): Boolean {
     val q = query.trim()
     if (q.isEmpty()) return true
     return h.displayName.contains(q, ignoreCase = true) ||
-        h.org?.contains(q, ignoreCase = true) == true
+        h.org?.contains(q, ignoreCase = true) == true ||
+        h.note?.contains(q, ignoreCase = true) == true
 }
 
 /** Newest-first under Today / Yesterday / Earlier; A–Z flat. */
@@ -433,9 +437,14 @@ private fun highlighted(text: String, query: String): AnnotatedString {
     }
 }
 
-/** "Org · reach-them-by", the two facts a list line has room for. */
+/**
+ * One fact, never two: a 360 dp row cut "Org · number" off every time. The
+ * organisation says who someone is; failing that the title, then a way to
+ * reach them. The number is one tap away on their page.
+ */
 fun secondaryLine(h: Handshake): String =
-    listOfNotNull(h.org, h.phones.firstOrNull()?.number ?: h.email).joinToString(" · ")
+    listOf(h.org, h.title, h.phones.firstOrNull { !it.blank }?.number, h.email)
+        .firstOrNull { !it.isNullOrBlank() }.orEmpty()
 
 // No "set your card" nudge here: the status line's red slashed card is
 // the whole signal, and the Band page is where the card gets set.

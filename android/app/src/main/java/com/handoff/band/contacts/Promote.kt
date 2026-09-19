@@ -1,6 +1,7 @@
 package com.handoff.band.contacts
 
 import android.content.ContentProviderOperation
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
@@ -53,6 +54,22 @@ object Promote {
         PhoneLabel.NONE -> ContactsContract.CommonDataKinds.Phone.TYPE_OTHER
     }
 
+    /**
+     * Given and family name such that "given family" is the name exactly as
+     * written. The last word before any bracket is the family name and the
+     * bracket rides with it: "Vikram Sharma (Vivado License)" is Vikram /
+     * Sharma (Vivado License), "Anne Marie Smith" is Anne Marie / Smith, and a
+     * single word is a given name alone.
+     */
+    internal fun nameParts(name: String): Pair<String, String> {
+        val n = name.trim().replace(Regex("\\s+"), " ")
+        val cut = n.indexOf('(').let { if (it < 0) n.length else it }
+        val words = n.substring(0, cut).trim().split(" ").filter { it.isNotEmpty() }
+        if (words.size < 2) return n to ""
+        val given = words.dropLast(1).joinToString(" ")
+        return given to n.substring(given.length).trim()
+    }
+
     fun intentFor(card: VCard): Intent = intentFor(
         name = card.displayName, phones = card.phones, email = card.email,
         org = card.org, title = card.title, note = card.note,
@@ -60,8 +77,8 @@ object Promote {
 
     /**
      * From the stored row rather than the raw vCard, so the wearer's edits and
-     * their note go into the system editor. `Insert.NAME` is a single string,
-     * so a name they have corrected carries exactly as written.
+     * their note go into the system editor. A name they have corrected goes
+     * as given + family ([nameParts]), so it carries exactly as written.
      */
     fun intentFor(h: Handshake): Intent = intentFor(
         name = h.displayName, phones = h.phones, email = h.email,
@@ -96,7 +113,19 @@ object Promote {
     ): Intent = Intent(ContactsContract.Intents.Insert.ACTION).apply {
         type = ContactsContract.RawContacts.CONTENT_TYPE
 
-        putExtra(ContactsContract.Intents.Insert.NAME, name)
+        // The name as a structured row, not Insert.NAME: the editor splits a
+        // single string on every space, so a renamed "Vikram Sharma (Vivado
+        // License)" arrived as middle name "(Vivado", surname "License)".
+        val (given, family) = nameParts(name)
+        putParcelableArrayListExtra(ContactsContract.Intents.Insert.DATA, arrayListOf(
+            ContentValues().apply {
+                put(ContactsContract.Data.MIMETYPE,
+                    ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+                put(ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME, given)
+                if (family.isNotEmpty())
+                    put(ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME, family)
+            },
+        ))
 
         val slots = listOf(
             ContactsContract.Intents.Insert.PHONE to
@@ -186,10 +215,13 @@ object Promote {
                 .build()
         }
 
-        // DISPLAY_NAME alone: the provider splits it into given and family
-        // the same way the editor does for Insert.NAME.
+        // Given and family from [nameParts], as the Insert does, so a renamed
+        // contact reads back exactly as the wearer wrote it.
+        val (given, family) = nameParts(h.displayName)
         row(ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE,
-            ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME to h.displayName)
+            ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME to h.displayName,
+            ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME to given,
+            ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME to family)
         // One row per number, each with its own label. A custom one is
         // TYPE_CUSTOM plus the word itself, which is how the phone's own
         // Contacts app stores a label somebody typed.

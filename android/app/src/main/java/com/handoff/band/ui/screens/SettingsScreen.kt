@@ -40,6 +40,12 @@ import com.handoff.band.ui.components.SectionHeader
 import com.handoff.band.ui.components.SettingsRow
 
 /**
+ * The Advanced row (bench and diagnostic tools) is hidden: the bench no longer
+ * uses it. The screen and its route stay; set this true to bring the row back.
+ */
+private const val SHOW_ADVANCED = false
+
+/**
  * Settings: the three things about the app itself, then About.
  *
  * Nothing here belongs to a contact or to the band. Sort order went back to
@@ -105,10 +111,12 @@ fun SettingsScreen(
             SettingsRow("App version", icon = Icons.Filled.Info, subtitle = appVersion,
                         chevron = false)
 
-            HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            if (SHOW_ADVANCED) {
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
-            SettingsRow("Advanced", icon = HandoffIcons.Advanced,
-                        subtitle = "Bench and diagnostic tools", onClick = onAdvanced)
+                SettingsRow("Advanced", icon = HandoffIcons.Advanced,
+                            subtitle = "Bench and diagnostic tools", onClick = onAdvanced)
+            }
 
             Spacer(Modifier.height(24.dp))
         }
