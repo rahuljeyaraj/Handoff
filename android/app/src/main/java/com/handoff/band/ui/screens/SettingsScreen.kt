@@ -22,7 +22,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -41,7 +40,7 @@ import com.handoff.band.ui.components.SectionHeader
 import com.handoff.band.ui.components.SettingsRow
 
 /**
- * Settings: the four things about the app itself, then About.
+ * Settings: the three things about the app itself, then About.
  *
  * Nothing here belongs to a contact or to the band. Sort order went back to
  * the list it sorts — the toolbar control on home is the only one now — and
@@ -54,24 +53,23 @@ import com.handoff.band.ui.components.SettingsRow
  * The rows are in the order a wearer needs them. Notifications first —
  * missing the notice that a card arrived is the one setting that loses
  * something — then Theme, which is the one people actually change; Language
- * and analytics are set once, if ever, and sit below.
+ * is set once, if ever, and sits below.
  *
  * Notifications opens Android's own screen for this app rather than
  * mirroring its switches: the app posts two kinds of notice (the foreground
  * service's, and a handshake's) and the system is where they are turned
- * down. [language] and [analyticsOn] are remembered but do nothing yet —
- * see `Prefs.Language` and `Prefs.analytics` for what each one still needs.
+ * down. [language] is remembered but does nothing yet — see
+ * `Prefs.Language` for what it still needs. There is no analytics row: the
+ * app has no internet permission, so there is nothing to consent to.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     theme: Prefs.Theme,
     language: Prefs.Language,
-    analyticsOn: Boolean,
     appVersion: String,
     onTheme: (Prefs.Theme) -> Unit,
     onLanguage: (Prefs.Language) -> Unit,
-    onAnalytics: (Boolean) -> Unit,
     onNotifications: () -> Unit,
     onAdvanced: () -> Unit,
     onBack: () -> Unit,
@@ -102,9 +100,6 @@ fun SettingsScreen(
                         onClick = { themeDialog = true })
             SettingsRow("Language", icon = HandoffIcons.Globe, subtitle = language.label,
                         onClick = { languageDialog = true })
-            SettingsRow("Allow app analytics", icon = HandoffIcons.Chart,
-                        subtitle = "Anonymous usage stats", chevron = false,
-                        trailing = { Switch(checked = analyticsOn, onCheckedChange = onAnalytics) })
 
             SectionHeader("About")
             SettingsRow("App version", icon = Icons.Filled.Info, subtitle = appVersion,

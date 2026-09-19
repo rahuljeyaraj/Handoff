@@ -165,13 +165,6 @@ object HandoffIcons {
             "M12 3.5a5 8.5 0 0 1 0 17a5 8.5 0 0 1 0 -17z")
     }
 
-    /** Three bars on a baseline — the analytics row. */
-    val Chart: ImageVector by lazy {
-        stroked("Chart", 1.75f,
-            "M4 19.5h16",
-            "M7.5 19.5v-5.5M12 19.5v-10M16.5 19.5v-7")
-    }
-
     /** A chip with pins on four sides — the Firmware row. */
     val Chip: ImageVector by lazy {
         stroked("Chip", 1.6f,

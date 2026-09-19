@@ -204,7 +204,7 @@ Now the people who shook his hand would get a number labelled `IRQ`. If they kne
 
 Settings was two short groups.
 
-Under `App`: `Notifications`, `Theme`, `Language`, and `Allow app analytics`. Under `About`: the app version.
+Under `App`: `Notifications`, `Theme` and `Language`. Under `About`: the app version.
 
 The app has no internet permission at all. Every contact he had collected lived on his phone and nowhere else.
 

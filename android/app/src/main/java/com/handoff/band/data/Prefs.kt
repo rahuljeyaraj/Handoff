@@ -152,26 +152,11 @@ class Prefs private constructor(context: Context) {
         _language.value = l
     }
 
-    /**
-     * "Allow app analytics", off until it is switched on. Nothing in the app
-     * collects anything today — there is no analytics SDK here and no network
-     * call that could carry one — so this is the consent, kept ahead of the
-     * thing it would gate rather than after it.
-     */
-    private val _analytics = MutableStateFlow(sp.getBoolean(KEY_ANALYTICS, false))
-    val analytics: StateFlow<Boolean> = _analytics
-
-    fun setAnalytics(on: Boolean) {
-        sp.edit { putBoolean(KEY_ANALYTICS, on) }
-        _analytics.value = on
-    }
-
     companion object {
         private const val FILE = "handoff.prefs"
         private const val KEY_THEME = "theme"
         private const val KEY_SORT = "sort"
         private const val KEY_LANGUAGE = "language"
-        private const val KEY_ANALYTICS = "analytics"
         private const val KEY_BAND_OFF = "band_off"
         private const val KEY_OWN_CARD = "own_card"
         private const val KEY_PUSHED = "pushed_card"

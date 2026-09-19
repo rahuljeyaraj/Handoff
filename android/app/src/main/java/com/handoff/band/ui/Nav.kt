@@ -92,7 +92,6 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
     val theme by prefs.theme.collectAsState()
     val sort by prefs.sort.collectAsState()
     val language by prefs.language.collectAsState()
-    val analytics by prefs.analytics.collectAsState()
 
     val ownCard by prefs.ownCard.collectAsState()
     val cardSet = ownCard != null
@@ -388,11 +387,9 @@ fun HandoffNavHost(nav: NavHostController = rememberNavController()) {
             SettingsScreen(
                 theme = theme,
                 language = language,
-                analyticsOn = analytics,
                 appVersion = appVersion(context),
                 onTheme = prefs::setTheme,
                 onLanguage = prefs::setLanguage,
-                onAnalytics = prefs::setAnalytics,
                 onNotifications = { openNotificationSettings(context) },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },
                 onBack = { nav.popBackStack() },
