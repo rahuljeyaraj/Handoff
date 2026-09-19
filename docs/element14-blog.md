@@ -43,9 +43,9 @@ The registration desk at the expo. The queue moved quickly, and then it was his 
 
 "Hi! Welcome! Your name?"
 
-"Rohit."
+"Rohit Menon."
 
-"Rohit." A finger ran down the list. "Got you. Here's your badge." She slid a lanyard across, and before he could pick it up she was reaching under the counter. "And this. Everybody gets one of these."
+"Rohit Menon." A finger ran down the list. "Got you. Here's your badge." She slid a lanyard across, and before he could pick it up she was reaching under the counter. "And this. Everybody gets one of these."
 
 It was a band. A small orange case, on a dark strap.
 
