@@ -1,4 +1,4 @@
-**Handoff**
+**Handoff: shake hands, share contacts**
 
 *Want to build a pair? Everything you need is in the appendix at the end.*
 
@@ -55,7 +55,7 @@ It was a band. A small orange case, on a dark strap.
 
 He looked at her, then at the band. "Just from the handshake."
 
-"Just from the handshake." She was clearly enjoying his face. "I know. Best thing at the show."
+"Just from the handshake." She was clearly enjoying his face. "I know. Everyone does that face."
 
 #### 2.1 Pairing with the phone
 
@@ -79,6 +79,8 @@ He held the band in one hand and the phone in the other. The phone gave a small 
 
 "That's it. Paired. It's yours now."
 
+![Pairing with the phone](element14-blog/14-pairing.png)
+
 #### 2.2 Your contact card
 
 "Next you set up your contact card in it."
@@ -99,6 +101,8 @@ He put it on. Left wrist, out of habit, and glanced at her.
 
 He looked at the phone. An empty page. `No handshakes yet`.
 
+![Your contact card](element14-blog/15-your-card.png)
+
 ### 3 The handshake
 
 #### 3.1 First contact
@@ -113,7 +117,9 @@ It was an ordinary handshake: warm, firm, a second long. The band on his wrist f
 
 "Check your phone."
 
-Her name was there. `Savithri Raghavan`. He tapped it. `Met today, 09:14 am`, and under it her number and her email.
+Her name was there. `Savithri Raghavan`. He tapped it. `Met today, 9:14 am`, and under it her number and her email.
+
+![First contact](element14-blog/16-first-contact.png)
 
 "And you've got me?"
 
@@ -123,7 +129,7 @@ She turned her own phone around. A long list of names, and his at the top.
 
 He was still looking at her phone. "Very."
 
-"Told you. Best thing at the show."
+She giggled.
 
 "Will it last the whole event? Do I need to charge it?"
 
@@ -143,9 +149,13 @@ He had fallen into a routine without noticing. Walk away from the stall. Open th
 
 Fifteen seconds, and on to the next stall.
 
+![Keeping track](element14-blog/17-keeping-track.png)
+
 By design, the Handoff app never polluted his phone contacts. They all stayed in the app, where they belonged. And the three or four who mattered, a hiring manager, a supplier, a student whose project he wanted to follow, he tapped `Save to phone contacts`, and they were in his phone book like anyone else. One press. No copying numbers.
 
 Around eleven he went back to the front desk to ask where the workshop had moved to, and Savithri shook his hand again on his way out. He checked the app, half expecting a second Savithri. There wasn't one. The entry he had already renamed to `Savithri Raghavan (front desk)` had simply moved to the top of the list, note and all. The app matches people by their number and email, not their name. Shake the same hand twice and you get one person, not two.
+
+![Met again](element14-blog/22-met-again.png)
 
 ### 4 The companion app
 
@@ -166,9 +176,13 @@ Four buttons along the top, beside the Handoff wordmark:
 * `Sort`, flipping the list between `Newest first` and `A to Z`.
 * `Settings`.
 
+![Home page](element14-blog/18-home.png)
+
 #### 4.2 Band info page
 
 He pressed the band info card. It took him to a page of its own.
+
+![Band info page](element14-blog/19-band.png)
 
 * `Your contact card`, his own contact details.
 * `Battery`. It read `Full`.
@@ -200,6 +214,8 @@ Now the people who shook his hand would get a number labelled `IRQ`. If they kne
 
 `Save`. The band blinked green, twice, and the icon on the band info page went green again.
 
+![Card page](element14-blog/20-card.png)
+
 #### 4.4 Settings page
 
 Settings was two short groups.
@@ -210,7 +226,9 @@ The app has no internet permission at all. Every contact he had collected lived 
 
 He opened `Theme` and picked `Dark`. The lounge was dim and the white page was a lantern.
 
-He sat back. The whole app had taken five minutes to walk through, and there had been nothing in it he needed to look up. That, he had learned over the years, was harder to build than it looked.
+![Settings page](element14-blog/21-settings.png)
+
+He sat back. The whole app had taken five minutes to walk through, and there had been nothing in it he needed to look up.
 
 ### 5 The how
 
@@ -255,7 +273,7 @@ The parts list and every step to build this board are in the appendix.
 
 ![One card's journey](element14-blog/01-layers.png)
 
-*Rohit's card on its way to Savithri. Hers makes the same trip the other way, at the same time.*
+*Rohit's card on its way to Savithri. Hers makes the same trip the other way, at the same time. Click to enlarge.*
 
 * Follow the numbers, 1 to 22.
 * **Blue**, at the desk: Rohit's phone gives his card to his band.
@@ -368,9 +386,9 @@ There are two usual ways to hear a tone that switches on and off.
 
 *A card like Rohit's, as text and packed.*
 
-* **Packed:** labels become one-byte tags, digits go two to a byte, common email domains become one byte. 169 bytes becomes 79, and both cards fit.
+* **Packed (box 7):** labels become one-byte tags, digits go two to a byte, common email domains become one byte. 169 bytes becomes 79, and both cards fit.
 * **Packed once, at the desk.** The band stores only the packed card, so a handshake has nothing left to do but send.
-* **Savithri's band rebuilds it** into a proper vCard before her phone sees it.
+* **Savithri's band rebuilds it** (box 18) into a proper vCard before her phone sees it.
 
 ![Cut by importance](element14-blog/04-frames.png)
 
@@ -402,7 +420,7 @@ There are two usual ways to hear a tone that switches on and off.
 
 *09:14 at the front desk.*
 
-* **The hearer sends.** Only the band that heard the shout knows a handshake has started, so it is the one that acts.
+* **The hearer sends (box 9).** Only the band that heard the shout knows a handshake has started, so it is the one that acts.
 * **The shouter receives.** As far as it knows it shouted into an empty room, and it is listening when the card arrives.
 * **Nothing to decide.** A band is deaf while it shouts, and a band that has heard a shout does not shout. So only the first shout can be heard, and only by the other band.
 * Two shouts at the same instant: neither is heard, and both go round again with fresh random times.
@@ -484,7 +502,7 @@ Before that, a quick handshake across the table, half a goodbye, already turning
 He opened the Handoff app. First in the list:
 
 `Farhan Ansari`
-`Met today, 17:02`
+`Met today, 5:02 pm`
 
 Rohit let out a breath. The band was gone. Everything it had carried was still here.
 
@@ -499,6 +517,8 @@ Two blue ticks. Then `typing…`
 `Knew it was you, I did save your number. Once I am back in the city I will raise an IRQ ;)`
 
 His kind of people.
+
+A connection was made.
 
 ---
 
@@ -537,9 +557,8 @@ Thank you to PCBWay, and to Serene, Tori and Sophia, for backing my project. If 
 
 * **Battery only while worn.** Never touch a band's plate while it is plugged into a computer.
 * **The plate is always covered.** No bare metal on skin.
-* **Hand to hand only.** Nothing across the chest.
 * **Nobody with a pacemaker or an implanted defibrillator** wears one.
-* **Build the parts around the plate exactly as listed.** They keep the current through a person under 3.3 µA. A person starts to feel about 1 mA.
+* **Build the parts around the plate exactly as listed.** They keep the current through a person under 3.3 µA, on either wrist and with either hand. A person starts to feel about 1 mA.
 
 The full rules are in `docs/body-coupled-handshake-design.md`, section 13.
 
