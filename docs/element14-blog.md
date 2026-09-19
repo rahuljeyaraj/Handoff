@@ -19,7 +19,7 @@ Shortwave reaches 10,000 km. FM radio, 50 km. Wi-Fi, 50 m. Bluetooth, 10 m. NFC,
 
 *Handoff: 0 cm.*
 
-Nobody built one that pointed the other way. Because the connection that matters most was never far away. It happens in a room, between two people, at no distance at all.
+But the connection that matters most was never far away. It happens in a room, between two people, at no distance at all.
 
 Picture it. You're at an expo. Someone stops at your stand and asks a question. Not a polite one, a real one, the kind only a person who has hit the same problem would ask. Ten minutes later you're both leaning over the same board. They solved it differently. You disagree about the fix, and you like them for it.
 
@@ -33,11 +33,9 @@ You shake hands.
 
 And that's the whole idea.
 
-Handoff is a band on the wrist. When two people wearing one shake hands, their contact details cross between them and land in each other's phones. The message doesn't go over the air. It travels through the handshake itself, through the two of you, and reaches no one else.
+Handoff is a band on the wrist. When two people wearing one shake hands, their contact details cross between them and land in each other's phones. They travel through the handshake itself, through the two of you.
 
 You let go, and the conversation can carry on next week. The handshake that closed it is the one that kept it.
-
-The first message ever sent through a handshake was a phone number. History made.
 
 ### 2 The setup
 
