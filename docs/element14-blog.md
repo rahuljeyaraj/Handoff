@@ -2,6 +2,8 @@
 
 *Want to build a pair? Everything you need is in the appendix at the end.*
 
+*The PCBs for this project were sponsored by [PCBWay](https://www.pcbway.com/). More about them towards the end.*
+
 ### 1 The idea
 
 History remembers the first message sent on every new technology.
@@ -468,6 +470,29 @@ His kind of people.
 
 ---
 
+### The boards, from PCBWay
+
+This is my first sponsored project. [PCBWay](https://www.pcbway.com/) manufactured the PCBs and shipped them to me. I only had to source the components.
+
+![The boards as they arrived](element14-blog/13-boards.jpg)
+
+**It started with their email.** PCBWay wrote on 10 September offering to sponsor a project. The board didn't exist yet, and the deadline was 16 days away. I designed it in two days and placed the order on Saturday
+
+**Their engineers were super helpful and prompt.**
+
+* **The finish.** I had picked leaded HASL on the order form but asked for lead-free in the notes. Tori caught the mismatch that same Saturday and asked which one I meant.
+* **The antenna.** Under the Pico's antenna there is a patch with no copper on either side. That's deliberate. To a fab it looks like a slot someone forgot to draw. Sophia asked me instead of guessing. Then she sent back the exact files they had received so I could check them against mine. It was settled the same morning.
+
+**Speed.** Ordered on 12 September. All questions closed by Monday the 14th. Shipped by DHL on the 15th, and at my door on [date].
+
+**Quality.** []
+
+**Serene**, in their marketing team, made the whole thing easy, from the first email to the order going through.
+
+Thank you to PCBWay, and to Serene, Tori and Sophia, for backing my project. If you want to build a pair, the appendix has the board files ready to upload to PCBWay.
+
+---
+
 ### Appendix — Build one yourself
 
 *The story ends above. This part is reference: how to build your own pair of bands.*
@@ -490,7 +515,7 @@ The full rules are in `docs/body-coupled-handshake-design.md`, section 13.
 
 For each band:
 
-* **The board.** Upload `hardware/build/handoff-pcbway.zip` to PCBWay. `hardware/build/order.md` has every answer the order form asks for.
+* **The board.** Upload `hardware/build/handoff-pcbway.zip` to [PCBWay](https://www.pcbway.com/). `hardware/build/order.md` has every answer the order form asks for.
 * **The parts on the board**, listed in `hardware/bom.csv`: a Raspberry Pi Pico 2 W, one MCP6292 amplifier chip, 0603 resistors and capacitors, two diodes, one transistor, the connectors, a slide switch and a push button. `hardware/README.md` gives the exact part numbers.
 * **Off the board:** a 5 mm RGB LED, a 10 mm coin vibration motor, a 3.7 V Li-ion cell with a JST-XH plug, and a TP4056 charger module.
 * **For the plate:** a 25 × 25 mm square of single-sided copper-clad board, and clear packing tape.
