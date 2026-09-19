@@ -260,7 +260,7 @@ He had met most of it already, from the outside.
 
 **Why a Pico 2 W.** One module does every job in the middle box.
 
-* **The tone is a pin.** PIO, the Pico's small programmable I/O engines, switches a pin at exactly 200 kHz on its own. No oscillator, no driver chip, and the processor is free.
+* **The tone comes straight from a pin.** PIO, the Pico's small programmable I/O engines, switches a pin at exactly 200 kHz on its own. No oscillator, no driver chip, and the processor is free.
 * **The converter reads the tone directly.** It samples 500,000 times a second, fast enough for 200 kHz, so there is no mixer to bring the tone down first.
 * **Two cores.** One listens all the time. The other runs the handshake and Bluetooth.
 * **Bluetooth on board.** The phone link needs no second chip.
