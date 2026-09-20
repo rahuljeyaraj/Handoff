@@ -477,7 +477,17 @@ Three decisions that looked right on paper and turned out wrong. Each one change
 * This link loses a lot on purpose, to keep the wearer safe. The same loss flattens the resonance before it can build.
 * Left out. Written down here so nobody tries it again.
 
-### 7 The end
+### 7 What comes next
+
+The pair works. This is what I want the next pair to do.
+
+* **A pocketful of cards.** A band hands each card to the phone as it arrives. The next one keeps a whole day of them on the wrist, so the phone can stay in a bag all afternoon.
+* **The band's own clock.** `Met today, 9:14 am` is the time the phone heard about it. Tell the band the time when it connects, and the card carries the moment of the handshake instead.
+* **Two cards.** A work card and a personal card, switched on the wrist with a long press, the LED saying which one is live.
+* **An iPhone app.** The band speaks ordinary Bluetooth, so nothing on the band is in the way. Somebody has to write it.
+* **A nudge, two days later.** The app knows when you met. The message you meant to send is the part that turns a handshake into a contact.
+
+### 8 The end
 
 The taxi pulled onto the flyover, and Rohit let his head fall back against the seat. He had made it. Just.
 
