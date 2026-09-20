@@ -153,7 +153,7 @@ Fifteen seconds, and on to the next stall.
 
 By design, the Handoff app never polluted his phone contacts. They all stayed in the app, where they belonged. And the three or four who mattered, a hiring manager, a supplier, a student whose project he wanted to follow, he tapped `Save to phone contacts`, and they were in his phone book like anyone else. One press. No copying numbers.
 
-Around eleven he went back to the front desk to ask where the workshop had moved to, and Savithri shook his hand again on his way out. He checked the app, half expecting a second Savithri. There wasn't one. The entry he had already renamed to `Savithri Raghavan (front desk)` had simply moved to the top of the list, note and all. The app matches people by their number and email, not their name. Shake the same hand twice and you get one person, not two.
+Late in the morning he went back to the front desk to ask where the afternoon sessions were, and Savithri shook his hand again on his way out. He checked the app, half expecting a second Savithri. There wasn't one. The entry he had already renamed to `Savithri Raghavan (front desk)` had simply moved to the top of the list, note and all. The app matches people by their number and email, not their name. Shake the same hand twice and you get one person, not two.
 
 ![Met again](element14-blog/22-met-again.png)
 
@@ -483,13 +483,13 @@ The taxi pulled onto the flyover, and Rohit let his head fall back against the s
 
 He was still smiling.
 
-He had only meant to peep in at one last stand on his way out. He had stayed half an hour. The man behind the table, Farhan, had hit the same problem Rohit had been fighting for three weeks, and had got round it a different way. They had leaned over the same board and argued it through, neither giving an inch. Rohit still thought Farhan's fix was wrong. But while he was arguing against it, he had finally seen what he had been missing. It had been in his own drawing all along.
+He had only meant to look in at one last stand on his way out. He had stayed half an hour. The man behind the table, Farhan, had hit the same problem Rohit had been fighting for three weeks, and had got round it a different way. They had leaned over the same board and argued it through, neither giving an inch. Rohit still thought Farhan's fix was wrong. But while he was arguing against it, he had finally seen what he had been missing. It had been in his own drawing all along.
 
 He laughed at himself out loud, and the driver glanced at him in the mirror.
 
 Both from Bengaluru, it turned out. They had come all the way to Hyderabad to meet.
 
-Then he froze for a moment.
+Then he froze.
 
 He had not got Farhan's number.
 
@@ -555,41 +555,69 @@ Thank you to PCBWay, and to Serene, Tori and Sophia, for backing my project. If 
 
 #### A.1 Safety first
 
-* **Battery only while worn.** Never touch a band's plate while it is plugged into a computer.
-* **The plate is always covered.** No bare metal on skin.
-* **Nobody with a pacemaker or an implanted defibrillator** wears one.
-* **Build the parts around the plate exactly as listed.** They keep the current through a person under 3.3 µA, on either wrist and with either hand. A person starts to feel about 1 mA.
+* **Battery only, both ends, whenever anyone is wearing one.** Never on a mains-powered laptop.
+* **The plate is always covered.** Tape over the copper, edge to edge. No bare metal on skin.
+* **Hand to hand only**, and **nobody with a pacemaker or an implanted defibrillator**.
+* **Use the parts listed.** They hold the current through a person under 3.3 µA, on either wrist and with either hand. A person starts to feel about 1 mA.
 
-The full rules are in `docs/body-coupled-handshake-design.md`, section 13.
+Full rules: `docs/body-coupled-handshake-design.md`, section 13.
 
 #### A.2 What you need
 
-For each band:
+**The boards.** Upload `hardware/build/handoff-pcbway.zip` to [PCBWay](https://www.pcbway.com/). `hardware/build/order.md` has every answer the order form asks for, and a list of what to check on their preview before you pay. The smallest run is five boards, which is the right number anyway: two bands and three spares.
 
-* **The board.** Upload `hardware/build/handoff-pcbway.zip` to [PCBWay](https://www.pcbway.com/). `hardware/build/order.md` has every answer the order form asks for.
-* **The parts on the board**, listed in `hardware/bom.csv`: a Raspberry Pi Pico 2 W, one MCP6292 amplifier chip, 0603 resistors and capacitors, two diodes, one transistor, the connectors, a slide switch and a push button. `hardware/README.md` gives the exact part numbers.
-* **Off the board:** a 5 mm RGB LED, a 10 mm coin vibration motor, a 3.7 V Li-ion cell with a JST-XH plug, and a TP4056 charger module.
-* **For the plate:** a 25 × 25 mm square of single-sided copper-clad board, and clear packing tape.
-* **The box.** Print the two halves in `hardware/enclosure/`: `bottom.3mf` and `top.3mf`.
-* **Four M3 brass heat-set inserts**, 5 mm across, and four M3 screws.
-* **A 22 mm watch strap.**
+<!-- TODO image 23-parts.jpg — everything below, laid out on the bench for one band: the bare board, the Pico, the headers, the tape of 0603s, the LED, the motor, the cell, the TP4056, the copper square, the two printed halves and the strap. This is the picture a builder checks their own pile against. -->
+
+**On the board**, per band. `hardware/bom.csv` has every value and package; `hardware/README.md` gives the part numbers.
+
+* A **Raspberry Pi Pico 2 W**. Buy the **WH**, the one with pins already on it — or a plain one and a 1×40 male header strip, because it ships bare.
+* A **1×40 female header strip**, cut into two rows of 20. The Pico sits in a socket, not soldered down: that is what lets you lift it out for the meter checks, and back in when a Pico dies.
+* One **MCP6292** in MSOP-8, 0603 resistors and capacitors, two **PMEG3020ER-TP** diodes, one **AO3400A**.
+* Two 2-pin **JST-XH** sockets, for the cell and the charger. **The other three footprints stay empty** — the plate wire, the LED and the motor solder straight into their holes, so there is nothing to crimp.
+* An **SS-12F23G5** slide switch and a 6 × 6 mm tactile button.
+
+**Off the board**, per band:
+
+* A **5 mm common-cathode RGB LED**. Its four legs are already in the board's hole order, so nothing crosses.
+* A **10 mm coin vibration motor**, 3 V.
+* A **1S 3.7 V Li-ion cell** — on a **2.50 mm JST-XH** plug, not the 2.00 mm JST-PH that most cells ship with and that looks identical until you try it. It has to lie inside a 45 × 65 mm box next to the board; the bill of materials uses a 1500 mAh cell, 38 × 44 × 5.5 mm.
+* A **TP4056** charger module.
+* 5 cm of thin insulated wire for the plate.
+
+**For the plate:** a 25 × 25 mm square of single-sided copper-clad board, and clear packing tape.
+
+**The box.** Print the two halves in `hardware/enclosure/`: `bottom.3mf` and `top.3mf`, about 45 × 65 × 25 mm together. Four M3 brass heat-set inserts, 5 mm across, four M3 screws to match them, and a 22 mm watch strap.
 
 Tools:
 
-* A fine soldering iron, flux, solder wick, tweezers and isopropyl alcohol.
+* A fine soldering iron, 0.5 mm solder, a flux pen, solder wick, tweezers and isopropyl alcohol.
+* A magnifier, or a phone camera, for the amplifier chip. Its eight pins are the finest pitch on the board.
 * A 3D printer, or a printing service.
-* A multimeter. No oscilloscope is needed at any step.
-* A PC with Python 3, and a micro-USB cable.
+* A multimeter with continuity, ohms, DC volts, AC volts and diode mode. **No oscilloscope is needed at any step.**
+* **A laptop that runs on its own battery**, with Python 3, and a micro-USB cable.
+* **Two Android phones**, 8.0 or newer, with Bluetooth and a camera.
 
 #### A.3 Set up the PC
 
+* **The repository.** Clone or download it first; every command below runs from its folder.
 * **Firmware tools.** Install VS Code and its Raspberry Pi Pico extension. Open the repository folder and accept the SDK download. That installs the compiler and everything else the build needs.
 * **Bring-up script.** Run `pip install pyserial`.
-* **App tools.** Install Android Studio.
+* **Prove it before you solder anything.** Hold BOOTSEL on a bare Pico, plug it in, and run `python scripts/bringup.py flash blink`. Its LED blinks once a second. That is the whole toolchain checked, on a board you have not yet spent an evening on.
+* **App tools.** Install Android Studio, with a JDK 17 and the Android SDK at compileSdk 35. The app is not on a store — you build it and push it over the cable.
 
 The root `README.md` covers the same, including Linux.
 
-#### A.4 Build the board
+#### A.4 The order to build in
+
+Nothing before the handshake needs the second band, so:
+
+* **Take one board all the way,** through the meter checks, the plate, the box and its label. It is you, a multimeter and a USB cable, and it is most of the work.
+* **Then build the second the same way.** From the outside they are identical, so label both as you go.
+* **Then the handshake**, which is the first thing that needs two bands, two phones and two people.
+
+One thing is easy to leave too late: the **plate** has to be made before the box closes, and its wire is soldered to the board several steps earlier than that. `docs/hardware-bringup.md` runs in exactly this order — steps 0 to 11 on the bench, then P for the plate and the box, then 12 for the firmware, the label, the phone and the handshake.
+
+#### A.5 Build the board
 
 Follow `docs/hardware-bringup.md`, one step at a time. It has a drawing of each face.
 
@@ -599,69 +627,85 @@ Follow `docs/hardware-bringup.md`, one step at a time. It has a drawing of each 
 * **Clean with isopropyl alcohol** after every pass, and let it dry. Flux left near the amplifier upsets it.
 * **One script runs every powered check:** `scripts/bringup.py`. It flashes a test program, then switches the LED, the motor and the transmitter from the PC.
 
-The last step flashes the real firmware:
+A few things there are easy to get wrong and hard to see:
+
+* **The Pico's own pins.** The board takes the Pico in a socket, so a plain Pico needs its male header soldered on first.
+* **JP8 is not a role strap you have to set.** Both bands run the same firmware and work out between themselves which one speaks first. It stays open on both.
+* **One step touches the electrode**, and only one — step 9, where a fingertip on the wire proves the receiver by picking up mains hum. Run the laptop on its own battery for it, mains lead out. Every other step is done with nobody touching the plate.
+
+The bench work ends at step 11, with the band running on its own cell and both directions of the signal path checked. What is left is the plate, the box and the firmware — in that order.
+
+#### A.6 Plate, box and strap
+
+Step P of the bring-up guide. This is the part that decides whether the band works on a wrist rather than on a bench.
+
+<!-- TODO image 24-plate.jpg — the bottom half open, seen from the side or in a cutaway: the taped plate on the outside against the wrist, then the board, then the cell, and the board's own copper facing up and away from the arm. The stacking order is the one thing in this appendix that words do badly. -->
+
+* **Solder the free end of the plate wire** to the copper side of the square. The other end is already in the board's `PAD` hole — it went in during bring-up, as the bench electrode, and the plate is what it grows into.
+* **Cover the copper completely** with one layer of clear packing tape, round the edges. Thinner tape couples better. This is the insulation the safety rules turn on.
+* **Tape the plate to the outside of the bottom half**, taped face out, so it lies against the wrist.
+* **Board and cell go between the plate and the top.** The board's own ground plane is the second electrode, and it has to face the room, not the arm. The two must never end up back to back.
+* **Press the four brass inserts** into the bottom half's posts with the soldering iron, then screw the board down.
+* **Cell into the battery socket.** Check the plug first: the square pad is minus. Charge it on the TP4056 before the first run.
+* **Charger:** TP4056 `OUT+` and `OUT−` to the charge socket. It is wired before the switch, so the cell charges with the band switched off — and the module stays outside the box.
+* **Fit the top half and the 22 mm strap**, and slide the switch to the position you marked during bring-up. The label comes later, in A.7 — the band has to be running the real firmware before it will tell you what to put on it.
+
+The box is an **initial design**, and it is honest to say so. Dry-fit it: hold the board in place and check every opening against your own parts — the USB socket, the switch handle, the button, the LED, and the way the plate wire and the charger lead get out — before any screw goes in. A hole is easier to open with a knife than to close.
+
+#### A.7 The real firmware, and the band's label
+
+Both bands get the same image. There is no transmitter one and no receiver one — they settle that between themselves over the link.
 
 ```
 python scripts/bringup.py flash handoff
 ```
 
-By then both directions of the signal path have been checked.
+At boot the LED flashes white and the motor taps once. Then the band tells you its name, and that is where the label comes from: four hex digits, printed as a QR code or simply typed into the app.
 
-#### A.5 Print the label
-
-The app finds a band by the QR code on its back.
-
-* With the band on USB, run `python scripts/bringup.py watch`. At start-up the band prints a line like `name "Handoff band 7A3C", label 7A3C`.
-* Run `pip install "qrcode[pil]"`, then `python tools/band_label.py 7A3C`.
-* That makes `band-7A3C.png`: the QR code, with the four characters printed under it. Print it small.
-
-#### A.6 Make the plate
-
-* **Solder a wire** to the copper side of the square.
-* **Cover the copper completely** with one layer of clear packing tape. Thinner tape works better.
-* **Plug the wire into J2's PAD pin.** Leave J2's other pin empty.
-* **Fix the plate to the back of the box**, taped side out, so it rests on the wrist.
-* **Keep the board and the cell between the plate and the outside of the box.** The board's own copper faces out, and that is what reaches the room.
-
-#### A.7 Put the band together
-
-* **Press the four brass inserts** into the posts in the bottom half, with the soldering iron.
-* **Screw the board down** onto them.
-* **LED into J3**, the longest leg into `K`.
-* **Motor leads into J6**, either way round.
-* **Cell into J1.** Check the plug first: the square pad is minus.
-* **Charger:** TP4056 `OUT+` to J5 `+`, `OUT−` to J5 `−`. J5 is only for charging the cell.
-* **Fit the top half.** Stick the label on the back, beside the plate.
-* **Fit the 22 mm strap.**
-* **Slide the switch on**, to the position you marked during bring-up.
+* With the band on USB, run `python scripts/bringup.py watch` and power-cycle it. The banner prints a line like `name "Handoff band 7A3C", label 7A3C`.
+* For a sticker: `pip install "qrcode[pil]"`, then `python tools/band_label.py 7A3C`. That writes `band-7A3C.png` — the QR code with the four characters under it. Print it about 20 mm square; smaller and a phone stops reading it at arm's length.
+* Or write the four digits on the band with a marker. The app takes them typed.
+* **Two bands, two codes.** Label both before they get mixed up.
 
 #### A.8 Install the app
 
 * Open the `android` folder in Android Studio.
 * Turn on USB debugging on the phone and plug it in.
 * Press Run.
+* Then do it again for the second phone.
 
 `android/README.md` has the command-line route.
 
 #### A.9 Pair and set up
 
-The same steps Rohit took at the desk in chapter 2.
+The same steps Rohit took at the desk in chapter 2, once per band.
 
 * **Switch the band on.** A slow blue pulse means it is waiting for a phone.
-* **In the app, tap `Pair a band`** and scan the label. Android asks you to confirm one device.
+* **In the app, tap `Pair a band`** and scan the label, or type the four digits. Android asks you to confirm one device.
 * **Set up your contact card** and tap `Save`. The band blinks green twice.
-* **To hand a band to someone else,** hold its button for five seconds. It forgets its phone and its card, and pulses blue again.
+* **One band, one phone.** A band that already belongs to a phone will not pair with another. Hold its button for five seconds and it forgets its phone and its card, and pulses blue again — which is also how you hand a band to someone else.
 
 #### A.10 The first handshake
 
-* Two people, one band each, plate on the wrist.
-* Both phones paired and nearby. The app does not need to be open.
-* **Shake hands**, a normal firm grip.
-* The band flickers white while the cards cross, then turns green and buzzes.
+<!-- TODO image 25-band.jpg — a finished band worn on a wrist, strap on, label showing. The first photograph of the actual thing in the post; everything before this is drawings and bare boards. -->
+
+**Prove the pair on the bench first**, which needs nobody but you: both bands on USB with a console each, held back to back so the two taped plates touch, and a `done` line appears on both. That shows both bands are alive and can complete an exchange — it does not prove coupling, because two bands on one laptop already share a ground. The wrist is what proves coupling.
+
+Then, for real:
+
+* Two people, one band each, plate against the skin of the wrist.
+* **Both bands on their own cells, USB out of both.** That is the safety rule, and it is also the only way the link works.
+* Both phones paired, each band carrying its owner's card, both phones nearby. The app does not need to be open.
+* **Shake hands**, a normal firm grip, for about a second.
+* Each band flickers white while the cards cross, then turns green and buzzes.
 * Each name is now in the other person's app.
 
 #### A.11 If something goes wrong
 
+* **The build fails before it reaches the board.** That is the Pico SDK, not your soldering. Prove it on a bare Pico, as in A.3.
 * **The Pico does not show up on USB.** Hold its BOOTSEL button while you plug it in, then flash again.
-* **The app cannot find the band.** Turn the phone's Bluetooth off and on again, then retry.
+* **`bringup.py` says there is more than one Pico.** The other band is plugged in too. Unplug it, or pass `--port`.
+* **The app cannot find the band.** Check the four digits against the banner, and type them instead of scanning. Turn the phone's Bluetooth off and on again. If the band was ever paired to another phone, hold its button for five seconds first.
+* **Both bands work alone, but a handshake does nothing.** USB out of both, plates against skin, and hold the grip a full second.
+* **One band does everything and the other nothing.** They run the same firmware, so suspect the quiet one's receive path and re-run the step that listens for mains hum.
 * **Anything during bring-up.** The table at the end of `docs/hardware-bringup.md` lists each symptom and where to look.

@@ -8,9 +8,29 @@ and one meter reading with a stated pass window.
 Drawings: [top face](hardware-bringup/top.png) · [bottom face](hardware-bringup/bottom.png)
 (the bottom is drawn mirrored, the way you see it when you flip the board over).
 
+**A handshake needs two bands.** Steps 0–11 and P are one board, on your own,
+with a meter and a USB cable, and they are most of the work. Step 12 flashes the
+product image, labels the band and pairs it to a phone — still one board. Only
+its last two checks need the other band, two phones and a second person, so
+**take board one to the end of step 12's pairing, build board two the same way,
+and meet them at the handshake.**
+
 ---
 
 ## Before you start
+
+**Prove the PC before you solder anything**
+
+Step 4 builds firmware. Set the toolchain up first, on a bare Pico, while the
+board is still an unsoldered rectangle — a build that fails then costs nothing.
+
+- Install the **Raspberry Pi Pico** VS Code extension, open this folder, let it
+  download SDK 2.3.1. The root [README](../README.md) has the versions and the
+  Linux route.
+- `pip install pyserial`.
+- Hold BOOTSEL on a bare Pico, plug it in, and run `python scripts/bringup.py
+  flash blink`. Its green LED should blink once a second. **That is the whole PC
+  setup proved.** If it fails, fix it now, not with a half-built board attached.
 
 **Tools**
 
@@ -20,12 +40,15 @@ Drawings: [top face](hardware-bringup/top.png) · [bottom face](hardware-bringup
 - Multimeter with continuity beep, Ω, DC V, diode mode
 - A micro-USB cable to the Pico, one short jumper wire
 - Python 3 with pyserial: `pip install pyserial`
+- **A laptop that runs on its own battery.** Step 9 is the one step where a
+  finger touches the electrode, and the mains lead has to be out for it
 
-**Three rules**
+**Four rules**
 
 - **Every solder jumper JP1–JP8 stays open until its step says to bridge it.** The board ships open on purpose so each block can be proved alone.
 - **When the board is powered, never touch a probe to U2 pin 3, R2's inner pad or R3's inner pad.** That node is 1 MΩ and the probe changes what it does. Unpowered Ω checks on it are fine.
 - **Clean the board with IPA after every soldering pass, and let it dry.** Flux across the 1 MΩ node puts the amplifier on a rail.
+- **Nobody touches an electrode while the board is on mains-powered USB.** Design §13 rule 1: the hazard is not the signal, it is a mains-referenced ground finding a path through a person. The 1 MΩ in series (R2, proved in step 1) bounds the current to 3.3 µA; the floating supply is the second layer, and the second layer is not optional. Step 9 is the only step that asks you to touch the electrode, and it says how.
 
 **Holding the board**
 
@@ -63,6 +86,12 @@ Drawings: [top face](hardware-bringup/top.png) · [bottom face](hardware-bringup
 | JP2 | GP11 → transmitter | Pico pin 15 | GP11 side; other pad is R1 | step 10 |
 | JP8 | ROLE → GND | any GND pin | GND side; other pad is Pico pin 19 | never (role strap) |
 
+**About JP8.** It is a bench override, read only by `apps/bringup` and the
+earlier one-way test apps, which needed to be told which board talks first. The
+product image ignores GP14 entirely and elects roles over the link. **Both bands
+run the same firmware and both leave JP8 open** — step 5 bridges it with a wire
+for two seconds to prove the pin, and nothing else ever does.
+
 **Firmware note.** The breadboard benches drove the pad from GP2; the PCB uses GP11. `scripts/bringup.py flash` builds for GP11 into `build-pcb/`. Anything flashed with plain `scripts/build.py` still targets GP2 and reaches nothing on this board — use `--tx-pin 11`.
 
 ---
@@ -99,13 +128,34 @@ Drawings: [top face](hardware-bringup/top.png) · [bottom face](hardware-bringup
 
 **Through-hole, top face** (soldered last)
 
-- Two 1×20 female headers for the Pico (cut from the 1×40)
-- J1, J5 (2-pin XH), J2 (2-pin XH), J3 (4-pin XH)
+- Two 1×20 **female** headers for the Pico, cut from a 1×40 strip
+- J1 and J5, the two 2-pin XH sockets on the right wall
 - SW1 slide switch, SW2 push button
+
+**The Pico needs pins of its own.** A plain Pico 2 W ships bare. Solder a 1×40
+**male** strip to it, or buy the pre-soldered *Pico 2 WH*. Either way the board
+side is female, so the Pico lifts out — which is what makes the meter checks in
+steps 0–3 possible with no chip on the board.
+
+**Three footprints stay empty, on purpose**
+
+| | Why |
+|---|---|
+| **J2** (PAD) | the electrode wire solders straight into the `PAD` hole. Leave the other hole empty |
+| **J3** (LED) | the 5 mm RGB LED's legs *are* `R`, `K`, `G`, `B` in that order, so its legs solder straight into the four holes with nothing crossed |
+| **J6** (motor) | the motor's two leads solder straight in, either way round |
+
+Fit the XH socket instead of soldering in if you would rather the LED or the
+plate be unpluggable — you then need a pre-crimped XH pigtail for each, and a
+2.50 mm one, not the 2.00 mm PH that looks the same. Soldered in is what fits
+the box, and it needs no crimp tool.
 
 **Off-board, wired later**
 
 - D2 RGB LED into J3 (step 5), M1 motor into J6 (step 5), the cell into J1 (step 11), the electrode wire into J2 (step 9)
+- **Check the cell's plug is a 2.50 mm XH** before it goes near J1. Many 1S cells
+  ship on a 2.00 mm PH lead; re-pin it into an XH housing, or change the lead.
+  Step 11 checks polarity, which is the other thing cells get wrong
 
 ---
 
@@ -197,10 +247,10 @@ Everything now goes in from the top and is soldered on the bottom.
 **Soldering order**
 
 - **Pico headers:** push the two female strips onto the Pico's own pins, drop the whole assembly into the board, solder one pin at each end, check it sits flat, solder the rest. Pull the Pico out afterward.
-- J2, J1, J5 on the right wall: the housing's open side faces the wall.
-- J3 on the left wall.
+- J1 and J5 on the right wall: the housing's open side faces the wall.
 - SW1: the metal body sits on the board, the handle sticks out past the edge. Solder the three pins and both ears.
 - SW2.
+- **J2, J3 and J6 stay empty** — the electrode wire, the LED and the motor solder into them later, at steps 9, 5 and 5.
 - IPA clean, dry.
 
 **Meter checks** (continuity, Pico still out)
@@ -277,7 +327,7 @@ python scripts/bringup.py led red
 ```
 
 - [ ] Meter on J3's `R` hole: 3.3 V. `led off` → 0 V.
-- [ ] Plug the LED into J3: **longest leg into `K`**, the single leg on one side into `R`.
+- [ ] Solder the LED into J3. Its four legs already sit in the hole order: **the longest leg is `K`**, the lone leg on that side of it is `R`, the two beyond are `G` and `B`. Nothing crosses. Leave the legs long enough to bend — the box decides where the LED ends up, and step 12 is easier with it loose.
 
 ```
 python scripts/bringup.py led red
@@ -384,11 +434,19 @@ python scripts/bringup.py adc
 
 ## Step 9 — the pad hears the world: bridge JP7
 
-- [ ] Unplug. **Bridge JP7.** Plug in.
-- [ ] Plug an electrode wire (any 5 cm wire, or the pad pigtail) into J2's `PAD` pin. Leave J2's other pin empty.
+**This is the step a finger touches.** Before it: the laptop runs on its own
+battery, **mains lead out**, and nothing else mains-powered is plugged into it.
+Step 1 already proved R2 + R3 = 2.0 MΩ, so the series resistance the design
+depends on is measured, not assumed. Both layers, every time. Anyone with a
+pacemaker or an ICD does not do this step, or any later one.
+
+- [ ] Unplug USB. **Bridge JP7.** Solder an electrode wire — any 5 cm wire — into J2's **square** pad, the one that beeps to TP5. Leave J2's other hole empty. Plug USB back in.
 
 - [ ] Meter on **AC volts**, red probe on TP3 `OUT1`, nothing touching the wire: under 0.05 V.
 - [ ] Hold the bare end of the wire between two fingers: TP3 reads **over 0.3 V AC** (usually about 1 V). Your body's 50 Hz mains hum, amplified ×11 and clipped by stage 1 — and 50 Hz is the one frequency a multimeter's AC range measures well.
+
+A bare wire on a fingertip is not a worn electrode, and this is the only place it
+happens. Everything that goes under a strap is taped copper — step P.
 
 ```
 python scripts/bringup.py adc 100000
@@ -448,6 +506,7 @@ USB out for all of this except the last line.
 
 **The pigtail, before it touches the board**
 
+- [ ] **Charge the cell first**, on the TP4056, until its LED turns green. A cell straight from the seller sits at its storage voltage, around 3.7 V, and the readings below assume a real one.
 - [ ] J1's silk: square pad `−`, round pad `+`. Check the cell's plug matches; re-pin it if not. (D1 makes a reversed plug harmless, not useful.)
 - [ ] Plug the cell into J1. SW1 **ON**. DC volts, black on J1's `−`:
 
@@ -477,21 +536,79 @@ python scripts/bringup.py vsys
 
 - [ ] Prints ~4700 on USB. Unplug USB, SW1 ON: the board keeps running (LED flash on the next power-cycle).
 
-**Charger** — J5 is wired straight to the cell, before SW1. It is **not** a power input. The TP4056's OUT+ goes to J5 `+`, OUT− to J5 `−`.
+**Charger** — J5 is wired straight to the cell, before SW1. It is **not** a power input. The TP4056's OUT+ goes to J5 `+`, OUT− to J5 `−`. Because it sits before the switch, **the cell charges with SW1 off** — which is how you want it, and also means J5 is live whenever the cell is in.
+
+---
+
+## Step P — the plate, and closing the box
+
+The board is proved. What is left is mechanical, and it is the part that decides
+whether the band works on a wrist rather than on a bench.
+
+**The plate**
+
+- [ ] Cut a **25 × 25 mm** square of single-sided copper-clad board (design §8.1).
+- [ ] Solder the free end of the step-9 wire to its copper face. Keep the wire short — under 5 cm — and let it leave the square from the edge nearest J2.
+- [ ] **Cover the copper completely** with one layer of clear packing tape, wrapped round the edges. Thinner tape couples better. No bare copper anywhere that can reach skin: this is design §13 rule 3, and it is the whole reason the band is safe to wear.
+- [ ] Tape the plate to the **outside of the bottom half**, taped face out, so it lies against the wrist.
+- [ ] The board and the cell sit between the plate and the top of the box. The board's own ground plane is the second electrode, and it has to face the room, not the arm (design §8.2 — do not let the two end up back to back).
+
+**The box** — `hardware/enclosure/bottom.3mf` and `top.3mf`, about 45 × 65 × 25 mm.
+
+- [ ] Print both halves. PLA or PETG, 0.2 mm layers. Slice each half as it is oriented in the file, look at the preview, and add supports if your slicer asks for them.
+- [ ] Press the four **M3 brass heat-set inserts**, 5 mm across, into the bottom half's posts with the soldering iron. They are on the board's own hole pattern, 33 × 55 mm between centres.
+- [ ] Screw the board down through its four 3.4 mm holes into the inserts. The screw passes 1.6 mm of board and then the insert: measure your inserts and buy **M3 to suit**, typically 6–8 mm.
+- [ ] Check every opening lines up before the screws go in: the Pico's micro-USB, SW1's handle, SW2, and wherever you have chosen to bring the LED out. **This enclosure is an initial design** (`hardware/enclosure/README.md` says so) — expect to open a hole with a knife or a drill, and expect to route the plate wire and the charger lead through a gap you make yourself.
+- [ ] The TP4056 is not in the box. Leave J5's lead long enough to reach it, or unscrew the top to charge.
+- [ ] Fit the 22 mm strap. The label goes on the outside of the **top** half — not the bottom, which the plate covers — but it is made in 12b, once the band is running the image that tells you what to print.
 
 ---
 
 ## Step 12 — the product image
+
+Five parts, in order. **12a to 12c are one band on its own**; 12d needs the
+second band finished too, and 12e needs two phones and a second person.
+
+**12a — flash it**
 
 ```
 python scripts/bringup.py flash handoff
 python scripts/bringup.py watch
 ```
 
+There is no transmitter image and no receiver image: both bands get this one,
+and they settle between themselves which of them speaks first.
+
 - [ ] The banner appears; at boot the RGB LED flashes white for 200 ms and the motor taps once.
 - [ ] Short press SW2 → a 300 ms battery flash (green / amber / red by level, white if it has no reading yet).
-- [ ] Pair from the Android app; provision a card. `python scripts/bringup.py raw "w"` stores a bench card without a phone.
-- [ ] With a second assembled board: electrodes touching → `done` lines on both consoles.
+
+**12b — the label.** The app finds a band by four hex digits, and the banner is
+where they come from. They are printed on a sticker or typed; the app takes
+either.
+
+- [ ] The banner line reads `name "Handoff band 7A3C", label 7A3C`. Write those four digits down — from the outside the two bands are identical, and this is the only thing that tells them apart.
+- [ ] For the printed QR: `pip install "qrcode[pil]"`, then `python tools/band_label.py 7A3C`. It writes `band-7A3C.png` into the current directory. Print it about **20 mm square**; below that the code stops scanning on a phone at arm's length.
+- [ ] Stick it on the outside of the top half, where the plate is not.
+
+**12c — the phone.** Build and install the app from `android/` (`android/README.md`),
+one phone per band.
+
+- [ ] Pair from the app: scan the label or type the digits, and confirm the one device Android offers.
+- [ ] Fill in the contact card and save it. The band blinks green twice.
+- [ ] A band belongs to one phone. Holding SW2 for five seconds clears the phone and the card and returns it to a slow blue pulse.
+
+`python scripts/bringup.py raw "w"` stores a bench card with no phone at all,
+which is enough to prove the link before either app exists.
+
+**12d — the link, on the bench.** Now the second band has to be finished too.
+
+- [ ] Both bands on USB, a console each. Hold them plate to plate, the two taped faces together → `done` lines on both consoles. A solo builder gets this far alone.
+- This proves both bands are alive and that a whole exchange completes. It does **not** prove coupling: two bands on one host already share a ground through it. Step 12e is the one that proves coupling.
+
+**12e — the handshake.**
+
+- [ ] Both bands **on their own cells, USB out of both** — design §13 rule 1, and also the only condition the link is built for. Plates against skin, one band per wrist, one person each.
+- [ ] Shake hands, a normal firm grip, about a second. Each band flickers, then turns green and buzzes; each name lands in the other phone.
 
 ---
 
@@ -513,3 +630,9 @@ python scripts/bringup.py watch
 | `freq` reads 0 | carrier not started, or the image was built for GP2 — flash through `bringup.py` |
 | Board dead on the cell, fine on USB | SW1 position; JP5; pigtail polarity (TP7 must read the cell) |
 | Motor runs at power-on | R17 missing or open (Pico hole 34 ↔ GND must read 100 kΩ) |
+| `bringup.py flash` fails before it reaches the board | the Pico SDK, not the board. Prove it on a bare Pico first — *Before you start* |
+| `bringup.py` says "more than one Pico on USB" | the second band is plugged in too; pass `--port COM7`, or unplug it |
+| The app never finds the band | the four digits, not the band: check them against the banner. Type them instead of scanning. Only one phone can own a band — hold SW2 for five seconds to clear the old one |
+| Both bands pair and buzz, but a handshake does nothing | both on their own cells with **USB out of both** — that is design §13 rule 1 and it is also the only condition the link was built for — both plates against skin, and hold the grip a full second |
+| One band does everything, the other nothing | they run the same image and elect roles; suspect the quiet one's receive path. Re-run step 9 on it |
+| The LED or the button cannot be reached once the box is shut | step P: the enclosure is an initial design, so check every opening against your own parts before the screws go in |
