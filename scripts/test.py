@@ -284,12 +284,20 @@ def _msvc_env():
                                  capture_output=True, text=True)
             if out.returncode != 0:
                 continue
+            # Windows environment names are case-insensitive, and "set"
+            # prints them in whatever case the parent shell holds -- "Path"
+            # from PowerShell, "PATH" from cmd. Merging blind would leave the
+            # dict with both spellings, which CreateProcess resolves
+            # arbitrarily, so fold each captured name onto the one already
+            # there.
             env = dict(os.environ)
+            canon = {k.upper(): k for k in env}
             for line in out.stdout.splitlines():
                 if "=" in line:
                     k, v = line.split("=", 1)
+                    k = canon.setdefault(k.upper(), k)
                     env[k] = v
-            cl = shutil.which("cl", path=env.get("PATH", ""))
+            cl = shutil.which("cl", path=env.get(canon.get("PATH", "PATH"), ""))
             if cl:
                 return cl, env
     return None, None
