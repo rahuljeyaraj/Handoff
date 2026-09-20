@@ -56,7 +56,13 @@ static volatile uint32_t s_seq[ADC_RING_BLOCKS];   /* ordinal of the block in it
 static volatile uint32_t s_overruns;
 static volatile uint32_t s_blocks;
 
-static int      s_dma[ADC_RING_BLOCKS];
+/* -1 is "not claimed yet", the same sentinel pio_carrier.c uses. Zero will
+ * not do: channel 0 is a real channel, and on this board it is the one the
+ * ring gets first, so a zero sentinel cannot tell "unclaimed" from "claimed
+ * channel 0" and a second init() would claim a third channel and leave the
+ * first chained to nothing. */
+static int      s_dma[ADC_RING_BLOCKS] = { -1, -1 };
+_Static_assert(ADC_RING_BLOCKS == 2, "s_dma's initialiser lists one -1 per block");
 static uint64_t s_t0;
 static bool     s_running;
 
@@ -143,7 +149,7 @@ void adc_ring_init(void)
     adc_set_clkdiv(0);
 
     for (i = 0; i < ADC_RING_BLOCKS; i++) {
-        if (s_dma[i] == 0 && !s_running) s_dma[i] = (int)dma_claim_unused_channel(true);
+        if (s_dma[i] < 0) s_dma[i] = (int)dma_claim_unused_channel(true);
         s_full[i] = false;
     }
 
@@ -195,15 +201,54 @@ void adc_ring_start(void)
 
 bool adc_ring_running(void) { return s_running; }
 
+/*
+ * RP2350-E5, "Interactions between CHAIN_TO and ABORT of active channels".
+ * These two channels chain to each other, which is the exact case the
+ * erratum calls out: aborting one makes its CHAIN_TO fire, and a channel
+ * part-way through an ABORT can still be re-triggered, so aborting them one
+ * at a time with EN set restarts the other -- and the loop restarts the
+ * first right back. adc_ring_stop() would then return with a channel still
+ * armed, and adc_ring_start() would arm the second on top of it. Both would
+ * then serve DREQ_ADC, each taking every other sample into its own block:
+ * two half-rate blocks instead of one whole one, which is a receiver that
+ * decodes nothing and an sps that reads double.
+ *
+ * The datasheet's sequence (12.6.8.3) is to clear EN on every channel in
+ * the chain FIRST, abort them in ONE write, and poll until they come to
+ * rest. EN is restored afterwards so the channels are left configured and
+ * idle, which is what start() expects. CHAIN_TO is deliberately left alone:
+ * the erratum's workaround asks only for EN, start() does not re-establish
+ * chaining, and clearing it here would break the ping-pong on restart.
+ */
 void adc_ring_stop(void)
 {
+    uint32_t mask = 0;
     uint i;
 
     adc_run(false);
+
     for (i = 0; i < ADC_RING_BLOCKS; i++) {
-        dma_channel_abort((uint)s_dma[i]);
-        dma_hw->ints0 = 1u << s_dma[i];   /* an abort can leave one pending */
+        dma_channel_set_irq0_enabled((uint)s_dma[i], false);
+        hw_clear_bits(&dma_channel_hw_addr((uint)s_dma[i])->al1_ctrl,
+                      DMA_CH0_CTRL_TRIG_EN_BITS);
+        mask |= 1u << s_dma[i];
     }
+
+    dma_hw->abort = mask;
+    while (dma_hw->abort & mask) tight_loop_contents();
+
+    /* In-flight transfers cannot be revoked; the datasheet forbids
+     * restarting a channel before its BUSY clears. */
+    for (i = 0; i < ADC_RING_BLOCKS; i++)
+        while (dma_channel_is_busy((uint)s_dma[i])) tight_loop_contents();
+
+    for (i = 0; i < ADC_RING_BLOCKS; i++) {
+        dma_hw->ints0 = 1u << s_dma[i];   /* an abort can leave one pending */
+        hw_set_bits(&dma_channel_hw_addr((uint)s_dma[i])->al1_ctrl,
+                    DMA_CH0_CTRL_TRIG_EN_BITS);
+        dma_channel_set_irq0_enabled((uint)s_dma[i], true);
+    }
+
     s_running = false;
     adc_fifo_drain();
 }
