@@ -106,8 +106,22 @@ static void __no_inline_not_in_flash_func(do_write)(void *param)
  * PICO_FLASH_ASSUME_CORE1_SAFE, because that macro would keep claiming core 1
  * is safe long after M4 has started it.
  */
+/*
+ * See __flash_binary_end above. The assert in flash_record_bind() states
+ * this, but assert() is compiled out by NDEBUG — which Release defines, and
+ * Release is the image that goes on a wrist. The one build where a band
+ * could erase a piece of its own firmware at provisioning time was the only
+ * one with no check, so the check is made here too, where it survives.
+ */
+static bool image_fits(void)
+{
+    return (uintptr_t)&__flash_binary_end - XIP_BASE <= RECORD_SECTOR_OFFSET;
+}
+
 static bool run_write(write_req_t *req)
 {
+    if (!image_fits()) return false;
+
     if (multicore_lockout_ready())
         return flash_safe_execute(do_write, req, 1000) == PICO_OK;
 
@@ -204,8 +218,10 @@ bool flash_record_bind(void)
     flash_record_hdr_t h;
 
     /* See __flash_binary_end above. A wristband whose firmware has grown into
-     * the record sector must not quietly erase itself at provisioning time. */
-    assert((uintptr_t)&__flash_binary_end - XIP_BASE <= RECORD_SECTOR_OFFSET);
+     * the record sector must not quietly erase itself at provisioning time.
+     * This stops a debug build on the spot; run_write() is what holds the
+     * line in Release, where assert() is compiled out. */
+    assert(image_fits());
 
     store_set_backend(&k_backend);
 
