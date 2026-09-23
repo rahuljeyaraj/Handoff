@@ -403,7 +403,8 @@ python scripts/bringup.py carrier off
 Unplug USB before each bridge.
 
 - [ ] **Bridge JP4.** Plug USB in.
-- [ ] U2 pin 8: 3.25–3.35 V. JP6's divider pad: 1.57–1.73 V.
+- [ ] JP4's AFE pad (it is U2 pin 8, and far easier to probe): 3.25–3.35 V.
+- [ ] JP6's divider pad — the pad that does **not** beep to TP4. TP4 itself is still floating, JP6 being open: 1.57–1.73 V.
 - [ ] Unplug. **Bridge JP6.** Plug in.
 
 | Red probe on | Reads |
