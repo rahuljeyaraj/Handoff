@@ -782,12 +782,16 @@ def load_netlist():
 
 
 # Refs that earn silkscreen: the bring-up procedure in the README is carried out
-# with the board in hand, and it names jumpers and connectors. The AFE's
-# passives do not get silk - there is no room for it between 0603 pads on a
-# 5.3 mm pitch - and their references stay on F.Fab where CAD still shows
-# them. The mounting holes are not here: a 3.4 mm hole in a corner needs no label, and
+# with the board in hand, and it names jumpers and connectors. The passives are
+# here too. They were not, on the grounds that nothing fits between 0603 pads on
+# a 5.3 mm pitch, but that was measuring against the wrong obstacle: what filled
+# the gap was each 0603's own silk OUTLINE, not its neighbour. Those outlines go
+# (see SILK_STRIP) and all 23 references fit with DRC clean. It matters because
+# the board is stuffed by hand from a BOM of eight different values, and reading
+# a reference off the board beats counting positions on a drawing.
+# The mounting holes are not here: a 3.4 mm hole in a corner needs no label, and
 # the label had nowhere to go but off the board.
-SILK_REFS = ("JP", "J", "SW", "U", "D")
+SILK_REFS = ("JP", "J", "SW", "U", "D", "R", "C")
 
 # Footprints whose silkscreen OUTLINE is removed (their reference text stays).
 # U1's outline is drawn over the whole area the AFE, the breakout pads and the
@@ -802,8 +806,14 @@ SILK_REFS = ("JP", "J", "SW", "U", "D")
 # D1 was here while it was an SMB, whose outline reached TP7's mask. As a
 # SOD-123FL its outline stops 0.7 mm short of TP7, so its cathode bar is
 # printed again - a hand-assembled diode needs its band.
-SILK_STRIP = {"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4",
+# Every passive joins them, and for the plainest reason of the lot: a two-pad
+# part has no orientation, so its outline carries nothing the pads do not
+# already show. What it did carry was the 1.5 mm directly above the part, which
+# is the only place a reference can go on a 5.3 mm pitch. Trading a decorative
+# box for a printed name is not a close call.
+SILK_STRIP = ({"U1", "J1", "J2", "J3", "J5", "SW1", "H1", "H2", "H3", "H4",
                "J6", "TP2", "TP3"}
+              | {f"R{n}" for n in range(1, 18)} | {f"C{n}" for n in range(1, 7)})
 
 # References that would otherwise earn silk by their prefix but have nowhere to
 # put it: J6, Q1 and D3 are packed into 6 x 9 mm at the elbow, between JP4's
@@ -817,13 +827,23 @@ NO_SILK_REF = {"J6", "Q1", "D3"}
 REF_AT = {
     "U2": (0.0, 4.6), "SW1": (-3.0, 8.0), "SW2": (3.25, 6.55),
     "C4": (-3.6, 0.0), "C5": (5.25, 0.0), "D1": (-2.6, 3.8, 90),
-    "J1": (3.9, 4.65, 90), "J2": (3.9, 3.85, 90), "J5": (3.9, 4.65, 90), "R10": (0.0, 0.0),
+    "J1": (3.9, 4.65, 90), "J2": (3.9, 3.85, 90), "J5": (3.9, 4.65, 90),
     "J3": (0.0, -3.5),
     "JP5": (-2.5, 0.0, 90), "JP6": (0.0, -2.3), "JP7": (0.0, 1.8), "JP2": (0.0, 1.8),
     "JP8": (0.0, -1.8), "JP4": (1.5, 1.9), "JP3": (0.0, 1.9), "JP1": (0.0, 1.8),
     "H1": (0.0, 5.0), "H2": (0.0, 5.0), "H3": (0.0, -5.0), "H4": (0.0, -5.0),
     "TP5": (-3.0, 0.0), "TP7": (-2.6, 0.0),
     "Q1": (0.0, -2.5), "D3": (0.0, -2.1), "J6": (-2.4, 1.3),
+    # The four passives the library default does not clear. R10 sits 1.9 mm from
+    # the hand-end wall, so its name cannot go above it and stay inside
+    # EDGE_MARGIN, and it cannot go below without landing midway between R10 and
+    # C4 and reading as either; sideways is the only placement that names one
+    # part. R14 is 2.52 mm below R13 and its default lands on R13. C6 and R16
+    # would print over a neighbouring pad, C6 over J5 hole 2 and R16 over C2
+    # pad 2. R16 is the one compromise on the board: 2.4 mm above R16 and
+    # 2.2 mm from C2, so it is nearer a part it does not name, and it is
+    # readable only because it is the one label in line with R16.
+    "R10": (2.4, 0.0, 90), "R14": (1.1, 1.5), "R16": (0.0, -2.4), "C6": (-1.5, 0.5, 90),
 }
 
 # Fitted only if the GP11 leakage measurement at M3 says so (README, E9)

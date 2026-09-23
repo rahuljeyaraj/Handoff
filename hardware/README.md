@@ -466,18 +466,35 @@ a real mismatch could not hide among the ten deliberate ones.
 
 **Silkscreen.** Values are hidden everywhere. References are on silk for the
 things the bring-up procedure names in your hand — jumpers, connectors,
-switches, U1/U2, D1 — and on the fab layer for the AFE's passives, where
-0.8 mm text does not fit between 0603 pads on a 5.3 mm pitch. The test pads
+switches, U1/U2, D1 — and for every passive. The passives were on the fab
+layer instead, on the grounds that 0.8 mm text does not fit between 0603 pads
+on a 5.3 mm pitch. That measured against the wrong obstacle: what filled the
+gap above each part was its own silk *outline*, not its neighbour. A two-pad
+part has no orientation, so that outline says nothing the pads do not, and
+dropping it (below) leaves room for all 23 references with DRC still clean.
+Four needed placing by hand. R10 sits 1.9 mm from the hand-end wall, so its
+name cannot go above it and stay inside the 0.5 mm edge margin, and below it
+would land midway between R10 and C4 and name neither — it goes sideways.
+R14's default lands on R13, 2.52 mm above it. C6's and R16's would print over
+a neighbouring pad (J5 hole 2 and C2 pad 2). R16 is the one compromise on the
+board: 2.4 mm above R16 but 2.2 mm from C2, so it is marginally nearer a part
+it does not name, and it reads only because it is the one label in line with
+R16. This matters because the board is stuffed by hand from a BOM of eight
+different values, and reading a reference off the board beats counting
+positions on a drawing. The test pads
 are named by their **net** in printed legends (`ADC0`, `OUT1`, `VREF`, `PAD`,
 `VSYS`, `D1K`, `GND`) rather than by reference, which is what someone holding
 a probe is looking for. The silkscreen *outlines* of U1, the four JST
-connectors, SW1, TP2/TP3 and the mounting holes are moved to the fab layer
-too: U1's is a 21 × 51 box drawn over everything that deliberately lives under
-it, and TP2's and TP3's rings ran into JP1's and JP3's outlines at the elbow.
-(D1's went with them while it was an SMB whose bar reached TP7's mask; the
-SOD-123FL's stops 0.7 mm short, so D1's cathode bar is printed again.) That is
-what the thirteen `lib_footprint_mismatch` warnings are — the only warnings the
-board reports, and all deliberate. A board-edge legend (project name, revision, date) is on
+connectors, SW1, TP2/TP3, the mounting holes and every passive are moved to
+the fab layer too: U1's is a 21 × 51 box drawn over everything that
+deliberately lives under it, TP2's and TP3's rings ran into JP1's and JP3's
+outlines at the elbow, and each passive's was occupying the only place its
+name could go. (D1's went with them while it was an SMB whose bar reached
+TP7's mask; the SOD-123FL's stops 0.7 mm short, so D1's cathode bar is printed
+again. Q1's pin-1 dot and D3's band stay on silk for the same reason — those
+parts do have an orientation.) That is what the thirty-six
+`lib_footprint_mismatch` warnings are — thirteen from the parts above and one
+per passive, the only warnings the board reports, and all deliberate. A board-edge legend (project name, revision, date) is on
 F.SilkS at the hand end and repeated on B.SilkS along the little-finger wall;
 a numbered block of fabrication notes (stackup, finish, min track/space, the
 drill list, the boss rule, the plot origin) is on `Cmts.User` beside the board, and
