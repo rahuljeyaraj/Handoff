@@ -6,9 +6,16 @@
  * it drives through scripts/bringup.py.
  *
  * Every command puts one pin into one known state and leaves it there, so a
- * meter can be read against it at leisure. Nothing else runs: no radio, no
- * receiver ring, no core 1, no PWM — a pin is high, low or released, and
- * what the meter says is what the copper does.
+ * meter can be read against it at leisure. Nothing else runs: no receiver
+ * ring, no core 1, no PWM — a pin is high, low or released, and what the
+ * meter says is what the copper does.
+ *
+ * The one exception is the radio, and `v` is why. On a Pico 2 W GP29 is the
+ * CYW43's SPI clock as well as VSYS/3 (hardware/README.md), and the divider
+ * only reads while that chip is powered and awake: with it off, ADC3 sits at
+ * the bottom of the range. So cyw43_arch_init() runs at boot and `v` wakes
+ * the chip for the read, exactly as power.c does for the product image. No
+ * radio is ever brought up beyond that.
  *
  *   l r|g|b|w|0   RGB LED on GP17/18/19, plain outputs (no PWM)
  *   m 1|0         motor gate, GP28
@@ -37,6 +44,7 @@
 
 #include "hardware/adc.h"
 #include "hardware/gpio.h"
+#include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 
 #include "hal_pico.h"
@@ -56,6 +64,7 @@
 static const char *s_pad = "hiz";
 static bool        s_motor;
 static int         s_btn = -1, s_role = -1;
+static bool        s_cyw43;
 
 /* ---------------------------------------------------------------------- */
 
@@ -122,9 +131,28 @@ static void cmd_vsys(void)
 {
     uint32_t i, sum = 0;
 
-    /* No CYW43 in this image, so GP29 is a plain ADC input here. */
+    /* GP29 belongs to the CYW43 until we take it. Wake the chip first — its
+     * SPI clock line is the divider's only path to the pin — then claim
+     * the pad, throw the settling conversions away (the divider is ~66 kOhm, so
+     * the first reads come in low), and average. The driver restores GP29
+     * on its next transaction; docs/vsys-in-the-ring.md 2.3 says not to
+     * restore it by hand. */
+    if (!s_cyw43) {
+        printf("    vsys unavailable: the CYW43 did not start, and GP29 "
+               "reads nothing without it\n");
+        return;
+    }
+
+    cyw43_thread_enter();
+    (void)cyw43_arch_gpio_get(CYW43_WL_GPIO_VBUS_PIN);
+
+    adc_gpio_init(HANDOFF_PIN_VSYS);
     adc_select_input(HANDOFF_VSYS_CHANNEL);
+    for (i = 0; i < 8u; i++) (void)adc_read();
     for (i = 0; i < 256u; i++) sum += adc_read();
+
+    cyw43_thread_exit();
+
     printf("    vsys %lu mV\n", (unsigned long)(adc_mv(sum / 256u) * 3u));
     adc_select_input(HANDOFF_ADC_CHANNEL);
 }
@@ -251,8 +279,11 @@ int main(void)
 
     adc_init();
     adc_gpio_init(HANDOFF_PIN_ADC);
-    adc_gpio_init(HANDOFF_PIN_VSYS);
     adc_select_input(HANDOFF_ADC_CHANNEL);
+
+    /* Only so that `v` has a divider to read; see the note at the top. A
+     * failure here costs nothing but VSYS, so it is reported, not fatal. */
+    s_cyw43 = (cyw43_arch_init() == 0);
 
     pio_carrier_init(200000u);
     pad_release();
@@ -262,7 +293,9 @@ int main(void)
     led(0, 0, 0);
     sleep_ms(1000);          /* let the USB console attach before the banner */
 
-    printf("\nhandoff bringup: TX on GP%d, ADC0 on GP%d\n", HANDOFF_PIN_TX, HANDOFF_PIN_ADC);
+    printf("\nhandoff bringup: TX on GP%d, ADC0 on GP%d%s\n",
+           HANDOFF_PIN_TX, HANDOFF_PIN_ADC,
+           s_cyw43 ? "" : "  (CYW43 down: `v` cannot read VSYS)");
     poll_inputs();
     help();
 
