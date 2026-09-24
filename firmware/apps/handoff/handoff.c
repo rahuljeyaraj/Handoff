@@ -104,6 +104,7 @@
 #include "flash.h"
 #include "frag.h"
 #include "hal_pico.h"
+#include "led.h"
 #include "link_sm.h"
 #include "motor.h"
 #include "power.h"
@@ -855,6 +856,7 @@ static void help(void)
            "  y [N]     sync pulse on GP15, or N of them 3 s apart\n"
            "  d [ms]    pause after a handshake before re-arming (now %lu)\n"
            "  k [ms]    contact budget, to cut handshakes short (now %lu; 0 = default)\n"
+           "  l [n]     red LED scale 0-255, set by eye on a real board (now %u)\n"
            "  w         store a bench card named after this board\n"
            "  r         print the last received card\n"
            "  s         stats           z  zero\n"
@@ -865,6 +867,7 @@ static void help(void)
            "  p [mv]    measure VSYS at the next quiet tick, or feed the wearer side a value\n",
            s_link_on ? "on" : "off", (unsigned long)(s_reidle_us / 1000u),
            (unsigned long)(s_cfg.contact_budget_us / 1000u),
+           (unsigned)led_red_scale_now(),
            s_verbose ? "(on)" : "(off)", wear_tracing() ? "(on)" : "(off)");
 }
 
@@ -964,6 +967,11 @@ static void dispatch(const char *line)
             s_sm.cfg.contact_budget_us = s_cfg.contact_budget_us;
         }
         printf("    contact budget %lu ms\n", (unsigned long)(s_cfg.contact_budget_us / 1000u));
+        break;
+    case 'l':
+        if (have_arg) led_red_scale((uint8_t)(arg > 255u ? 255u : arg));
+        printf("    red scale %u / 255%s\n", (unsigned)led_red_scale_now(),
+               led_red_scale_now() == LED_SCALE_R ? " (LED_SCALE_R)" : "");
         break;
     case 'w': write_bench_card(); break;
     case 'r': print_received(); break;
@@ -1074,7 +1082,22 @@ int main(void)
      * the main loop is the thing the two-context rule exists to stop. */
     s_power_due = true;
 
-    sleep_ms(1500);          /* let the USB console attach before the banner */
+    /*
+     * Let the USB console attach before the banner — but poll the wearer side
+     * while waiting. wear_init() above posted the boot flash and the boot tap,
+     * and both are only ever drawn from wear_poll(): a blocking sleep here
+     * outlives the flash's 200 ms and the tap, so the first thing a battery
+     * boot showed was nothing at all. Found on the first assembled board,
+     * 24 Sep 2026. Sleeping first and flashing after would work too, but then
+     * a wearer with no USB waits 1.5 s for any sign of life.
+     */
+    {
+        uint64_t until = hal_now_us(s_hal) + 1500u * 1000u;
+        while (hal_now_us(s_hal) < until) {
+            wear_poll(hal_now_us(s_hal));
+            sleep_ms(5);
+        }
+    }
     print_banner();
 
     if (s_have_own) {

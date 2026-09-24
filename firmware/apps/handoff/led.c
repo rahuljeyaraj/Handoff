@@ -14,7 +14,10 @@
 #define LED_DIV  256.0f
 
 static const uint8_t k_pins[3] = { LED_PIN_R, LED_PIN_G, LED_PIN_B };
-static const uint8_t k_scale[3] = { LED_SCALE_R, LED_SCALE_G, LED_SCALE_B };
+static uint8_t k_scale[3] = { LED_SCALE_R, LED_SCALE_G, LED_SCALE_B };
+
+/* The colour showing now, so a scale change can be re-applied to it. */
+static ui_rgb_t s_showing;
 
 static uint16_t level(uint8_t v, uint8_t scale)
 {
@@ -38,7 +41,16 @@ void led_init(void)
 
 void led_set(ui_rgb_t c)
 {
+    s_showing = c;
     pwm_set_gpio_level(LED_PIN_R, level(c.r, k_scale[0]));
     pwm_set_gpio_level(LED_PIN_G, level(c.g, k_scale[1]));
     pwm_set_gpio_level(LED_PIN_B, level(c.b, k_scale[2]));
 }
+
+void led_red_scale(uint8_t scale)
+{
+    k_scale[0] = scale;
+    led_set(s_showing);
+}
+
+uint8_t led_red_scale_now(void) { return k_scale[0]; }
