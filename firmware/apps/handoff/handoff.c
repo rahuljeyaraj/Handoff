@@ -64,6 +64,8 @@
  *   d [ms]    pause after a handshake before the trigger re-arms (1500)
  *   k [ms]    contact budget: a short one cuts every handshake off, as
  *             hands parting would (0 = back to the default)
+ *   m [0|1]   vibrate on / off, or toggle — the same stored preference the
+ *             app's Band page sets, so a board with no phone can still set it
  *   w         store a bench card named after this board (needs no phone)
  *   r         print the last received card
  *   s         stats           z   zero the stats
@@ -334,6 +336,21 @@ static void reset_for_new_wearer(const char *who)
     printf("handoff: reset for a new wearer from %s (store %d)\n", who, e);
 }
 
+/*
+ * The vibrate preference, from either side. It is the app's switch (Band page
+ * -> Vibrate, BLE_CTRL_HAPTIC) and lives in the store so a reboot keeps it,
+ * but there is no phone on every bench board, so `m` reaches the same setting
+ * over USB. Returns whether it reached flash: with no card stored there is
+ * nothing to save it alongside, so it holds in RAM until one is written.
+ */
+static bool set_haptic(bool on)
+{
+    store_set_haptic(&s_store, on);
+    wear_set_haptic(on);
+    return store_get(&s_store, NULL, NULL) == STORE_OK
+        && store_save(&s_store) == STORE_OK;
+}
+
 static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
 {
     (void)ctx;
@@ -361,12 +378,8 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
 
     case BLE_CTRL_HAPTIC: {
         bool on = len >= 1u && arg[0] != 0u;
-        bool persisted;
+        bool persisted = set_haptic(on);
 
-        store_set_haptic(&s_store, on);
-        wear_set_haptic(on);
-        persisted = store_get(&s_store, NULL, NULL) == STORE_OK
-            && store_save(&s_store) == STORE_OK;
         printf("handoff: haptic %s%s\n", on ? "on" : "off",
                persisted ? ", persisted" : ", not yet persisted (no card)");
         report_status();
@@ -891,6 +904,7 @@ static void help(void)
            "  k [ms]    contact budget, to cut handshakes short (now %lu; 0 = default)\n"
            "  l [n]     red LED scale 0-255, set by eye on a real board (now %u)\n"
            "  t 0|1     force the next exchange: 0 receiver, 1 sender (skips the trigger)\n"
+           "  m [0|1]   vibrate on / off, the app's switch (now %s)\n"
            "  w         store a bench card named after this board\n"
            "  r         print the last received card\n"
            "  s         stats           z  zero\n"
@@ -902,6 +916,7 @@ static void help(void)
            s_link_on ? "on" : "off", (unsigned long)(s_reidle_us / 1000u),
            (unsigned long)(s_cfg.contact_budget_us / 1000u),
            (unsigned)led_red_scale_now(),
+           store_haptic_on(&s_store) ? "on" : "off",
            s_verbose ? "(on)" : "(off)", wear_tracing() ? "(on)" : "(off)");
 }
 
@@ -1021,6 +1036,16 @@ static void dispatch(const char *line)
         s_force_role = (have_arg && arg) ? 1 : 0;
         printf("    forced role %s\n", s_force_role ? "sender" : "receiver");
         break;
+
+    case 'm': {
+        bool on = have_arg ? (arg != 0u) : !store_haptic_on(&s_store);
+        bool persisted = set_haptic(on);
+
+        printf("    vibrate %s%s\n", on ? "on" : "off",
+               persisted ? ", persisted" : ", not persisted (no card stored)");
+        s_status_dirty = true;       /* the phone hears it from BTstack's timer */
+        break;
+    }
 
     case 'w': write_bench_card(); break;
     case 'r': print_received(); break;
