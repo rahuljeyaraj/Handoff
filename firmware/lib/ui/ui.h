@@ -35,7 +35,7 @@
  *   phone connected, idle            off                          -
  *   card written by the phone        green double-flash           tap (h)
  *   listening (idle)                 OFF                          -
- *   rendezvous                       white 10 Hz                  none (link)
+ *   rendezvous (a peer confirmed)    white 10 Hz                  none (link)
  *   handshake, sending / receiving   white solid                  none (link)
  *   complete, card received          green solid 2 s              double tap (h)
  *   card forwarded to the phone      + one green blip             -

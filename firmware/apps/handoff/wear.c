@@ -155,12 +155,24 @@ static void button(uint32_t now)
 
 /* ---- the body link ------------------------------------------------------ */
 
+/*
+ * RENDEZVOUS IS A CONFIRMED PEER, NOT A CARRIER BEING MEASURED. This read
+ * TRIG_WAIT, which only means the trigger heard *something* and is still
+ * timing it to find out what. The room supplies those constantly — the hunt
+ * behind [[handoff-elects-two-senders]] threw away 715 room bursts on one
+ * board — so the band blinked white at 10 Hz essentially without stopping,
+ * which is the opposite of ui.h's "listening (idle) OFF" row and of what a
+ * wristband should do on a wrist. TRIG_SEND and TRIG_RECEIVE are the states
+ * the trigger only reaches once a carrier has passed HANDOFF_SHOUT_MIN_US,
+ * so they mean another band, and nothing else does.
+ */
 void wear_link(const link_sm_t *sm)
 {
     ui_link_t l;
     switch (sm->state) {
     case LINK_IDLE:
-        l = sm->trig.state == TRIG_WAIT ? UI_LINK_RENDEZVOUS : UI_LINK_IDLE;
+        l = (sm->trig.state == TRIG_SEND || sm->trig.state == TRIG_RECEIVE)
+            ? UI_LINK_RENDEZVOUS : UI_LINK_IDLE;
         break;
     case LINK_COMPLETE:
     case LINK_ABORT:
