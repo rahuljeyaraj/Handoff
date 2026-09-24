@@ -455,6 +455,25 @@ python scripts/bringup.py adc 100000
 
 - [ ] Fingers off: `p-p` under ~300 mV. Fingers on: `p-p` **over 1000 mV** — stage 2 passes the clipped edges through to the ADC.
 
+**If the fingers-off number will not come down, suspect the room before the
+board** (found on both boards, 23 Sep 2026). A bare electrode wire is an
+antenna, and the receiver's own band — roughly 5 kHz to 320 kHz, set by C1/R6
+below and R9/C2 above — is exactly where a mini PC, a monitor and phone
+chargers are loud. On a mains-powered bench the capture can sit rail to rail
+(`p-p` 3000+, clipping at 3300) with nobody touching anything, repeatably.
+
+- **50 Hz is not the cause.** C1 with R6 is a high-pass at about 5 kHz, so mains
+  hum cannot reach the ADC. That is also why the meter reads ~0 V AC at TP3
+  while the ADC is clipping: a DMM's AC range is deaf above a few hundred Hz.
+- **The discriminator:** tie the electrode wire to ground and capture again. If
+  it falls to a few tens of mV, the board, its supply and its ground are clean
+  and the wire is the antenna. With the wire desoldered the floor should read
+  around 200 mV `p-p`, in window.
+- The meter half of this step still passes on a noisy bench — TP3 read 1.5 V AC
+  with fingers on the wire against a 0.3 V floor. Judge the board on that, and
+  take the ADC numbers on a **battery host** (laptop on battery, or a phone on
+  OTG) if they are ever wanted.
+
 That is the receiver alive end to end: pad → R2 → both stages → R9 → ADC.
 
 ---
@@ -470,17 +489,29 @@ python scripts/bringup.py pad off
 - [ ] Unplug. **Bridge JP2.** Plug in. Run `pad off` again.
 - [ ] TP3 `OUT1`: still within 0.10 V of TP4. **If it has moved to a rail**, GP11 leaks (RP2350-E9): wick JP2 open again and fit **C6** (a 330 pF, the C2 part) in the crossed-out spot under JP2 instead. Then continue.
 
+**RP2350-E9 is real and both assembled boards needed C6** (23 Sep 2026). With
+JP2 bridged and GP11 released, OUT1 went to the top rail (3.33 V) and the ADC
+mean jumped 1871 → 2221 mV. After wicking JP2 open and fitting C6, OUT1 came
+back to 2.21 V. On a board built from scratch, **fit C6 from the start and
+leave JP2 open** — that is the right build, and `pad high` / `pad low` moving
+the ADC mean by only ~3 mV while `carrier 200` rails it is the proof that C6
+and not a JP2 bridge is carrying the signal.
+
+**The next two checks are for a bridged JP2 only. If C6 is fitted, SKIP them
+and go straight to the carrier.** C6 is a DC block, so a statically driven pin
+cannot move OUT1 through it — that is the whole point of the part.
+
 ```
 python scripts/bringup.py pad high
 ```
 
-- [ ] TP3: above 3.0 V (stage 1 hits the top rail).
+- [ ] *(bridged JP2 only)* TP3: above 3.0 V (stage 1 hits the top rail).
 
 ```
 python scripts/bringup.py pad low
 ```
 
-- [ ] TP3: below 0.3 V.
+- [ ] *(bridged JP2 only)* TP3: below 0.3 V.
 
 ```
 python scripts/bringup.py pad off
@@ -491,11 +522,29 @@ python scripts/bringup.py pad off
 ```
 python scripts/bringup.py carrier 40
 python scripts/bringup.py adc
+python scripts/bringup.py carrier 200
+python scripts/bringup.py adc
 python scripts/bringup.py carrier off
 python scripts/bringup.py adc
 ```
 
-- [ ] With the carrier on: `p-p` **over 2000 mV** — the board hears its own shout and clips it, as designed. Off: back under 300 mV.
+| Carrier | `p-p` must be | board one | board two |
+|---|---|---|---|
+| 40 kHz | over 2000 mV | 3265 mV | 3266 mV |
+| **200 kHz** | over 2000 mV | 2623 mV | 2291 mV |
+| off | under ~400 mV | 410–431 mV | 410 mV |
+
+- [ ] With the carrier on the board hears its own shout and clips it, as designed.
+
+**Do not skip 200 kHz.** It is the marginal carrier — it sits nearest R9/C2's
+321 kHz corner, so it is the one that falls off first if C2 is the wrong part
+or a stage is sick. 40 kHz rails on almost anything.
+
+**Carrier-off runs a little over the old 300 mV limit once C6 is fitted**, and
+that is expected: C6 couples GP11's track into the receive node on top of a
+loud room (see the step 9 note). 410 mV against a 2000 mV signal is still
+roughly eight times' margin, and the carrier detector is frequency-selective on
+top of that.
 
 The whole signal path is now proved, both directions.
 
@@ -528,8 +577,19 @@ USB out for all of this except the last line.
 
 - [ ] SW1 OFF. Bridge JP5. SW1 ON.
 - [ ] Green boot flash. TP6: the cell minus 0.2–0.4 V. Pico pin 36: 3.3 V.
+
+**The green boot flash is the bring-up image only.** It exists so a battery
+boot is visible with no USB and no console. If the board is already carrying
+the product image (step 12), the sign is different: **white for 200 ms and one
+motor tap**. Either one means the board booted on the cell; neither appearing
+is the fault.
 - [ ] No USB means no console, so the button check is the meter: pin 20 goes 3.3 → 0 V when SW2 is pressed.
-- [ ] Plug USB in with the cell still on. TP6 rises to ~4.7 V, TP7 stays at the cell: D1 is blocking USB from the cell.
+- [ ] Plug USB in with the cell still on. TP6 rises to ~4.7 V, and **D1's un-banded end** (the end facing SW1, same node as J1 `+`) stays at the cell: D1 is blocking USB from the cell.
+
+**Probe D1's anode here, not TP7.** Once JP5 is bridged it ties D1's *cathode*
+straight to VSYS, so TP7 `D1K` and TP6 `VSYS` are one node and both rise to
+~4.7 V. The only point that stays at the cell is the anode side. The path is
+SW1 → D1 anode (pad 2) → D1 cathode (pad 1) → JP5 → VSYS → Pico pin 39.
 
 ```
 python scripts/bringup.py vsys
