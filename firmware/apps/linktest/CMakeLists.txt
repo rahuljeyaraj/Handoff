@@ -7,6 +7,7 @@ add_executable(linktest
 target_link_libraries(linktest
     pico_stdlib
     handoff_lib
+    pico_cyw43_arch_none
 )
 
 pico_enable_stdio_usb(linktest 1)
@@ -23,6 +24,7 @@ target_compile_definitions(linktest_tx PRIVATE LINKTEST_ROLE=1)
 target_link_libraries(linktest_tx
     pico_stdlib
     handoff_lib
+    pico_cyw43_arch_none
 )
 pico_enable_stdio_usb(linktest_tx 1)
 pico_enable_stdio_uart(linktest_tx 0)

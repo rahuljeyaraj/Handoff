@@ -59,6 +59,7 @@
 #include <string.h>
 
 #include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
 #include "hardware/gpio.h"
 
 #include "adc_ring.h"
@@ -647,6 +648,19 @@ int main(void)
            HANDOFF_CHIP_RATE_HZ, HANDOFF_BIT_RATE_BPS);
     printf("  frame %d chips, %lu us airtime, %d-byte payload\n",
            FRAME_TOTAL_CHIPS, (unsigned long)FRAME_AIRTIME_US, HANDOFF_FRAG_PAYLOAD);
+
+    /*
+     * Design §10.4: pin the SMPS into fixed-frequency PWM before the ADC goes
+     * live, so its switching noise lands in one predictable place instead of
+     * wandering across the ADC band. GP23 is the plain Pico 2's mode pin; on
+     * the 2 W it is the CYW43 power enable and the mode control moves to
+     * WL_GPIO1. Measured 24 Sep: without this the 200 kHz bin idles at mean
+     * 34 LSB with bursts to 400, against a skin signal of 10-16.
+     */
+    if (cyw43_arch_init() == 0)
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_SMPS_PIN, true);
+    else
+        printf("  cyw43_arch_init failed: SMPS still in power-save\n");
 
     s_hal = hal_pico_init();
 
