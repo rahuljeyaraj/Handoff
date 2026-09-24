@@ -1,0 +1,23 @@
+   0.008  A| -- COM8 open
+   0.433  A|   hb 41 s seen 0 good 0 crc 0 lost 0 level 15 overruns 0 load 30%
+   2.019  A| >> c 200
+   2.063  A|     carrier 200000 Hz, bin 10, 200 pad bits per chip
+   5.004  A| >> z
+   5.063  A|     stats zeroed
+   9.002  A| >> m
+   9.005  A| 
+   9.005  A|   --- measure at 200000 Hz, 500 ms ---
+   9.737  A|     chip energy:  mean 34.2 LSB, max 373 LSB (A, if frames are flowing)
+   9.737  A|     raw samples:  653.7 LSB RMS about code 2184 (sigma, if the transmitter is paused)
+   9.737  A|     M4 floor:     1.1 LSB RMS about code 869 (on-die sensor, at boot)
+  10.353  A|   hb 5 s seen 0 good 0 crc 0 lost 0 level 0 overruns 0 load 30%
+  16.006  A| >> m
+  16.013  A| 
+  16.013  A|   --- measure at 200000 Hz, 500 ms ---
+  16.747  A|     chip energy:  mean 37.2 LSB, max 407 LSB (A, if frames are flowing)
+  16.747  A|     raw samples:  647.2 LSB RMS about code 2180 (sigma, if the transmitter is paused)
+  16.747  A|     M4 floor:     1.1 LSB RMS about code 869 (on-die sensor, at boot)
+  20.381  A|   hb 15 s seen 0 good 0 crc 0 lost 0 level 170 overruns 0 load 30%
+  21.020  A| >> s
+  21.116  A|       16 s  good 0  crc 0  lost 0   FER 1.0000   BER 5.00e-01   margin 0  worst gap 0  last fail 0 s
+  21.116  A|            false syncs 0, dma overruns 0, core-1 load 30%

@@ -1,0 +1,37 @@
+   0.008  A| -- COM8 open
+   2.000  A| >> c 20
+   2.031  A|     carrier 20000 Hz, bin 1, 20 pad bits per chip
+   5.012  A| >> m
+   5.083  A| 
+   5.083  A|   --- measure at 20000 Hz, 500 ms ---
+   5.722  A|     chip energy:  mean 225.5 LSB, max 2520 LSB (A, if frames are flowing)
+   5.722  A|     raw samples:  650.7 LSB RMS about code 2180 (sigma, if the transmitter is paused)
+   5.722  A|     M4 floor:     0.3 LSB RMS about code 866 (on-die sensor, at boot)
+   9.158  A|   hb 7 s seen 0 good 0 crc 0 lost 0 level 11 overruns 0 load 28%
+  11.006  A| >> c 40
+  11.085  A|     carrier 40000 Hz, bin 2, 40 pad bits per chip
+  14.009  A| >> m
+  14.012  A| 
+  14.012  A|   --- measure at 40000 Hz, 500 ms ---
+  14.745  A|     chip energy:  mean 123.1 LSB, max 1836 LSB (A, if frames are flowing)
+  14.745  A|     raw samples:  643.2 LSB RMS about code 2182 (sigma, if the transmitter is paused)
+  14.745  A|     M4 floor:     0.3 LSB RMS about code 866 (on-die sensor, at boot)
+  19.181  A|   hb 8 s seen 0 good 0 crc 0 lost 0 level 320 overruns 0 load 28%
+  20.004  A| >> c 100
+  20.044  A|     carrier 100000 Hz, bin 5, 100 pad bits per chip
+  23.009  A| >> m
+  23.103  A| 
+  23.103  A|   --- measure at 100000 Hz, 500 ms ---
+  23.735  A|     chip energy:  mean 61.7 LSB, max 849 LSB (A, if frames are flowing)
+  23.735  A|     raw samples:  609.3 LSB RMS about code 2176 (sigma, if the transmitter is paused)
+  23.735  A|     M4 floor:     0.3 LSB RMS about code 866 (on-die sensor, at boot)
+  29.004  A| >> c 200
+  29.090  A|     carrier 200000 Hz, bin 10, 200 pad bits per chip
+  29.191  A|   hb 0 s seen 0 good 0 crc 0 lost 0 level 18 overruns 0 load 28%
+  32.018  A| >> m
+  32.078  A| 
+  32.078  A|   --- measure at 200000 Hz, 500 ms ---
+  32.828  A|     chip energy:  mean 29.5 LSB, max 409 LSB (A, if frames are flowing)
+  32.828  A|     raw samples:  630.3 LSB RMS about code 2172 (sigma, if the transmitter is paused)
+  32.828  A|     M4 floor:     0.3 LSB RMS about code 866 (on-die sensor, at boot)
+  39.181  A|   hb 10 s seen 0 good 0 crc 0 lost 0 level 0 overruns 0 load 28%

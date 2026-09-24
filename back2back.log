@@ -1,0 +1,40 @@
+   0.014  A| -- COM7 open
+   0.014  B| -- COM8 open
+   0.991  A|   hb sent 55 seq 55 running stalls 0
+   2.007  A| >> c 200
+   2.190  A|     carrier 200000 Hz, bin 10, 200 pad bits per chip
+   4.018  B| >> c 200
+   4.052  B|     carrier 200000 Hz, bin 10, 200 pad bits per chip
+   7.319  B|   hb 3 s seen 17 good 16 crc 1 lost 0 level 353 overruns 0 load 30%
+   8.002  B| >> z
+   8.080  B|     stats zeroed
+   9.063  A|   sent 100 frames, next seq 100, 18 s, refused 0, stalls 0
+  11.025  A|   hb sent 110 seq 110 running stalls 0
+  15.013  B| >> m
+  15.058  B| 
+  15.058  B|   --- measure at 200000 Hz, 500 ms ---
+  15.821  B|     chip energy:  mean 241.0 LSB, max 722 LSB (A, if frames are flowing)
+  15.821  B|     raw samples:  1494.5 LSB RMS about code 2766 (sigma, if the transmitter is paused)
+  15.821  B|     M4 floor:     1.1 LSB RMS about code 869 (on-die sensor, at boot)
+  17.347  B|   hb 9 s seen 49 good 49 crc 0 lost 2 level 302 overruns 0 load 30%
+  20.011  A| >> p
+  20.072  A|     paused: pad high-Z
+  20.946  A|   hb sent 161 seq 161 paused stalls 0
+  24.014  B| >> m
+  24.104  B| 
+  24.104  B|   --- measure at 200000 Hz, 500 ms ---
+  24.757  B|     chip energy:  mean 34.9 LSB, max 84 LSB (A, if frames are flowing)
+  24.757  B|     raw samples:  282.1 LSB RMS about code 2367 (sigma, if the transmitter is paused)
+  24.757  B|     M4 floor:     1.1 LSB RMS about code 869 (on-die sensor, at boot)
+  27.379  B|   hb 19 s seen 64 good 64 crc 0 lost 3 level 34 overruns 0 load 30%
+  28.015  A| >> p
+  28.031  A|     running
+  30.969  A|   hb sent 177 seq 177 running stalls 0
+  34.570  B|       26 s  good 100  crc 0  lost 3   FER 0.0291   BER 0.00e+00   margin 454  worst gap 1  last fail 10 s
+  34.570  B|            false syncs 11, dma overruns 0, core-1 load 30%
+  35.113  A|   sent 200 frames, next seq 200, 44 s, refused 0, stalls 0
+  37.299  B|   hb 29 s seen 115 good 115 crc 0 lost 3 level 260 overruns 0 load 30%
+  40.019  B| >> s
+  40.128  B|       32 s  good 130  crc 0  lost 3   FER 0.0226   BER 0.00e+00   margin 454  worst gap 1  last fail 10 s
+  40.128  B|            false syncs 11, dma overruns 0, core-1 load 30%
+  40.998  A|   hb sent 232 seq 232 running stalls 0

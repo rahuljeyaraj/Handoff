@@ -1,0 +1,27 @@
+   0.015  A| -- COM7 open
+   0.015  B| -- COM8 open
+   2.007  A| >> c 200
+   2.086  A|     carrier 200000 Hz, bin 10, 200 pad bits per chip
+   2.402  A|   hb sent 55 seq 55 running stalls 0
+   4.018  B| >> c 200
+   4.036  B|     carrier 200000 Hz, bin 10, 200 pad bits per chip
+   7.507  B|   hb 3 s seen 5 good 1 crc 4 lost 0 level 230 overruns 0 load 29%
+   8.018  B| >> z
+   8.035  B|     stats zeroed
+  10.475  A|   sent 100 frames, next seq 100, 18 s, refused 0, stalls 0
+  12.345  A|   hb sent 110 seq 110 running stalls 0
+  17.511  B|   hb 9 s seen 2 good 0 crc 2 lost 0 level 27 overruns 0 load 29%
+  20.018  B| >> m
+  20.084  B| 
+  20.084  B|   --- measure at 200000 Hz, 500 ms ---
+  20.833  B|     chip energy:  mean 96.9 LSB, max 1561 LSB (A, if frames are flowing)
+  20.833  B|     raw samples:  799.5 LSB RMS about code 2271 (sigma, if the transmitter is paused)
+  20.833  B|     M4 floor:     0.8 LSB RMS about code 864 (on-die sensor, at boot)
+  22.416  A|   hb sent 165 seq 165 running stalls 0
+  27.458  B|   hb 19 s seen 2 good 0 crc 2 lost 0 level 4 overruns 0 load 28%
+  28.608  A|   sent 200 frames, next seq 200, 36 s, refused 0, stalls 0
+  32.344  A|   hb sent 220 seq 220 running stalls 0
+  36.001  B| >> s
+  36.062  B|       27 s  good 0  crc 2  lost 0   FER 1.0000   BER 3.96e-01   margin 539  worst gap 0  last fail 0 s
+  36.062  B|            false syncs 42, dma overruns 0, core-1 load 28%
+  37.432  B|   hb 29 s seen 2 good 0 crc 2 lost 0 level 2 overruns 0 load 28%
