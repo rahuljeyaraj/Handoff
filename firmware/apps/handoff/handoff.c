@@ -787,11 +787,30 @@ static void poll_link(uint64_t now)
     }
 
     if (st != last_state || s_sm.role != last_role) {
+        const bool left_trigger = (last_state == LINK_IDLE && st != LINK_IDLE);
         last_state = st;
         last_role  = s_sm.role;
-        if (s_verbose && st != LINK_COMPLETE && st != LINK_ABORT)
+        if (s_verbose && st != LINK_COMPLETE && st != LINK_ABORT) {
             printf("st %llu %s %s\n", (unsigned long long)now,
                    link_state_name(st), role_name(s_sm.role));
+            /*
+             * What the trigger actually heard. Without this a bench cannot
+             * tell a band that triggered on a peer from one that triggered on
+             * its own shout decaying (silent ~0) or on the room (silent
+             * scattered, carrier gone again in about the detector's hold).
+             */
+            if (left_trigger)
+                printf("trig silent %lu us, carrier %lu us; shouts %lu waits %lu "
+                       "sends %lu receives %lu short %lu timeouts %lu\n",
+                       (unsigned long)s_sm.trig.last_silent_us,
+                       (unsigned long)s_sm.trig.last_wait_us,
+                       (unsigned long)s_sm.trig.shouts,
+                       (unsigned long)s_sm.trig.waits,
+                       (unsigned long)s_sm.trig.sends,
+                       (unsigned long)s_sm.trig.receives,
+                       (unsigned long)s_sm.trig.short_carriers,
+                       (unsigned long)s_sm.trig.quiet_timeouts);
+        }
     }
 
     if (st == LINK_COMPLETE || st == LINK_ABORT) on_done(now);
@@ -824,6 +843,20 @@ static void print_stats(void)
            (unsigned long)hal_pico_rx_cut(), (unsigned long)s_sm.framer.false_syncs,
            (unsigned long)hal_pico_overruns(), (unsigned long)hal_pico_tx_stalls(0),
            hal_pico_core1_load());
+    /*
+     * The receive turn ends on "they have gone quiet", and quiet is decided by
+     * carrier_present() alone — so a carrier detector whose floor primed INSIDE
+     * the far end's frame reports silence for the whole frame and the turn is
+     * handed back over the top of it. That failure is invisible in every other
+     * counter: it looks exactly like a peer that never transmitted. level
+     * against floor is what tells them apart — a healthy idle detector sits
+     * with level near floor and present 0, a poisoned one sits with BOTH high.
+     */
+    printf("           carrier level %lu floor %lu present %u; framer syncs %lu\n",
+           (unsigned long)carrier_level(&s_sm.carrier),
+           (unsigned long)carrier_floor(&s_sm.carrier),
+           (unsigned)carrier_present(&s_sm.carrier),
+           (unsigned long)s_sm.framer.syncs);
     printf("           chips %lu at %lu sps; vsys %u mV %s, %lu reads %lu failed, last %lu us\n",
            (unsigned long)hal_pico_chips(), (unsigned long)hal_pico_sps(),
            (unsigned)s_vsys_mv, s_on_usb ? "usb" : "batt",
@@ -857,6 +890,7 @@ static void help(void)
            "  d [ms]    pause after a handshake before re-arming (now %lu)\n"
            "  k [ms]    contact budget, to cut handshakes short (now %lu; 0 = default)\n"
            "  l [n]     red LED scale 0-255, set by eye on a real board (now %u)\n"
+           "  t 0|1     force the next exchange: 0 receiver, 1 sender (skips the trigger)\n"
            "  w         store a bench card named after this board\n"
            "  r         print the last received card\n"
            "  s         stats           z  zero\n"
@@ -973,6 +1007,21 @@ static void dispatch(const char *line)
         printf("    red scale %u / 255%s\n", (unsigned)led_red_scale_now(),
                led_red_scale_now() == LED_SCALE_R ? " (LED_SCALE_R)" : "");
         break;
+    /*
+     * The same thing BLE_CTRL_FORCE_ROLE does, on the console, because the
+     * trigger and the exchange fail in ways that look identical from outside
+     * — both end in `abort ... good 0` — and the only way to tell them apart
+     * is to hand out the roles by hand and see whether a frame decodes.
+     */
+    case 't':
+        if (!s_link_on || !s_have_own) {
+            printf("    link off or no card: `w` then `g` first\n");
+            break;
+        }
+        s_force_role = (have_arg && arg) ? 1 : 0;
+        printf("    forced role %s\n", s_force_role ? "sender" : "receiver");
+        break;
+
     case 'w': write_bench_card(); break;
     case 'r': print_received(); break;
     case 's': print_stats(); break;

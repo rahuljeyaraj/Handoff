@@ -30,7 +30,7 @@
 
 /* One whole cycle at its longest: shout, settle, and the longest listen the
  * draw can produce. This is the window the phase sweep covers. */
-#define CYCLE_MAX_US (HANDOFF_SHOUT_US + HANDOFF_TURNAROUND_US + \
+#define CYCLE_MAX_US (HANDOFF_SHOUT_US + HANDOFF_TRIG_SETTLE_US + \
                       HANDOFF_LISTEN_MAX_US)
 
 /*
@@ -336,7 +336,7 @@ static void stuck_carrier(void)
      * expired by one cycle plus the cap itself.
      */
     HF_CHECK_MSG(first_listen_after_wait <=
-                 HANDOFF_SHOUT_US + HANDOFF_TURNAROUND_US +
+                 HANDOFF_SHOUT_US + HANDOFF_TRIG_SETTLE_US +
                  HANDOFF_QUIET_WAIT_MAX_US + 4u * STEP_US,
              "took %llu us to give up on a stuck carrier, cap is %u us",
              (unsigned long long)first_listen_after_wait,

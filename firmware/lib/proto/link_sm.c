@@ -45,6 +45,7 @@ void link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
 
 static void queue_frame(link_sm_t *sm);
 static void enter_rx(link_sm_t *sm, uint64_t now_us, bool reset_framer);
+static void enter_turnaround(link_sm_t *sm, uint64_t now_us, uint32_t settle_us);
 
 /*
  * A new contact begins here: the previous person's record is dropped and the
@@ -110,7 +111,26 @@ static void open_contact(link_sm_t *sm, uint64_t now_us)
  * The framer is not reset on this path either, and that one is not a
  * preference — the lock IS the reason we are here.
  */
-static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role)
+/*
+ * from_trigger says the role came from TRIG_SEND — we heard somebody's shout
+ * and the channel is ours. That matters for one reason only, and it is the same
+ * reason take_channel() exists: THE PEER IS STILL DEAF.
+ *
+ * It has just finished its own shout, and it stays deaf for
+ * HANDOFF_TRIG_SETTLE_US while its amplifier recovers. Our decision lands about
+ * the carrier detector's hold after that shout stopped, so sending a preamble
+ * immediately puts it inside a window the peer cannot hear — and a preamble
+ * missed is not merely a lost frame, it is a lost frame, because frame.c's hunt
+ * locks on the preamble's start and cannot join one in progress. The peer then
+ * hears a long carrier it can never decode, times out on it, shouts again, and
+ * the pair never rendezvous at all.
+ *
+ * This went unnoticed while the settle was HANDOFF_TURNAROUND_US: at 1 ms the
+ * peer's ears happened to open before the preamble by luck. The phase sweep in
+ * test_beacon.c fails from 3 ms up, which is exactly where the luck runs out.
+ */
+static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role,
+                           bool from_trigger)
 {
     sm->role = role;
 
@@ -118,6 +138,13 @@ static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role)
         frame_rx_init(&sm->framer);
         carrier_reset(&sm->carrier);
         sm->turn_frames = 0;
+        if (from_trigger) {
+            /* Their settle, plus our own amplifier's, so the preamble starts
+             * after their ears are certainly open. */
+            enter_turnaround(sm, now_us,
+                             HANDOFF_TRIG_SETTLE_US + HANDOFF_TURNAROUND_US);
+            return;
+        }
         sm->state = LINK_TX_FRAME;
         queue_frame(sm);
         return;
@@ -133,7 +160,9 @@ void link_sm_begin(link_sm_t *sm, uint64_t now_us, link_role_t role)
     frame_rx_init(&sm->framer);
     trig_stop(&sm->trig);
     open_contact(sm, now_us);
-    enter_exchange(sm, now_us, role);
+    /* The caller decided the roles itself, so there is no peer coming out of a
+     * shout to wait for — see enter_exchange(). */
+    enter_exchange(sm, now_us, role, false);
 }
 
 void link_sm_idle(link_sm_t *sm, uint64_t now_us)
@@ -438,7 +467,8 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
         trig_stop(&sm->trig);
         if (!sm->exchange_open) open_contact(sm, now_us);
         enter_exchange(sm, now_us,
-                       ts == TRIG_SEND ? LINK_ROLE_SENDER : LINK_ROLE_RECEIVER);
+                       ts == TRIG_SEND ? LINK_ROLE_SENDER : LINK_ROLE_RECEIVER,
+                       true);
     }
 }
 
@@ -485,7 +515,15 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
     case LINK_RX_FRAME: {
         const uint32_t got = drain_rx(sm, true);
 
-        if (carrier_present(&sm->carrier)) sm->last_carrier_us = now_us;
+        /*
+         * A frame in progress keeps the turn alive on its own account. The
+         * carrier detector cannot do this job by itself: its floor tracks up
+         * to meet a carrier that lasts a whole frame, so it reports silence
+         * partway through every one, and the turn was being handed back over
+         * the top of the frame it was waiting for. See frame_rx_busy().
+         */
+        if (carrier_present(&sm->carrier) || frame_rx_busy(&sm->framer))
+            sm->last_carrier_us = now_us;
 
         if (got) {
             sm->rx_turn_frames = (uint8_t)(sm->rx_turn_frames + got);

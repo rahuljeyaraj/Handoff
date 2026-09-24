@@ -145,4 +145,23 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, uint16_t chip_energy);
 const frame_hdr_t *frame_rx_hdr(const frame_rx_t *r);
 const uint8_t     *frame_rx_payload(const frame_rx_t *r);   /* HANDOFF_FRAG_PAYLOAD bytes */
 
+/*
+ * The framer has taken a preamble and is collecting a frame. It is a far better
+ * answer to "is the far end still transmitting?" than carrier.c is, and that is
+ * what it exists for.
+ *
+ * carrier.c tracks a slow floor over ~128 chips so it can find a preamble
+ * against a moving ambient. A whole frame is FRAME_TOTAL_CHIPS — several times
+ * that window — so the floor climbs to meet the carrier partway through every
+ * frame and carrier_present() goes false while the frame is still arriving.
+ * That is not a bug in the detector; it is a detector doing its job over the
+ * wrong timescale for this question.
+ *
+ * Measured on the first assembled PCB, 24 Sep 2026: a receiver reported
+ * `carrier level 548 floor 256 present 0` and the framer synced 23 times while
+ * finishing exactly zero frames, because the receive turn ended on the
+ * detector's silence and reset the framer mid-body every time.
+ */
+bool               frame_rx_busy(const frame_rx_t *r);
+
 #endif /* HANDOFF_FRAME_H */

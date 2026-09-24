@@ -20,15 +20,24 @@
  * THE RULE. Every band free-runs this loop, unsynchronised with any other:
  *
  *   SHOUT    HANDOFF_SHOUT_US of flat carrier      (deaf — own amp driving)
- *   SETTLE   HANDOFF_TURNAROUND_US                 (deaf — own amp recovering)
+ *   SETTLE   HANDOFF_TRIG_SETTLE_US                (deaf — own amp recovering)
  *   LISTEN   50-100 ms, drawn per cycle            (ears open, continuously)
  *
- * While listening, anything heard is one of exactly two things:
+ * While listening, anything heard is one of exactly three things:
  *
- *   flat carrier, framer never locks   somebody's shout   wait for silence,
+ *   flat carrier lasting HANDOFF_SHOUT_MIN_US or more, framer never locks
+ *                                      somebody's shout   wait for silence,
  *                                                         then send our card
  *   alternating preamble, framer locks a card arriving    receive it
+ *   flat carrier, but too short        not a band at all  keep listening, and
+ *                                                         do not count it
  *   nothing, for the whole drawn window nobody there      shout again
+ *
+ * THE THIRD CASE IS NOT OPTIONAL, and leaving it out is what broke the first
+ * assembled boards. Without a length test the band cannot tell a peer from its
+ * own amplifier or from the room, and a band ALONE on a bench, with no peer
+ * powered at all, elected itself sender on 60 shouts out of 60 — see
+ * HANDOFF_SHOUT_MIN_US and HANDOFF_TRIG_SETTLE_US for the measurements.
  *
  * THE LISTEN TIMER COUNTS SILENT TIME ONLY. It is held while a carrier is
  * present. Without that a band would shout over a card already in flight.
@@ -38,7 +47,15 @@
  *
  * WHY THERE IS NOTHING TO ELECT. To hear the other band's shout you must have
  * your ears open before their shout ends. Your own ears open SHOUT_US +
- * TURNAROUND_US after your own shout began — 11 ms here.
+ * TRIG_SETTLE_US after your own shout began — 16 ms here.
+ *
+ * The algebra below is written with the old 11 ms and still holds in shape: the
+ * deaf window got longer, which only makes the earlier shouter MORE certainly
+ * the one that fails to hear. What the longer window does cost is rendezvous
+ * time, because a band is now deaf for a larger fraction of each cycle and so
+ * more often misses the start of a peer's shout and fails the length gate. That
+ * costs a retry, not a handshake, and the phase sweep in test_beacon.c is what
+ * bounds it — read the number it prints, do not estimate it.
  *
  * For two shouts starting at t_A and t_B, with t_A < t_B:
  *
@@ -105,6 +122,61 @@
 #endif
 
 /*
+ * Deaf time after our own shout, while the amplifier comes out of saturation.
+ *
+ * NOT HANDOFF_TURNAROUND_US, which is design §9.7's 1 ms measured at M8 on the
+ * breadboard and governs the gap between frames inside an exchange. This is the
+ * same physical quantity measured on the first assembled PCB, where it is much
+ * longer: a shout is 10 ms of flat drive into an amplifier with a gain of 11
+ * that hard-limits, and C6 couples the drive track straight into its input.
+ *
+ * Measured 24 Sep 2026. Freshly armed, a band printed `trig silent 0 us`
+ * repeatedly — the carrier detector was already up the instant its ears opened
+ * — and the carrier then lasted about 4.2 ms. Taking off the detector's 8-chip
+ * hold, the band's own shout is still above threshold about 3.2 ms after the
+ * pad goes idle, so 1 ms of settle opened the ears squarely into it.
+ *
+ * The cost of getting this wrong is not subtle. With 1 ms, a band ALONE on a
+ * bench, with no peer powered at all, heard its own shout, read it as somebody
+ * else's, and elected itself sender on 60 shouts out of 60. TRIG_RECEIVE never
+ * fired once. 6 ms is the measured 3.2 with room for a louder board.
+ */
+#ifndef HANDOFF_TRIG_SETTLE_US
+#define HANDOFF_TRIG_SETTLE_US    6000u
+#endif
+
+/*
+ * How long a carrier must have lasted before it counts as somebody's shout.
+ *
+ * The second half of the same 24 Sep 2026 finding. A settle long enough to miss
+ * our own shout still leaves the room, which on this bench puts ~4 ms bursts
+ * into the receive band often enough to land in most listen windows — and
+ * TRIG_WAIT, as first written, read ANY carrier that came and went as a shout.
+ * It never asked how long it lasted, so noise and a peer were the same event.
+ *
+ * They are not, and the two populations do not overlap. A peer's shout is
+ * HANDOFF_SHOUT_US of flat tone; the detector raises its flag about
+ * HANDOFF_DETECT_US in and drops it hold_chips after the tone stops, so a fully
+ * heard one measures about 11 ms, and board two measured board one's real
+ * shouts at 13.5-16.5 ms. Everything the bench produced that was not a shout
+ * measured 8.2 ms or less.
+ *
+ * Sit between them, nearer the junk: a gate set too high rejects real shouts
+ * and breaks the rendezvous outright, while one set too low only wastes a
+ * contact that the next cycle retries. That asymmetry is why this is 9 and not
+ * 11.
+ *
+ * A carrier that fails this test is not an event at all — the band returns to
+ * LISTEN *keeping its silence budget*, rather than drawing a fresh window. A
+ * fresh draw here would be a lock-up: bursts arriving every ~25 ms against a
+ * 50-100 ms draw mean the window would never once run out, so the band would
+ * never shout again and would go off the air completely.
+ */
+#ifndef HANDOFF_SHOUT_MIN_US
+#define HANDOFF_SHOUT_MIN_US      9000u
+#endif
+
+/*
  * The listen window, drawn fresh every cycle from [MIN, MAX). The range is not
  * a latency budget — it is the decorrelator: two bands that shouted at the same
  * instant repeat only if their next two draws land within a detector latency of
@@ -141,8 +213,25 @@ HANDOFF_STATIC_ASSERT(HANDOFF_SHOUT_US >= 4u * HANDOFF_DETECT_US,
     "shout too short for a peer to raise its flag and still see it end");
 
 HANDOFF_STATIC_ASSERT(
-    HANDOFF_LISTEN_MIN_US > HANDOFF_SHOUT_US + HANDOFF_TURNAROUND_US,
+    HANDOFF_LISTEN_MIN_US > HANDOFF_SHOUT_US + HANDOFF_TRIG_SETTLE_US,
     "listen window can be shorter than the deaf phase: some cycles never listen");
+
+/* The settle exists because the PCB's amplifier outlasts §9.7's 1 ms. If it
+ * were ever set shorter than that, the trigger would be deaf for less time than
+ * the exchange is, which is the bug this constant was added to fix. */
+HANDOFF_STATIC_ASSERT(HANDOFF_TRIG_SETTLE_US >= HANDOFF_TURNAROUND_US,
+    "trigger settles for less time than the exchange turnaround");
+
+/* A gate at or above what a fully heard shout measures rejects every real
+ * shout, and the rendezvous stops working altogether rather than degrading. */
+HANDOFF_STATIC_ASSERT(
+    HANDOFF_SHOUT_MIN_US < HANDOFF_SHOUT_US - HANDOFF_DETECT_US + 8u * HANDOFF_CHIP_US,
+    "shout gate is above what a fully heard shout measures: nothing can pass it");
+
+/* The gate has to be reachable inside the quiet-wait cap, or a legal shout is
+ * cut short by the timeout before it can ever be long enough to count. */
+HANDOFF_STATIC_ASSERT(HANDOFF_QUIET_WAIT_MAX_US > HANDOFF_SHOUT_MIN_US,
+    "quiet-wait cap expires before a shout can satisfy the gate");
 
 /* The draw range is what decorrelates a simultaneous-shout collision. */
 HANDOFF_STATIC_ASSERT(
@@ -184,6 +273,29 @@ typedef struct {
     uint32_t quiet_timeouts;
     uint32_t sends;
     uint32_t receives;
+    /* Carriers rejected by HANDOFF_SHOUT_MIN_US: heard, but too short to have
+     * been anybody's shout. On a quiet channel this stays at zero; on a loud
+     * bench it is the count of contacts the gate saved. */
+    uint32_t short_carriers;
+
+    /*
+     * The anatomy of the last trip through WAIT, which is the only way to tell
+     * a band triggering on a peer from one triggering on itself or on the room.
+     *
+     *   last_silent_us   silence already banked when the carrier appeared. Near
+     *                    zero every cycle means the band is hearing its own
+     *                    shout decay; scattered across the listen window means
+     *                    it is hearing the room.
+     *   last_wait_us     how long the carrier then lasted. A peer's shout is
+     *                    HANDOFF_SHOUT_US of flat tone; an impulse from the
+     *                    room clears in about the detector's hold.
+     *
+     * Both are set when WAIT resolves, either way, and are telemetry only —
+     * nothing in the machine reads them.
+     */
+    uint64_t wait_started_us;
+    uint32_t last_silent_us;
+    uint32_t last_wait_us;
 } trig_t;
 
 void         trig_init(trig_t *t, const hal_iface_t *hal);

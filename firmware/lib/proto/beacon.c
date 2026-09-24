@@ -40,6 +40,15 @@ static void enter_wait(trig_t *t, uint64_t now_us)
     t->state = TRIG_WAIT;
     t->deadline_us = now_us + HANDOFF_QUIET_WAIT_MAX_US;
     t->waits++;
+    t->wait_started_us = now_us;
+    /* Silence banked before the carrier appeared. Telemetry — see beacon.h. */
+    t->last_silent_us = t->listen_us - t->silent_left_us;
+}
+
+/* Telemetry — how long the thing we heard lasted. See beacon.h. */
+static void close_wait(trig_t *t, uint64_t now_us)
+{
+    t->last_wait_us = (uint32_t)(now_us - t->wait_started_us);
 }
 
 void trig_init(trig_t *t, const hal_iface_t *hal)
@@ -80,7 +89,7 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
     case TRIG_SHOUT:
         if (now_us >= t->deadline_us) {
             t->state = TRIG_SETTLE;
-            t->deadline_us = now_us + HANDOFF_TURNAROUND_US;
+            t->deadline_us = now_us + HANDOFF_TRIG_SETTLE_US;
         }
         break;
 
@@ -118,11 +127,28 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
          * lapse for a chip inside one.
          */
         if (framer_locked) {
+            close_wait(t, now_us);
             t->receives++;
             t->state = TRIG_RECEIVE;
             break;
         }
         if (!carrier_heard) {
+            close_wait(t, now_us);
+            /*
+             * Was it long enough to have been a shout? Without this the band
+             * cannot tell a peer from a 4 ms burst off the room, or from its
+             * own amplifier, and on a real bench it elects itself sender every
+             * cycle. See HANDOFF_SHOUT_MIN_US.
+             *
+             * A carrier too short to be a shout is not an event: go back to
+             * listening with the silence budget UNTOUCHED. A fresh draw here
+             * would take the band off the air — see the constant's comment.
+             */
+            if (t->last_wait_us < HANDOFF_SHOUT_MIN_US) {
+                t->short_carriers++;
+                t->state = TRIG_LISTEN;
+                break;
+            }
             t->sends++;
             t->state = TRIG_SEND;
             break;
@@ -141,6 +167,7 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
              * be busy. A fresh window buys at least LISTEN_MIN_US of looking
              * first, which is what this path is for.
              */
+            close_wait(t, now_us);
             t->quiet_timeouts++;
             t->reset_due = true;
             enter_listen(t);

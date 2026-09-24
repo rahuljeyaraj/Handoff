@@ -226,3 +226,11 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, uint16_t chip_energy)
 
 const frame_hdr_t *frame_rx_hdr(const frame_rx_t *r)     { return &r->hdr; }
 const uint8_t     *frame_rx_payload(const frame_rx_t *r) { return r->body + FRAME_HDR_BYTES; }
+
+/* MARKER counts as well as BODY: the preamble really did arrive, so somebody
+ * is transmitting, and walking away between the marker and the body would
+ * throw the frame away just as surely. */
+bool frame_rx_busy(const frame_rx_t *r)
+{
+    return r->state != FRAME_ST_HUNT;
+}
