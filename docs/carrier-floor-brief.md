@@ -102,28 +102,41 @@ were run against the new test:
 - the fraction kept but the step rounded toward zero: passes, which is how the
   ternary was shown to earn nothing.
 
-## Open — the bench, and it is the only thing left
+## On the boards — done 25 Sep 2026, tethered
 
-The host channel model is not the room. Its ambient is `energy_off` 6 with ±8 of
-jitter, so its floor settles near 6 and reaches 1 on the clamp; **the detector
-there is still effectively the old fixed threshold, and the new floor is not
-being exercised at a realistic ambient.** The boards are where this is worth
-something: 93D1 idles at level 48–62, which clears `min_delta` on its own, so a
-real floor should reject room bursts it currently takes.
+Both boards flashed with `build-pcb/handoff.uf2` and run through
+`scripts/link2.py --a 93D1 --b 379E`.
 
-1. Flash both boards:
-   `python scripts/build.py --config Release --tx-pin 11 --build-dir build-pcb`.
-2. Read the `s` line's floor. It should now move **both ways**, and sit near the
-   idle chip energy `m` reports — not walk 15, 11, 9, 8, 7, 6 to the clamp.
-3. Then `scripts/link2.py --a 93D1 --b 379E --run 40 --at "2:A:s" --log`.
-   Handshakes must still complete; `false_syncs` should not go up.
-4. Then a worn run, design §13 rule 1: both bands on their own cells, USB out of
-   both, one band per wrist. A tethered run cannot answer this.
+**The floor moves both ways, which is the whole point.** Sampled over two runs:
 
-**`ratio_num` and `min_delta` are both live for the first time.** They were
-tuned against a floor that was effectively always 1, so together they were one
-fixed threshold. On the bench the floor will be real and both gates will bite;
-expect to retune them against 93D1's ambient rather than assume 24/24 still fit.
+| | floor, in order |
+|---|---|
+| 93D1 | 70, 73, 82, 79, 77, 80, 74, 77 |
+| 379E | 53, 49, 49, 53, 57, 50, 56, 57 |
+
+Against the old behaviour on 379E, which only ever fell: 15, 11, 9, 8, 7, 6.
+The two boards settle at different floors, and they are the right ones — 93D1
+is the noisy one and sits near 77, 379E near 53.
+
+**The ratio test is doing real work for the first time.** 93D1 printed `level 78
+floor 74 present 0`. With the old floor pinned at 1 the gate was `level > 25`,
+so 93D1's own idle read as a carrier; now it does not. `short` — carriers heard
+but rejected by `HANDOFF_SHOUT_MIN_US` — stayed at 0 on 93D1 across the runs.
+
+**The link is not regressed.** 9 handshakes in 26 s, every one `COMPLETE`, roles
+alternating, `frags 3/3` and `2/2`, `bad 0` on 8 of 9, `retries 0` on 8 of 9,
+about 1.0–1.2 s each, both cards decoded each time.
+
+`ratio_num` and `min_delta` were live for the first time here and **24/24 still
+fit**: at a floor of 77 the gates are 231 and 101, against a carrier reading
+426. No retune needed.
+
+## Open — the worn run
+
+Everything above was USB-tethered, so those floors are the tethered ambient and
+not the worn one, and the coupling was the bench's rather than a body's. Design
+§13 rule 1 still has to be run: both bands on their own cells, USB out of both,
+one band per wrist. A tethered run cannot answer it.
 
 One thing the host suite cannot see: the PCB's amplifier is still above the
 detector's threshold about 3.2 ms after the pad goes idle. The floor no longer
