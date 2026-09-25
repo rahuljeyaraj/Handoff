@@ -214,12 +214,45 @@ static bool tx_start(void)
     return true;
 }
 
+/*
+ * Link v2 step 1 instrument. The clock tree, gated against the crystal by the
+ * RP2350 frequency counter rather than read back from the SDK.
+ *
+ * What the bench is looking for: sys at HANDOFF_SYS_CLK_HZ, and usb and adc
+ * both still 48000 kHz after the move off 150 MHz. clk_adc is what sets the
+ * 500 ksps sample rate (48 MHz / 96), and the whole of the receiver is
+ * calibrated against it, so it moving would be silent and fatal.
+ */
+static void clocks_print(void)
+{
+    hal_pico_clocks_t m;
+
+    hal_pico_clocks(&m);
+
+    printf("\n  clocks, measured against the crystal:\n"
+           "    clk_ref   %8lu kHz\n"
+           "    clk_sys   %8lu kHz   (sdk says %lu, config.h says %lu)\n"
+           "    clk_usb   %8lu kHz   (48000 or USB is gone)\n"
+           "    clk_adc   %8lu kHz   (48000 or the sample rate moved)\n"
+           "    clk_peri  %8lu kHz\n"
+           "    adc rate  %8lu sps  (want %lu)\n",
+           (unsigned long)m.ref_khz,
+           (unsigned long)m.sys_khz, (unsigned long)m.sys_cfg_khz,
+           (unsigned long)(HANDOFF_SYS_CLK_HZ / 1000),
+           (unsigned long)m.usb_khz,
+           (unsigned long)m.adc_khz,
+           (unsigned long)m.peri_khz,
+           (unsigned long)hal_pico_sps(),
+           (unsigned long)HANDOFF_ADC_FS_HZ);
+}
+
 static void tx_help(void)
 {
     printf("\n  c 40|200  carrier, kHz\n"
            "  g [ms]    gap between frames, default %lu\n"
            "  p         pause / resume\n"
            "  1         one frame (while paused)\n"
+           "  f         clock tree, measured\n"
            "  h         this\n", (unsigned long)(GAP_DEFAULT_US / 1000u));
 }
 
@@ -240,6 +273,7 @@ static void tx_dispatch(const char *line, bool *one_shot)
         printf("    %s\n", s_paused ? "paused: pad high-Z" : "running");
         break;
     case '1': *one_shot = true; break;
+    case 'f': clocks_print(); break;
     case 'h': case '?': tx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }
@@ -578,6 +612,7 @@ static void rx_help(void)
            "  r         raw burst across the next frame, dumped\n"
            "  t [N]     stream every Nth chip energy; t 0 stops\n"
            "  x [0|1]   self loop: our own carrier into our own receiver\n"
+           "  f         clock tree, measured\n"
            "  h         this\n");
 }
 
@@ -616,6 +651,7 @@ static void rx_dispatch(const char *line)
     case 'x':
         selfloop_set(have_arg ? arg != 0u : !s_selfloop);
         break;
+    case 'f': clocks_print(); break;
     case 'h': case '?': rx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }

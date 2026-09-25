@@ -964,6 +964,38 @@ static void cmd_carrier(uint32_t khz)
     printf("    carrier %lu kHz\n", (unsigned long)khz);
 }
 
+/*
+ * Link v2 step 1 instrument. The clock tree, gated against the crystal by the
+ * RP2350 frequency counter rather than read back from the SDK.
+ *
+ * sys moved 150 -> 144 MHz so both link tones are a whole even number of
+ * cycles (link v2 4). usb and adc must NOT have moved with it: clk_adc sets
+ * the 500 ksps sample rate, and every window, chip and bin in the receiver is
+ * derived from it, so a shift there would be silent and fatal.
+ */
+static void clocks_print(void)
+{
+    hal_pico_clocks_t m;
+
+    hal_pico_clocks(&m);
+
+    printf("\n  clocks, measured against the crystal:\n"
+           "    clk_ref   %8lu kHz\n"
+           "    clk_sys   %8lu kHz   (sdk says %lu, config.h says %lu)\n"
+           "    clk_usb   %8lu kHz   (48000 or USB is gone)\n"
+           "    clk_adc   %8lu kHz   (48000 or the sample rate moved)\n"
+           "    clk_peri  %8lu kHz\n"
+           "    adc rate  %8lu sps  (want %lu)\n",
+           (unsigned long)m.ref_khz,
+           (unsigned long)m.sys_khz, (unsigned long)m.sys_cfg_khz,
+           (unsigned long)(HANDOFF_SYS_CLK_HZ / 1000),
+           (unsigned long)m.usb_khz,
+           (unsigned long)m.adc_khz,
+           (unsigned long)m.peri_khz,
+           (unsigned long)hal_pico_sps(),
+           (unsigned long)HANDOFF_ADC_FS_HZ);
+}
+
 static void help(void)
 {
     printf("\n  g         link on / off (now %s)\n"
@@ -978,6 +1010,7 @@ static void help(void)
            "  s         stats           z  zero\n"
            "  v         per-send lines %s\n"
            "  c 40|200  carrier, kHz    h  this\n"
+           "  f         clock tree, measured\n"
            "  u         LED / motor trace %s;  u <event> inject one (u ? lists)\n"
            "  b <ms>    press the button for that long\n"
            "  p [mv]    measure VSYS at the next quiet tick, or feed the wearer side a value\n",
@@ -1124,6 +1157,7 @@ static void dispatch(const char *line)
         printf("    per-send lines %s\n", s_verbose ? "on" : "off");
         break;
     case 'c': cmd_carrier(have_arg ? arg : HANDOFF_CARRIER_HZ / 1000u); break;
+    case 'f': clocks_print(); break;
     case 'h': case '?': help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }

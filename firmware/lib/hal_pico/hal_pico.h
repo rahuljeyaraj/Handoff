@@ -162,4 +162,29 @@ bool     hal_pico_tx_abort(void);
  */
 uint32_t hal_pico_rx_cut(void);
 
+/*
+ * ---- link v2 step 1: the clock tree, measured ---------------------------
+ *
+ * An instrument, not behaviour. Moving sys_clk 150 -> 144 MHz (link v2 §4)
+ * is only safe if the ADC and USB clocks do not move with it, and the brief
+ * says verify that rather than assume it. clock_get_hz() would only repeat
+ * what the SDK was told; this counts each clock against the crystal with the
+ * RP2350 frequency counter, so a clock that is not where it is supposed to
+ * be shows up as a number rather than as a dead link.
+ *
+ * Fills *m and returns it. Every field is kHz as measured, except the two
+ * *_cfg fields, which are what the SDK believes — print both and compare.
+ */
+typedef struct {
+    uint32_t sys_khz;       /* measured clk_sys  */
+    uint32_t usb_khz;       /* measured clk_usb  — must stay 48000 */
+    uint32_t adc_khz;       /* measured clk_adc  — must stay 48000 */
+    uint32_t peri_khz;      /* measured clk_peri */
+    uint32_t ref_khz;       /* measured clk_ref  — the crystal path */
+    uint32_t sys_cfg_khz;   /* what the SDK was told clk_sys is */
+    uint32_t adc_cfg_khz;   /* what the SDK was told clk_adc is */
+} hal_pico_clocks_t;
+
+void hal_pico_clocks(hal_pico_clocks_t *m);
+
 #endif /* HANDOFF_HAL_PICO_H */

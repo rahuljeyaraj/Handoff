@@ -19,6 +19,7 @@
 
 #include <string.h>
 
+#include "hardware/clocks.h"
 #include "hardware/sync.h"
 #include "pico/flash.h"
 #include "pico/multicore.h"
@@ -37,6 +38,16 @@
 /* Deliberately not in tlm.h: only the owner of the block loop may feed the
  * raw burst, and after M5 that owner is this file. See tlm_usb.c. */
 void tlm_usb_raw_feed(const int16_t *samples, size_t n, uint64_t first_idx);
+
+/*
+ * config.h and the SDK must agree about the system clock, or every derived
+ * number in config.h — the PIO divider, the link v2 tone periods — is
+ * computed against a clock the board is not running. The SDK is told in the
+ * root CMakeLists; config.h carries the same figure. Disagreement is a build
+ * error here rather than a silent detuning on the bench. (Link v2 §4.)
+ */
+HANDOFF_STATIC_ASSERT((uint32_t)HANDOFF_SYS_CLK_HZ == (uint32_t)SYS_CLK_HZ,
+    "HANDOFF_SYS_CLK_HZ and the SDK SYS_CLK_HZ disagree");
 
 static hal_iface_t s_iface;
 static bool        s_inited;
@@ -361,6 +372,26 @@ uint8_t hal_pico_core1_load(void)
 }
 
 uint32_t hal_pico_overruns(void) { return adc_ring_overruns(); }
+
+/*
+ * Link v2 step 1. The RP2350 frequency counter gates each clock against
+ * clk_ref, so these are measurements, not a read-back of what we asked for.
+ * The two *_cfg fields are the read-back, deliberately, so the console can
+ * print the pair and the bench can see them agree.
+ */
+void hal_pico_clocks(hal_pico_clocks_t *m)
+{
+    if (!m) return;
+
+    m->sys_khz  = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS);
+    m->usb_khz  = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_USB);
+    m->adc_khz  = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_ADC);
+    m->peri_khz = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_PERI);
+    m->ref_khz  = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_REF);
+
+    m->sys_cfg_khz = clock_get_hz(clk_sys) / 1000u;
+    m->adc_cfg_khz = clock_get_hz(clk_adc) / 1000u;
+}
 
 uint32_t hal_pico_noise_floor(int32_t *mean_code)
 {

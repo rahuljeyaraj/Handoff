@@ -25,8 +25,23 @@
 #define HANDOFF_CARRIER_HZ        200000  /* 40000 during M3/M10 bring-up      */
 #endif
 
+/*
+ * Link v2 §4: both tones must come out as a whole, EVEN number of system
+ * cycles per period, because the PIO generator splits each period into two
+ * equal halves and an odd count cannot be halved. 144 MHz is the only clock
+ * near the RP2350 default that does this for both 180 and 200 kHz:
+ *
+ *      150 MHz   180 kHz -> 833.33 cycles   no
+ *      144 MHz   180 kHz -> 800 cycles      yes    200 kHz -> 720   yes
+ *
+ * Physical, not tuned: it is the clock the tone arithmetic demands.
+ *
+ * The SDK is told the same number in the root CMakeLists, with the matching
+ * PLL_SYS_* setup, so the board boots at 144 MHz rather than switching to it.
+ * hal_pico.c static-asserts the two agree.
+ */
 #ifndef HANDOFF_SYS_CLK_HZ
-#define HANDOFF_SYS_CLK_HZ        150000000  /* RP2350, design §10.1           */
+#define HANDOFF_SYS_CLK_HZ        144000000  /* link v2 §4, was 150 MHz        */
 #endif
 
 #ifndef HANDOFF_ADC_FS_HZ
@@ -73,6 +88,29 @@
 
 /* Bin spacing equals the window rate, so this is the bin index of the carrier. */
 #define HANDOFF_GZ_BIN            (HANDOFF_CARRIER_HZ / HANDOFF_WINDOW_RATE_HZ)
+
+/*
+ * ---- link v2 tone pair (design link-v2-design.md §4) --------------------
+ *
+ * Structural: the two tones are ADJACENT bins, the closest the transform
+ * allows. Coupling rises with frequency, so a wider pair arrives at two
+ * different strengths and needs a correction; one bin apart keeps the
+ * imbalance near 1 dB and puts both tones at the top of the band where
+ * coupling is best. The guards are bins 7, 8 and 11 — the bins no odd
+ * harmonic of either tone can reach (§4). Nothing here is tuned; changing
+ * these changes the protocol.
+ *
+ * Frequencies are derived, not typed: bin index times the bin spacing.
+ */
+#define HANDOFF_TONE_A_BIN        9
+#define HANDOFF_TONE_B_BIN        10
+
+#define HANDOFF_TONE_A_HZ         (HANDOFF_TONE_A_BIN * HANDOFF_WINDOW_RATE_HZ)
+#define HANDOFF_TONE_B_HZ         (HANDOFF_TONE_B_BIN * HANDOFF_WINDOW_RATE_HZ)
+
+#define HANDOFF_GUARD_LO_BIN      7
+#define HANDOFF_GUARD_MID_BIN     8
+#define HANDOFF_GUARD_HI_BIN      11
 
 #define HANDOFF_CHIP_RATE_HZ      (HANDOFF_WINDOW_RATE_HZ / HANDOFF_WINDOWS_PER_CHIP)
 #define HANDOFF_BIT_RATE_BPS      (HANDOFF_CHIP_RATE_HZ / 2)   /* Manchester   */
@@ -133,6 +171,64 @@ HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % (2 * HANDOFF_PIO_SLOT_CYCLES * HANDOF
     "carrier is not an exact PIO divider of the system clock");
 HANDOFF_STATIC_ASSERT(HANDOFF_PIO_DIVIDER >= 1 && HANDOFF_PIO_DIVIDER <= 65535,
     "PIO divider out of range");
+
+/*
+ * ---- link v2: the clock owes the tones an exact, even period -------------
+ *
+ * The fsk_out generator builds each period out of two equal halves. A period
+ * that is not a whole number of system cycles cannot be generated at all; a
+ * period that is whole but odd cannot be split evenly, and an uneven split is
+ * a duty cycle off 50 %, which puts energy in the EVEN harmonics. The second
+ * harmonic of 180 kHz is 360 kHz, which aliases at 500 ksps onto 140 kHz —
+ * guard bin 7. That would poison the noise reference with our own
+ * transmitter, which is exactly the v1 fault this redesign exists to remove.
+ *
+ * So: a future clock change fails the build here rather than on the bench.
+ */
+HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % HANDOFF_TONE_A_HZ == 0,
+    "tone A is not a whole number of system cycles");
+HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % HANDOFF_TONE_B_HZ == 0,
+    "tone B is not a whole number of system cycles");
+HANDOFF_STATIC_ASSERT((HANDOFF_SYS_CLK_HZ / HANDOFF_TONE_A_HZ) % 2 == 0,
+    "tone A period is odd: its two halves cannot be equal");
+HANDOFF_STATIC_ASSERT((HANDOFF_SYS_CLK_HZ / HANDOFF_TONE_B_HZ) % 2 == 0,
+    "tone B period is odd: its two halves cannot be equal");
+
+/* Adjacent bins is the design, not an accident of the numbers above. */
+HANDOFF_STATIC_ASSERT(HANDOFF_TONE_B_BIN == HANDOFF_TONE_A_BIN + 1,
+    "the tone pair must be adjacent bins");
+
+/* Both tones, and every guard, must be below Nyquist for this window. */
+HANDOFF_STATIC_ASSERT(2 * HANDOFF_GUARD_HI_BIN < HANDOFF_GZ_N,
+    "guard bin is above Nyquist for this window length");
+
+/*
+ * Guards must miss every odd harmonic that folds back into the band. For a
+ * tone on bin b, harmonic h lands on |((h*b) mod GZ_N) folded about GZ_N/2|.
+ * 180 kHz: 3rd -> 2, 5th -> 5, 7th -> 12.  200 kHz: 3rd -> 5, 5th -> 0,
+ * 7th -> 5.  So bins 2, 5 and 12 are unusable, and 7, 8, 11 are clear.
+ */
+#define HANDOFF_FOLD_BIN(b)                                     \
+    (((b) % HANDOFF_GZ_N) <= (HANDOFF_GZ_N / 2)                 \
+         ? ((b) % HANDOFF_GZ_N)                                 \
+         : (HANDOFF_GZ_N - ((b) % HANDOFF_GZ_N)))
+
+#define HANDOFF_GUARD_CLEAR_OF(g, t)                            \
+    ((g) != HANDOFF_FOLD_BIN(3 * (t)) &&                        \
+     (g) != HANDOFF_FOLD_BIN(5 * (t)) &&                        \
+     (g) != HANDOFF_FOLD_BIN(7 * (t)))
+
+#define HANDOFF_GUARD_CLEAR(g)                                  \
+    (HANDOFF_GUARD_CLEAR_OF(g, HANDOFF_TONE_A_BIN) &&           \
+     HANDOFF_GUARD_CLEAR_OF(g, HANDOFF_TONE_B_BIN) &&           \
+     (g) != HANDOFF_TONE_A_BIN && (g) != HANDOFF_TONE_B_BIN)
+
+HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_CLEAR(HANDOFF_GUARD_LO_BIN),
+    "low guard bin is contaminated by a tone harmonic");
+HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_CLEAR(HANDOFF_GUARD_MID_BIN),
+    "mid guard bin is contaminated by a tone harmonic");
+HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_CLEAR(HANDOFF_GUARD_HI_BIN),
+    "high guard bin is contaminated by a tone harmonic");
 
 HANDOFF_STATIC_ASSERT(HANDOFF_FRAG_PAYLOAD >= 8 && HANDOFF_FRAG_PAYLOAD <= 255,
     "fragment payload out of range");

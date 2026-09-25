@@ -76,7 +76,7 @@ TEST_SOURCES = [HOST / n for n in (
     "test_carousel.c", "test_beacon.c", "test_link.c",
     "test_ui.c", "test_button.c",
     "test_vectors.c",
-    "test_channel.c", "test_budget.c",
+    "test_channel.c", "test_budget.c", "test_clock.c",
 )]
 
 PROGRAMS = {

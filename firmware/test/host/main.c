@@ -54,6 +54,7 @@ static const suite_t k_suites[] = {
     { "vectors",    test_vectors },
     { "channel",    test_channel },
     { "budget",     test_budget },
+    { "clock",      test_clock },
 };
 
 int main(int argc, char **argv)
