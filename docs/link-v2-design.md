@@ -334,7 +334,7 @@ Each step is a bench measurement, not a feature. Stop at any step that fails.
 | 3 | 5-bin Goertzel bank on core 1 | no dropped windows at 500 ksps; budget printed — **PASSED**, 46 cycles a sample, 16 points of core 1 |
 | 4 | Passive: one board TX, one RX, plate to plate | `E_A`/`E_B` separate cleanly; guards do not rise while transmitting — **PASSED**, guard median flat across an 11× signal sweep |
 | 5 | Presence by guard median, tethered | busy tracks reality with the level swept — **PASSED 1fd27d0**, crossover on the derived k |
-| 6 | Frame decode with no slicer | BER at least as good as v1 on the same bench |
+| 6 | Frame decode with no slicer | BER at least as good as v1 on the same bench — **PASSED**, better at two gaps of three, and core 1 falls to 21 % |
 | 7 | Nonce beacon and election | two boards, no double-send, no self-trigger |
 | 8 | Skin path, on cells, floating | §14.1's 447-frame result matched or beaten |
 
@@ -519,6 +519,57 @@ answers about an interval rather than an instant. `manchester.h` states the run
 length and a host test walks all 65 536 bit pairs to prove it. **It deletes at
 step 6**, when constant envelope makes it unreachable — which is §4's second
 "free" benefit arriving as a requirement rather than a bonus.
+
+---
+
+
+### What step 6 measured, 25 Sep 2026 — and the correction it forces on §8
+
+**PASSED.** The slicer is deleted, the OOK bridge is deleted, and the radio is
+FSK end to end. BER is at least as good as v1 at every gap measured and
+strictly better at two of three; `apps/handoff` completes the same 15
+handshakes in 42 s for **21 % of core 1 against v1's 35 %**. Brief §7 has the
+tables.
+
+#### Correction 6 — §8's imbalance correction is not needed, and that is a derivation
+
+§8 says a raw `E_A > E_B` would be biased, and asks for the ratio to be
+carried from the preamble into the body decisions. §10 correction 1 already
+found the sign backwards. Step 6 finds the whole requirement absent, for two
+reasons that are arithmetic rather than measurement:
+
+- **The comparison is never between two signals.** Step 4 measured the
+  off-tone bin as indistinguishable from silence — 62 against 67 quiet, while
+  the on-tone bin read 716. So `sign(E_B - E_A)` is a signal against a noise
+  floor, and 9 % cannot change its sign.
+- **It cancels in the body, by construction.** Manchester puts one tone-A chip
+  and one tone-B chip in EVERY bit, so the difference of the two halves is
+  ±(S_A + S_B) whatever the two strengths are. Symmetric, not approximately
+  symmetric.
+
+`test_frame.c` sweeps the imbalance to 3:1 — thirty times worse than this
+hardware, in both directions — and no decision changes. So nothing corrects
+it, which is §1 applied to itself: a number goes in when a requirement asks
+for it, and none does. The framer still MEASURES it off every synced preamble
+and reports it, because an instrument costs nothing and a correction would
+have been machinery with nothing to correct.
+
+#### The bridge deleted itself, and presence said so in one number
+
+`p` with frames flowing reads **53227 busy windows of 60046 — 88.6 %**, and a
+156 ms frame every 176 ms is 88.6 %. The detector is busy for exactly the
+airtime. §4's "constant envelope" arrives as a deletion rather than a bonus:
+there is no gap inside a frame left to bridge.
+
+#### What the branch has given back, cumulatively
+
+Core 1 was 46–47 % at step 5 and is **21 %** now, in `handoff`, beside
+BTstack. Nothing was optimised. The v1 Goertzel and its symbol sync came out
+of the link when the bank became the receiver, and the retunable Goertzel that
+remains is a console probe that runs only while someone is looking at it.
+Correction 4's warning still stands — a budget taken in `linktest` is a lower
+bound — which is why that 21 % is quoted from `handoff` and not from the
+console app.
 
 ---
 

@@ -758,6 +758,168 @@ design has failed its own rule.
 **Passes when:** BER through the self loop and over the wire is at least as
 good as v1 on the same bench. Not "close to" — at least as good.
 
+### What step 6 actually measured, 25 Sep 2026
+
+**PASSED.** The slicer is deleted, the hunt window is computed, the OOK bridge
+is gone, and the radio is FSK end to end — transmitter, receiver and framer.
+BER is at least as good as v1 at every gap measured and strictly better at two
+of three, and `handoff` completes the same number of handshakes for **fourteen
+fewer points of core 1**.
+
+#### The link, three gaps, both radios, one session
+
+Two boards on the PCB plate path, `linktest_tx` on 93D1 and `linktest` on
+379E. At each gap: measure v2, flash `main` to both boards, measure v1 —
+nothing moved between the two halves of a row.
+
+| gap | v2 FER | v2 BER | v2 margin | v2 lost | v1 FER | v1 BER | v1 margin | v1 lost |
+|---|---|---|---|---|---|---|---|---|
+| 5 cm | **0.0000** | **0** | 667 | 0 | 0.0000 | 0 | 437 | 0 |
+| 10–12 cm | **0.0000** | **0** | 247 | **0** | 0.0025 | 0 | 153 | 1 |
+| 25 cm | **0.9683** | **0.374** | 48 | — | 1.0000 | 0.485 | 15 | — |
+
+**5 cm proves nothing and is in the table anyway**, because a row where both
+radios read zero is the row that says the bench was not the thing being
+measured. 10–12 cm is the first place they differ; 25 cm is past both knees,
+and v2 still got **11 frames across where v1 got none**.
+
+The margin column is not directly comparable between the two and the factor is
+known rather than guessed: v2's margin is `sqrt(S_A^2 + S_B^2)` because every
+Manchester bit holds one chip of each tone, so it carries a `sqrt(2)` v1 does
+not. 667/437 is 1.53 against that 1.41 — the rest is the link being better.
+
+#### The simulator says the same thing, and it says it about the waterfall
+
+`scripts/test.py --ber`, identical frames, seeds and SNR definition, v1 run
+from a `main` worktree:
+
+| SNR | v2 good | v2 FER | v2 BER | v1 good | v1 FER | v1 BER |
+|---|---|---|---|---|---|---|
+| −6 dB | **30** | 0.5000 | **2.73e-02** | 0 | 1.0000 | 2.82e-01 |
+| −4 dB | **59** | **0.0167** | **6.51e-05** | 23 | 0.6167 | 8.52e-02 |
+| −2 dB | 60 | 0.0000 | 0 | 60 | 0.0000 | 0 |
+
+About 2 dB, which is what a constant envelope against OOK should buy.
+
+#### `apps/handoff`, and this is the step-5 lesson being obeyed
+
+Step 5's near-disaster — 98 % core-1 load, 1709 DMA overruns, zero handshakes
+— existed **only** in the app that carries BTstack, and `linktest` could not
+see it. So it is measured here, in that app, and not inferred:
+
+| 42 s at 5 cm | complete | partial | abort | overruns | stalls | core-1 |
+|---|---|---|---|---|---|---|
+| **v2** | **15** | 0 | 0 | 0 | 0 | **21 %** |
+| v1, `main` | 15 | 0 | 0 | 0 | 0 | 35 % |
+
+Same throughput, 14 points cheaper. Handshakes complete in **949 ms as the
+faster role and 1133 ms as the slower**, which is design §2's one-second
+requirement met on one of the two roles and just missed on the other.
+
+**Core 1 is at 21 %, against 46–47 % at step 5.** Nothing was optimised; two
+things were deleted. The v1 Goertzel and its symbol sync came out of the link,
+and the retunable Goertzel that is left runs only while a console command is
+looking at it. Within one image: **bank off 7.3 cycles a sample, bank on
+59.9 — the whole v2 receiver costs 52.6**, against step 5's 46.8 for the bank
+and presence sitting beside a v1 chain that is now gone.
+
+#### Presence reads 88.6 %, and that number is the OOK bridge's obituary
+
+`p` on the receiver, with frames flowing: **53227 busy windows of 60046**.
+The transmitter sends a 156 ms frame every 176 ms. 156/176 is 88.6 %.
+
+The detector is busy for exactly the airtime and for nothing else — no hold,
+no hysteresis, no bridge. That is the whole reason `LINK_OOK_BRIDGE_US` could
+be deleted rather than shortened: v1 switched the carrier off for a zero, so
+presence flapped at the chip rate inside every frame and a detector with no
+memory answered "nobody is transmitting" in each gap, truthfully. FSK has no
+gaps. Design §4's second "free" benefit of a constant envelope, arriving as a
+deletion.
+
+#### The imbalance: measured again, and still not corrected
+
+`n 2`, both tone bins in the same windows with frames flowing: **bin 9 mean
+327 LSB, bin 10 mean 301** — tone A **8.6 %** stronger, against step 4's
+9.1 % from `y 3`. Guards flat at 21 / 46 / 33, median 34. Capture linear.
+
+Design §8 expected to carry that imbalance from the preamble into the body
+decisions. **Nothing corrects it, and that is a derivation rather than a
+shortcut.** Every Manchester bit holds one chip of each tone, so the
+difference of the two halves is ±(S_A + S_B) whatever the two strengths are —
+symmetric by construction. `test_frame.c` sweeps the imbalance to **3:1, thirty
+times worse than this hardware, in both directions**, and no decision changes.
+frame.h has the working.
+
+The framer measures it anyway and reports it in `last_imbalance_pct`, off the
+preamble of every frame it syncs to. Reported, never fed back — and unlike
+`y 3` it reads the far board mid-handshake rather than needing a board
+dedicated to driving a pattern.
+
+#### What the window came out at, and what it replaced
+
+`FRAME_ALT_WINDOW` / `FRAME_ALT_MIN` were 24 and 22, typed, and frame.h's own
+comment admitted what they bought: "one spurious sync every couple of hours".
+Nobody had chosen that. They are now computed from `HANDOFF_FALSE_SYNC_S` —
+one false sync per 24 hours — and come out at **29 and 27, one every 43.8
+hours**, with the tolerance for one flipped chip anywhere in the window kept
+as the structural reason counting exists at all.
+
+Both ends are asserted: 29 must meet the rate, and **28 must fail it**, so the
+window is the smallest that satisfies the requirement rather than the tightest
+someone felt like. `test_frame.c` recomputes the whole thing in double, the
+same contract `test_presence.c` gives the CFAR k.
+
+#### Three things that had to move, and none of them is the radio
+
+**The v1 captures cannot be decoded by a v2 receiver.** There are two, from
+the M5 bench, and one of them is the frame the board lost when a transient
+froze its slicer. They are OOK, and there is no slicer in the firmware any
+more. The slicer moved to `firmware/test/host/v1_replay.c` — the replay
+harness, not lib/ — and the captures still replay on every run. What they test
+now is the framing, which step 6 did not touch; what they can no longer test
+is the chip decision, which is correct, because the decision they were
+recorded to exercise does not exist.
+
+**`tools/gen_vectors.py` renders two tones.** It is the only test that reads
+the spec independently of the C, so it had to follow the spec. The two
+implementations still agree to the LSB with the tone switching every chip, and
+that is arithmetic rather than luck: a chip is a whole number of periods of
+either tone, so at a chip boundary an integrated phase and a `sin(2*pi*f*t)`
+are both at zero.
+
+**The retunable Goertzel became a console probe.** `m`, `k`, `b` and `b 1`
+used to read the link's own chip stream, which is why walking the bins cost
+frames. They now read a Goertzel that runs only while a capture is
+outstanding, reports a mean and a max over an interval, and has nothing
+framing behind it. Retuning costs the receiver nothing — it is not on that
+bin.
+
+#### One bug found, in code this step did not write
+
+`firmware/test/host/decode.c` had a literal newline inside a `printf` format
+string: the file had not compiled since whenever that happened. `handoff_decode`
+is only built for a replay, so nothing noticed. Fixed in passing, and it is
+exactly the hazard §11's tooling note warns about.
+
+#### Regression
+
+| | |
+|---|---|
+| suite | **25567 checks**, 0 failures (was 25536) |
+| v2 link at 5 cm | good 400, crc 0, lost 0, FER 0.0000, BER 0, margin 667, overruns 0 |
+| `apps/handoff` | 15 complete in 42 s each, 0 partial, 0 abort, 0 stalls, 0 overruns |
+| core 1 | 21 % in `handoff`, against `main`'s 35 % and step 5's 47 % |
+
+New instruments:
+
+| | |
+|---|---|
+| `hal_pico_probe()` | the retunable bin, mean and max over N windows, off unless someone is looking |
+| `hal_pico_samples()` | ADC samples core 1 took. The denominator of a cycles-per-sample budget, and unlike the window count it survives the bank being switched off — which is one of `n`'s two legs |
+| `frame_rx_t.last_imbalance_pct` | the 180/200 imbalance off every synced preamble, reported and never fed back |
+| `handoff_decode --v1` | replay an OOK capture through the slicer the firmware no longer has |
+
+
 ---
 
 ## 8. Step 7 — rendezvous by nonce
