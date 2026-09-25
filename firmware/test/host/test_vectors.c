@@ -16,6 +16,7 @@
 #include "frame.h"
 #include "hf_test.h"
 #include "tests.h"
+#include "v1_replay.h"
 
 #define MAX_CHIPS   1024
 #define MAX_SAMPLES CHAN_MAX_SAMPLES(MAX_CHIPS)
@@ -67,33 +68,53 @@ static size_t load_capture(const char *file)
     return n;
 }
 
-/* Push chips through the framer at ideal energies. */
+/* Push chips through the framer at ideal tone differences: tone B is a
+ * positive d, tone A a negative one, and both are clean. */
 static frame_rx_result_t decode_chips(frame_rx_t *r, const uint8_t *chips, size_t n)
 {
     frame_rx_result_t last = FRAME_RX_NONE;
     size_t i;
     for (i = 0; i < n; i++) {
-        const frame_rx_result_t res = frame_rx_push(r, chips[i] ? 1000u : 20u);
+        const frame_rx_result_t res = frame_rx_push(r, chips[i] ? 1000 : -1000);
         if (res != FRAME_RX_NONE) last = res;
     }
     return last;
 }
 
-/* Full path: samples through Goertzel, sync, then the framer. */
+/* Full path: samples through both tone bins, sync, then the framer. */
 static frame_rx_result_t decode_samples(frame_rx_t *r, const int16_t *s, size_t n)
 {
     demod_t d;
     frame_rx_result_t last = FRAME_RX_NONE;
+    frame_chip_t chip;
     size_t i;
 
     demod_init(&d);
     for (i = 0; i < n; i++) {
-        uint32_t score;
-        uint16_t chip;
         frame_rx_result_t res;
 
-        if (!gz_push(&d.gz, s[i], &score)) continue;
-        if (!sync_push(&d.sy, score, &chip)) continue;
+        if (!demod_push(&d, s[i], &chip)) continue;
+        res = frame_rx_push(r, chip);
+        if (res != FRAME_RX_NONE) last = res;
+    }
+    return last;
+}
+
+/*
+ * The v1 captures. The slicer they need lives in v1_replay.c, and its header
+ * says why it is there rather than in lib/link.
+ */
+static frame_rx_result_t decode_v1_samples(frame_rx_t *r, const int16_t *s, size_t n)
+{
+    v1_replay_t v;
+    frame_rx_result_t last = FRAME_RX_NONE;
+    frame_chip_t chip;
+    size_t i;
+
+    v1_replay_init(&v, HANDOFF_GZ_BIN);
+    for (i = 0; i < n; i++) {
+        frame_rx_result_t res;
+        if (!v1_replay_push(&v, s[i], &chip)) continue;
         res = frame_rx_push(r, chip);
         if (res != FRAME_RX_NONE) last = res;
     }
@@ -231,7 +252,7 @@ void test_vectors(void)
      * index is our own JSON, so the scan below is all the parser it needs:
      * a "file" and, when the payload is loopback's pattern, a "seq".
      */
-    hf_begin("captures: every adopted hardware capture still decodes");
+    hf_begin("captures: every adopted v1 hardware capture still frames");
     {
         char path[512];
         FILE *f;
@@ -276,7 +297,7 @@ void test_vectors(void)
             if (!nsamples) continue;
 
             frame_rx_init(&r);
-            res = decode_samples(&r, g_samples, nsamples);
+            res = decode_v1_samples(&r, g_samples, nsamples);
             HF_CHECK_MSG(res == FRAME_RX_GOOD,
                          "capture %s no longer decodes (result %d)", file, (int)res);
             replayed++;

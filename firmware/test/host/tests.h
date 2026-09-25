@@ -4,6 +4,8 @@
 void test_crc(void);
 void test_manchester(void);
 void test_goertzel(void);
+void test_gz_bank(void);
+void test_presence(void);
 void test_sync(void);
 void test_frame(void);
 void test_chunk(void);
@@ -19,6 +21,8 @@ void test_button(void);
 void test_vectors(void);
 void test_channel(void);
 void test_budget(void);
+void test_clock(void);
+void test_fsk(void);
 
 /*
  * Where tools/gen_vectors.py wrote its output. scripts/test.py drops an

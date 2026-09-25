@@ -15,17 +15,52 @@ static uint32_t draw_listen(trig_t *t)
     return HANDOFF_LISTEN_MIN_US + (hal_random_u32(t->hal) % span);
 }
 
-static void enter_shout(trig_t *t, uint64_t now_us)
+/*
+ * Draw a nonce we are willing to put on the wire.
+ *
+ * frame_beacon_nonce_ok() rejects the 39 values in 65536 whose own beacon
+ * contains a card marker — see frame.h. Rejection sampling rather than a fix
+ * to the format, because the nonce is the one field in this protocol whose
+ * value is free: nothing reads it but an equality test.
+ *
+ * The loop is bounded rather than `while (!ok)`. It terminates with
+ * probability 1 and it is not allowed to be the reason a band stops
+ * beaconing, so after a handful of tries it goes out anyway: a 1-in-1700
+ * nonce costs a rendezvous cycle, and an RNG stuck at one value is a much
+ * bigger problem than that, which the self-echo counter will show.
+ */
+#define TRIG_NONCE_TRIES 8
+
+static void draw_nonce(trig_t *t)
 {
-    t->state = TRIG_SHOUT;
-    t->deadline_us = now_us + HANDOFF_SHOUT_US;
+    unsigned tries;
+
+    for (tries = 0; tries < TRIG_NONCE_TRIES; tries++) {
+        t->nonce = (uint16_t)(hal_random_u32(t->hal) & 0xFFFFu);
+        if (frame_beacon_nonce_ok(t->nonce)) break;
+        t->nonce_rejects++;
+    }
+    t->nonce_stale = false;
+}
+
+/*
+ * The redraw happens HERE, on the way into a beacon, and not when the echo
+ * that asked for it arrived. beacon.h has the reason: our previous nonce has
+ * to keep rejecting the stragglers of our previous beacon right up to the
+ * moment we stop claiming it.
+ */
+static void enter_beacon(trig_t *t, uint64_t now_us)
+{
+    if (t->nonce_stale) { draw_nonce(t); t->redraws++; }
+    t->state = TRIG_BEACON;
+    t->deadline_us = now_us + HANDOFF_BEACON_AIRTIME_US;
     t->burst_due = true;
-    t->shouts++;
+    t->beacons++;
 }
 
 /*
  * Every listen window is a fresh draw. LISTEN runs off silent_left_us rather
- * than a deadline, because the whole point of the rule is that carrier time
+ * than a deadline, because the whole point of beacon.h §3 is that carrier time
  * does not count against it.
  */
 static void enter_listen(trig_t *t)
@@ -33,22 +68,6 @@ static void enter_listen(trig_t *t)
     t->listen_us = draw_listen(t);
     t->silent_left_us = t->listen_us;
     t->state = TRIG_LISTEN;
-}
-
-static void enter_wait(trig_t *t, uint64_t now_us)
-{
-    t->state = TRIG_WAIT;
-    t->deadline_us = now_us + HANDOFF_QUIET_WAIT_MAX_US;
-    t->waits++;
-    t->wait_started_us = now_us;
-    /* Silence banked before the carrier appeared. Telemetry — see beacon.h. */
-    t->last_silent_us = t->listen_us - t->silent_left_us;
-}
-
-/* Telemetry — how long the thing we heard lasted. See beacon.h. */
-static void close_wait(trig_t *t, uint64_t now_us)
-{
-    t->last_wait_us = (uint32_t)(now_us - t->wait_started_us);
 }
 
 void trig_init(trig_t *t, const hal_iface_t *hal)
@@ -61,11 +80,11 @@ void trig_init(trig_t *t, const hal_iface_t *hal)
 void trig_start(trig_t *t, uint64_t now_us)
 {
     t->burst_due = false;
-    t->reprime_due = false;
     t->last_poll_us = now_us;
     t->listen_us = 0;
     t->silent_left_us = 0;
-    enter_shout(t, now_us);
+    draw_nonce(t);
+    enter_beacon(t, now_us);
 }
 
 void trig_stop(trig_t *t)
@@ -74,8 +93,7 @@ void trig_stop(trig_t *t)
     t->burst_due = false;
 }
 
-trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
-                       bool framer_locked)
+trig_state_t trig_poll(trig_t *t, uint64_t now_us, const trig_in_t *in)
 {
     const uint64_t raw = now_us - t->last_poll_us;
     /* A caller that steps the clock backwards, or restarts one instance and
@@ -86,8 +104,23 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
     t->last_poll_us = now_us;
 
     switch (t->state) {
-    case TRIG_SHOUT:
-        if (now_us >= t->deadline_us) {
+    case TRIG_BEACON:
+        /*
+         * BOTH conditions, and neither is redundant.
+         *
+         * The airtime alone is not enough: the caller queues the chips AFTER
+         * this function returns, and hal_tx_chips() then spends about a
+         * millisecond packing them before the DMA starts (hal_pico.h puts a
+         * 624-chip card frame at 5.4 ms). So the pad is still driving when the
+         * airtime is up, and a settle started here would be a millisecond
+         * short at the end where it matters.
+         *
+         * hal_tx_busy() alone is not enough either: on the first poll after
+         * enter_beacon() nothing has been queued yet, so it reads false and
+         * the beacon would end before it began. The deadline is what
+         * guarantees the queue happened.
+         */
+        if (now_us >= t->deadline_us && !hal_tx_busy(t->hal)) {
             t->state = TRIG_SETTLE;
             t->deadline_us = now_us + HANDOFF_TRIG_SETTLE_US;
         }
@@ -96,81 +129,61 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
     case TRIG_SETTLE:
         /*
          * Deliberately deaf, exactly as LINK_TURNAROUND is: what the receive
-         * path reports here is our own amplifier coming out of saturation, and
-         * believing it would wake the band on its own shout every cycle.
+         * path reports here is our own amplifier coming out of saturation.
          */
         if (now_us >= t->deadline_us) enter_listen(t);
         break;
 
     case TRIG_LISTEN:
         /*
-         * Anything at all sends us to WAIT, where the question of what it is
-         * gets answered. The silence budget is NOT charged for this interval —
-         * that is the whole "counts silent time only" rule, and it is what
-         * stops a band shouting over a card already in flight.
+         * A card already arriving beats everything: the peer decoded our
+         * beacon, elected itself sender, and is mid-preamble. Checked first
+         * because it is the one input that says the rendezvous is already
+         * over.
          */
-        if (carrier_heard) { enter_wait(t, now_us); break; }
-
-        if (elapsed >= t->silent_left_us) {
-            t->silent_left_us = 0;
-            enter_shout(t, now_us);
-        } else {
-            t->silent_left_us -= elapsed;
-        }
-        break;
-
-    case TRIG_WAIT:
-        /*
-         * Which comes first decides it. A lock is checked before silence
-         * because a framer that has taken a preamble and a marker is holding
-         * the front of a real frame, and the carrier detector's hysteresis can
-         * lapse for a chip inside one.
-         */
-        if (framer_locked) {
-            close_wait(t, now_us);
+        if (in->card) {
             t->receives++;
             t->state = TRIG_RECEIVE;
             break;
         }
-        if (!carrier_heard) {
-            close_wait(t, now_us);
-            /*
-             * Was it long enough to have been a shout? Without this the band
-             * cannot tell a peer from a 4 ms burst off the room, or from its
-             * own amplifier, and on a real bench it elects itself sender every
-             * cycle. See HANDOFF_SHOUT_MIN_US.
-             *
-             * A carrier too short to be a shout is not an event: go back to
-             * listening with the silence budget UNTOUCHED. A fresh draw here
-             * would take the band off the air — see the constant's comment.
-             */
-            if (t->last_wait_us < HANDOFF_SHOUT_MIN_US) {
-                t->short_carriers++;
-                t->state = TRIG_LISTEN;
-                break;
+
+        if (in->beacon) {
+            if (in->nonce == t->nonce) {
+                /*
+                 * Our own beacon coming back at us, or — once in 2^16 — a
+                 * peer that drew the same sixteen bits. The two are
+                 * indistinguishable and want the same answer, which is the
+                 * neat part: do not send, and go out next time under a
+                 * different name. beacon.h §2.
+                 */
+                t->self_echoes++;
+                t->nonce_stale = true;
+            } else {
+                /*
+                 * Somebody else, and the CRC says so rather than a stopwatch.
+                 * §2: decoding a peer means we had not yet started our own
+                 * beacon this cycle, so the peer has nothing of ours to
+                 * decode, so nobody else is about to send. The channel is
+                 * ours.
+                 */
+                t->peers++;
+                t->sends++;
+                t->state = TRIG_SEND;
             }
-            t->sends++;
-            t->state = TRIG_SEND;
             break;
         }
-        if (now_us >= t->deadline_us) {
-            /*
-             * It never stopped. Do not send into a channel that is provably
-             * busy — go back to listening with a fresh draw, and ask for the
-             * carrier detector to be reset, because the most likely innocent
-             * explanation is that the ambient floor has moved under it.
-             *
-             * The silence still owed from before the carrier appeared is
-             * discarded rather than resumed. Resuming it would let a band that
-             * had 2 ms left when the carrier arrived shout 2 ms after giving up
-             * on it — straight into a channel it has just spent 30 ms watching
-             * be busy. A fresh window buys at least LISTEN_MIN_US of looking
-             * first, which is what this path is for.
-             */
-            close_wait(t, now_us);
-            t->quiet_timeouts++;
-            t->reprime_due = true;
-            enter_listen(t);
+
+        /*
+         * §3: the silence budget is NOT charged while the channel is busy.
+         * Listen before talk, and the one consumer design §6 gives presence.
+         */
+        if (in->busy) break;
+
+        if (elapsed >= t->silent_left_us) {
+            t->silent_left_us = 0;
+            enter_beacon(t, now_us);
+        } else {
+            t->silent_left_us -= elapsed;
         }
         break;
 
@@ -185,9 +198,7 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
 
 bool trig_listening(const trig_t *t)
 {
-    /* WAIT listens too: it is waiting to see the carrier go away, or to see
-     * the framer lock, and it cannot do either with its ears shut. */
-    return t->state == TRIG_LISTEN || t->state == TRIG_WAIT;
+    return t->state == TRIG_LISTEN;
 }
 
 bool trig_take_burst(trig_t *t)
@@ -197,21 +208,10 @@ bool trig_take_burst(trig_t *t)
     return due;
 }
 
-bool trig_take_carrier_reprime(trig_t *t)
-{
-    const bool due = t->reprime_due;
-    t->reprime_due = false;
-    return due;
-}
-
 uint32_t trig_listen_us(const trig_t *t) { return t->listen_us; }
+uint16_t trig_nonce(const trig_t *t)     { return t->nonce; }
 
-size_t trig_fill(uint8_t *chips, size_t max)
+size_t trig_fill(const trig_t *t, uint8_t *chips, size_t max)
 {
-    const size_t n = (max < (size_t)TRIG_SHOUT_CHIPS) ? max
-                                                      : (size_t)TRIG_SHOUT_CHIPS;
-    /* All on. No transitions, so frame.c's preamble hunt cannot lock to it —
-     * see the note in beacon.h. */
-    memset(chips, 1, n);
-    return n;
+    return frame_beacon_encode(t->nonce, chips, max);
 }

@@ -63,6 +63,7 @@
 #include "hardware/gpio.h"
 
 #include "adc_ring.h"
+#include "beacon.h"   /* the settle and the cycle it belongs to */
 #include "config.h"
 #include "frame.h"
 #include "hal_pico.h"
@@ -174,10 +175,414 @@ static char parse(const char *line, uint32_t *arg, bool *have_arg)
 }
 
 /* ======================================================================
+ * Link v2 step 2 -- the two-tone generator, self-measured
+ * ======================================================================
+ *
+ * No scope and no second board: pio_carrier_measure_hz() runs a second state
+ * machine counting rising edges on the pad, independent of whatever is driving
+ * it. Check 2a is that both tones come out within 0.1 % of nominal.
+ *
+ * The input buffer has to be on for the counter to see the pad, and the
+ * shipped link keeps it off (RP2350-E9, see pio_carrier_sense) -- so it is
+ * turned on around the gate and off again, which is what bringup does.
+ */
+#define FSK_GATE_US 200000u
+
+/* Both live in the transmitter section below; the alignment check clocks a
+ * real encoded frame out of the two-tone generator. */
+static uint8_t s_chips[FRAME_TOTAL_CHIPS];
+static size_t  encode(uint16_t seq);
+
+static uint32_t ppm_err(uint32_t got, uint32_t want)
+{
+    uint32_t d = got > want ? got - want : want - got;
+    return want ? (uint32_t)(((uint64_t)d * 1000000u + want / 2u) / want) : 0u;
+}
+
+static void fsk_start(void)
+{
+    if (!pio_carrier_fsk_active()) {
+        pio_carrier_fsk_init();
+        printf("    two-tone generator has the pad; `y 9` hands it back\n");
+    }
+}
+
+/*
+ * Hand the pad back to the v1 generator.
+ *
+ * LINK V2 STEP 6 CHANGED WHAT THIS COSTS. The two-tone generator is the
+ * LINK's transmitter now, not an instrument borrowing the pad, so this stops
+ * the link from transmitting at all until `y` takes it back. Before step 6 it
+ * simply undid an instrument. The warning is the whole change.
+ */
+static void fsk_stop(void)
+{
+    if (!pio_carrier_fsk_active()) return;
+    pio_carrier_sense(false);
+    pio_carrier_drive(false);
+    pio_carrier_init(hal_pico_carrier_hz());   /* v1 generator, v1 divider */
+    pio_carrier_sense(false);
+    pio_carrier_drive(false);
+    printf("    v1 generator has the pad again, pad high-Z\n");
+    printf("    THE LINK CANNOT TRANSMIT until `y 0`, `y 1` or `y 3`\n");
+}
+
+static uint32_t fsk_measure(int tone, uint32_t want, bool verdict)
+{
+    uint32_t got, err, duty;
+
+    fsk_start();
+    pio_carrier_fsk_tone(tone);
+    pio_carrier_sense(true);
+    got  = pio_carrier_measure_hz(FSK_GATE_US);
+    duty = pio_carrier_duty_ppm(FSK_GATE_US);
+    pio_carrier_sense(false);
+
+    err = ppm_err(got, want);
+    printf("    tone %c  bin %2u  nominal %lu Hz  measured %lu Hz  %lu ppm",
+           tone ? 'B' : 'A',
+           (unsigned)(tone ? HANDOFF_TONE_B_BIN : HANDOFF_TONE_A_BIN),
+           (unsigned long)want, (unsigned long)got, (unsigned long)err);
+    if (verdict) printf("   %s", err <= 1000u ? "PASS" : "FAIL");   /* 0.1 % */
+    /*
+     * The duty, ON THE PAD. This is the number the guard bins are supposed to
+     * be a proxy for, and reading it here is how a generator that slipped is
+     * told apart from an amplifier that distorted.
+     */
+    printf("\n            duty %lu.%04lu %% of the gate",
+           (unsigned long)(duty / 10000u), (unsigned long)(duty % 10000u));
+    if (verdict) printf("   %s",
+           (duty > 495000u && duty < 505000u) ? "50 % within 0.5 pt" : "NOT 50 %");
+    printf("\n");
+    return err;
+}
+
+/*
+ * Check 2a end to end, with the arithmetic it is checking printed beside the
+ * reading -- so the transcript records what the words were as well as what
+ * came out of the pad.
+ */
+static void fsk_walk(void)
+{
+    uint32_t ea, eb;
+
+    printf("\n  --- two-tone generator, %lu ms gate ---\n",
+           (unsigned long)(FSK_GATE_US / 1000u));
+    printf("    chip word A %08lX = %u periods of %u cycles (loop %u, y %u)\n",
+           (unsigned long)HANDOFF_FSK_WORD_A, (unsigned)HANDOFF_FSK_PERIODS_A,
+           (unsigned)HANDOFF_FSK_PERIOD_A, (unsigned)HANDOFF_FSK_ISR_A,
+           (unsigned)HANDOFF_FSK_Y_A);
+    printf("    chip word B %08lX = %u periods of %u cycles (loop %u, y %u)\n",
+           (unsigned long)HANDOFF_FSK_WORD_B, (unsigned)HANDOFF_FSK_PERIODS_B,
+           (unsigned)HANDOFF_FSK_PERIOD_B, (unsigned)HANDOFF_FSK_ISR_B,
+           (unsigned)HANDOFF_FSK_Y_B);
+    printf("    both chips %u cycles = %lu us\n",
+           (unsigned)HANDOFF_FSK_CHIP_CYCLES, (unsigned long)HANDOFF_CHIP_US);
+
+    ea = fsk_measure(0, (uint32_t)HANDOFF_TONE_A_HZ, true);
+    eb = fsk_measure(1, (uint32_t)HANDOFF_TONE_B_HZ, true);
+
+    printf("    2a %s\n", (ea <= 1000u && eb <= 1000u)
+           ? "PASSED: both tones within 0.1 % of nominal"
+           : "FAILED: a tone is off by more than 0.1 %");
+}
+
+/*
+ * Check 2c, done at the pad rather than through the receiver.
+ *
+ * The hazard pio_carrier.pio warns about is a cycle-count imbalance between
+ * the two symbol paths: it shifts every chip after the first, so errors
+ * accumulate down the frame rather than scattering. The brief proposes finding
+ * that by decoding a known 624-chip pattern through the self loop -- but the
+ * self loop saturates the receiver (mean code 3564 of 4095 on this board, and
+ * 3638 for the v1 generator, so it is the bench and not the generator), and a
+ * decode through a railed ADC proves nothing either way.
+ *
+ * Counting edges proves MORE, and needs no receiver at all. Each chip is a
+ * whole number of tone periods, and one period is one rising edge:
+ *
+ *      tone A chip  ->  HANDOFF_FSK_PERIODS_A rising edges
+ *      tone B chip  ->  HANDOFF_FSK_PERIODS_B rising edges
+ *
+ * so the edge count across any chip pattern is exact arithmetic, and it is
+ * exact only if every chip got precisely its own cycles. One chip short or
+ * long anywhere in the frame shows up in the total. An imbalance that shifted
+ * chips without losing periods would still hold the count -- which is why the
+ * duty and frequency measurements above are run as well: together they pin
+ * the period, its two halves, and the chip boundary.
+ */
+static void fsk_align_one(const char *what, const uint8_t *chips, size_t n)
+{
+    uint32_t want = 0, got;
+    uint64_t until;
+    size_t i;
+
+    for (i = 0; i < n; i++)
+        want += chips[i] ? (uint32_t)HANDOFF_FSK_PERIODS_B
+                         : (uint32_t)HANDOFF_FSK_PERIODS_A;
+
+    fsk_start();
+    /* The check leaves the pad released when it finishes, so a second run
+     * would count a high-Z pad: take it back every time. */
+    pio_carrier_drive(true);
+    /*
+     * Stop whatever the generator was doing BEFORE opening the gate. A 2a
+     * measurement leaves a tone looping, and fsk_send() spends tens of
+     * microseconds building 624 words before its DMA starts -- so a gate
+     * opened first counts that tail and reads eleven edges long. Found by
+     * this check disagreeing with itself on its first pattern only.
+     */
+    pio_carrier_reset();
+    pio_carrier_sense(true);
+    pio_carrier_count_begin();
+    pio_carrier_fsk_send(chips, n);
+
+    /*
+     * busy() clears when the DMA is done and the FIFO empty, but the joined
+     * FIFO holds eight words -- eight chips, 2 ms -- and the OSR one more. So
+     * wait out the airtime from the DMA start instead, plus a chip of margin.
+     */
+    until = pio_carrier_started_us() + (uint64_t)(n + 1u) * HANDOFF_CHIP_US;
+    while (hal_now_us(s_hal) < until) tight_loop_contents();
+
+    got = pio_carrier_count_end();
+    pio_carrier_sense(false);
+
+    printf("    %-22s %4u chips  want %6lu edges  got %6lu   %s\n",
+           what, (unsigned)n, (unsigned long)want, (unsigned long)got,
+           got == want ? "EXACT" : "MISMATCH");
+}
+
+static void fsk_align(void)
+{
+    static uint8_t pat[FRAME_TOTAL_CHIPS];
+    size_t n = FRAME_TOTAL_CHIPS, i, frame_n;
+
+    printf("\n  --- chip alignment by edge count, at the pad ---\n");
+    printf("    tone A chip = %u periods, tone B chip = %u periods\n",
+           (unsigned)HANDOFF_FSK_PERIODS_A, (unsigned)HANDOFF_FSK_PERIODS_B);
+
+    memset(pat, 0, n);
+    fsk_align_one("all tone A", pat, n);
+
+    memset(pat, 1, n);
+    fsk_align_one("all tone B", pat, n);
+
+    for (i = 0; i < n; i++) pat[i] = (uint8_t)(i & 1u);
+    fsk_align_one("alternating A/B", pat, n);
+
+    /* A real encoded frame: preamble, marker, Manchester body and CRC, which
+     * is the pattern the link will actually clock out. */
+    frame_n = encode(0);
+    fsk_align_one("an encoded frame", s_chips, frame_n);
+
+    /* And the pad back to where the link leaves it. */
+    pio_carrier_drive(false);
+}
+
+/*
+ * ---- y 4: THE SETTLE, MEASURED (link v2 step 7) -------------------------
+ *
+ * HANDOFF_TRIG_SETTLE_US is how long a band stays deaf after its own beacon,
+ * and until now it was 6000 because 6000 worked: brief §8 asks for the AFE's
+ * own recovery read directly instead. This reads it.
+ *
+ * Drive one beacon's worth of tone into our own pad, release it, and watch
+ * the presence detector — which is the same detector the trigger listens
+ * through — until it stops calling the channel busy. That interval IS the
+ * quantity, and it needs no second board and no scope: the thing being
+ * measured is our own amplifier coming out of saturation into our own input,
+ * which is a one-board fault by definition.
+ *
+ * WHAT IT MEASURES IS NOT ONLY THE AMPLIFIER. The reading includes the ADC
+ * block latency, because presence is decided on core 1 from samples the DMA
+ * has already delivered, and the trigger sees the channel through that same
+ * delay. That is correct rather than a contaminant: the settle has to cover
+ * both, and a figure that left the ring out would be short by exactly the
+ * amount that matters.
+ *
+ * THE LAST BUSY WINDOW, NOT THE FIRST QUIET ONE. A decaying burst crosses the
+ * CFAR threshold and comes back over it, so the first quiet verdict is an
+ * underestimate and a noisy one. The whole observation window is watched and
+ * the LAST busy verdict in it is what is reported.
+ */
+#define SETTLE_RUNS       8u
+#define SETTLE_WATCH_US   200000u
+#define SETTLE_QUIET_US   400000u   /* between runs, for the CFAR boxcar */
+#define SETTLE_TRACE      24u
+#define SETTLE_TRACE_STEP  1000u   /* the interesting part is the first ms */
+
+/* One burst. Returns the time of the last busy verdict inside the watch,
+ * or 0 if the detector never read busy at all. */
+static uint32_t settle_once(uint32_t drive_us, uint32_t *trace_us,
+                            uint32_t *trace_sig, uint32_t *trace_noi,
+                            uint32_t trace_n)
+{
+    hal_pico_presence_t pr;
+    absolute_time_t t0;
+    uint32_t last_busy_us = 0, next_trace = 0;
+    bool saw_busy = false;
+
+    pio_carrier_fsk_tone(1);
+    pio_carrier_drive(true);
+    sleep_us(drive_us);
+
+    /* High-Z, not driven low: a driven pad still loads the electrode. */
+    pio_carrier_drive(false);
+    t0 = get_absolute_time();
+
+    for (;;) {
+        const uint32_t at = (uint32_t)absolute_time_diff_us(t0, get_absolute_time());
+        if (at >= SETTLE_WATCH_US) break;
+        hal_pico_presence(&pr);
+        if (pr.busy) { last_busy_us = at; saw_busy = true; }
+        if (trace_n && next_trace < trace_n &&
+            at >= next_trace * SETTLE_TRACE_STEP) {
+            trace_us[next_trace]  = at;
+            trace_sig[next_trace] = pr.signal;
+            trace_noi[next_trace] = pr.noise;
+            next_trace++;
+        }
+    }
+    sleep_ms(SETTLE_QUIET_US / 1000u);
+    return saw_busy ? last_busy_us : 0u;
+}
+
+/*
+ * ---- y 4: THE SETTLE, MEASURED (link v2 step 7) -------------------------
+ *
+ * HANDOFF_TRIG_SETTLE_US is how long a band stays deaf after its own beacon,
+ * and until now it was 6000 because 6000 worked: brief S8 asks for the AFE's
+ * own recovery read directly instead. This reads it.
+ *
+ * Drive tone into our own pad, release it, and watch the presence detector --
+ * the same detector the trigger listens through -- until it stops calling the
+ * channel busy. No second board and no scope: the thing being measured is our
+ * own amplifier coming out of saturation into our own input, which is a
+ * one-board fault by definition.
+ *
+ * THREE DRIVE LENGTHS, because one would not be a measurement. If the
+ * recovery is an RC discharging a coupling cap that the drive charged, it
+ * grows with how long the drive lasted -- and that matters a great deal here,
+ * because step 7 took the transmission from v1's 10 ms shout to a 28 ms
+ * beacon. A settle that is flat across the three is a fixed recovery; one
+ * that grows is the beacon paying for its own length twice.
+ *
+ * WHAT IT MEASURES IS NOT ONLY THE AMPLIFIER. The reading includes the ADC
+ * block latency, because presence is decided on core 1 from samples the DMA
+ * has already delivered, and the trigger sees the channel through that same
+ * delay. That is correct rather than a contaminant: the settle has to cover
+ * both, and a figure that left the ring out would be short by exactly the
+ * amount that matters.
+ *
+ * THE LAST BUSY WINDOW, NOT THE FIRST QUIET ONE. A decaying burst crosses the
+ * CFAR threshold and comes back over it -- and the reference itself moves,
+ * because a saturated receiver puts distortion in the guard bins too and the
+ * boxcar holds that for a preamble afterwards. The whole observation window
+ * is watched and the LAST busy verdict in it is reported, with a trace of the
+ * two sides of the comparison beside it so the two effects can be told apart.
+ */
+static void fsk_settle(void)
+{
+    static const uint32_t k_drive_us[] = {
+        FRAME_BEACON_AIRTIME_US / 4u,       /* about v1's flat shout      */
+        FRAME_BEACON_AIRTIME_US / 2u,
+        FRAME_BEACON_AIRTIME_US,            /* one beacon                 */
+    };
+    uint32_t trace_us[SETTLE_TRACE], trace_sig[SETTLE_TRACE], trace_noi[SETTLE_TRACE];
+    size_t d;
+
+    if (!hal_pico_bank_on()) {
+        printf("    the bank is OFF, so there is no detector. `n 1` first.\n");
+        return;
+    }
+
+    printf("\n  --- settle: our own amplifier, after its own drive ---\n");
+    printf("    watching %lu us after release, %lu runs each, %lu us quiet between\n",
+           (unsigned long)SETTLE_WATCH_US, (unsigned long)SETTLE_RUNS,
+           (unsigned long)SETTLE_QUIET_US);
+
+    fsk_start();
+
+    for (d = 0; d < sizeof k_drive_us / sizeof k_drive_us[0]; d++) {
+        const uint32_t drive = k_drive_us[d];
+        uint32_t run, worst = 0, sum = 0, best = 0xFFFFFFFFu, never = 0;
+
+        for (run = 0; run < SETTLE_RUNS; run++) {
+            const bool want_trace = (run == 0u);
+            const uint32_t last = settle_once(drive,
+                                              trace_us, trace_sig, trace_noi,
+                                              want_trace ? SETTLE_TRACE : 0u);
+            if (!last) { never++; continue; }
+            sum += last;
+            if (last > worst) worst = last;
+            if (last < best)  best  = last;
+        }
+
+        if (never == SETTLE_RUNS) {
+            printf("    drive %6lu us: never busy -- the pad is not driven, "
+                   "or the bank is not scoring\n", (unsigned long)drive);
+            continue;
+        }
+
+        printf("    drive %6lu us: last busy min %6lu mean %6lu max %6lu us"
+               " (%lu runs, %lu silent)\n",
+               (unsigned long)drive, (unsigned long)best,
+               (unsigned long)(sum / (SETTLE_RUNS - never)),
+               (unsigned long)worst,
+               (unsigned long)(SETTLE_RUNS - never), (unsigned long)never);
+
+        {
+            size_t i;
+            printf("        ms:signal/noise ");
+            for (i = 0; i < SETTLE_TRACE; i++)
+                printf(" %lu:%lu/%lu", (unsigned long)(trace_us[i] / 1000u),
+                       (unsigned long)trace_sig[i], (unsigned long)trace_noi[i]);
+            printf("\n");
+        }
+    }
+
+    printf("    ADC block latency %lu us is inside every figure above\n",
+           (unsigned long)HAL_PICO_RX_LATENCY_US);
+    printf("    HANDOFF_TRIG_SETTLE_US is %lu us\n",
+           (unsigned long)HANDOFF_TRIG_SETTLE_US);
+}
+
+static void fsk_dispatch(uint32_t arg, bool have_arg)
+{
+    if (!have_arg)    { fsk_walk(); return; }
+    if (arg == 2u)    { fsk_align(); return; }
+    if (arg == 4u)    { fsk_settle(); return; }
+    if (arg == 9u)    { fsk_stop(); return; }
+
+    fsk_start();
+    /*
+     * Take the pad, every time, and say so. fsk_init() takes it on the first
+     * call, but `y 2` hands it back when it finishes -- so on a bench where
+     * this board is the transmitter for another one, a `y 0` after an
+     * alignment check would drive a high-Z pad and the far board would read a
+     * quiet room. That is a reading the transcript cannot tell from a dead
+     * coupling path, so the state is printed beside the tone.
+     */
+    pio_carrier_drive(true);
+
+    if (arg == 3u) {
+        pio_carrier_fsk_alt();
+        printf("    driving tone A / tone B on ALTERNATE chips, unbroken\n");
+    } else {
+        pio_carrier_fsk_tone(arg ? 1 : 0);
+        printf("    driving tone %c (%lu Hz) unbroken\n",
+               arg ? 'B' : 'A',
+               (unsigned long)(arg ? HANDOFF_TONE_B_HZ : HANDOFF_TONE_A_HZ));
+    }
+    printf("    pad %s; `y 9` stops\n",
+           pio_carrier_is_driving() ? "DRIVEN" : "high-Z -- nothing is going out");
+}
+
+/* ======================================================================
  * Transmitter
  * ====================================================================== */
 
-static uint8_t  s_chips[FRAME_TOTAL_CHIPS];
 static uint16_t s_tx_seq;
 static uint32_t s_tx_sent, s_tx_refused;
 static uint32_t s_gap_us = GAP_DEFAULT_US;
@@ -214,12 +619,48 @@ static bool tx_start(void)
     return true;
 }
 
+/*
+ * Link v2 step 1 instrument. The clock tree, gated against the crystal by the
+ * RP2350 frequency counter rather than read back from the SDK.
+ *
+ * What the bench is looking for: sys at HANDOFF_SYS_CLK_HZ, and usb and adc
+ * both still 48000 kHz after the move off 150 MHz. clk_adc is what sets the
+ * 500 ksps sample rate (48 MHz / 96), and the whole of the receiver is
+ * calibrated against it, so it moving would be silent and fatal.
+ */
+static void clocks_print(void)
+{
+    hal_pico_clocks_t m;
+
+    hal_pico_clocks(&m);
+
+    printf("\n  clocks, measured against the crystal:\n"
+           "    clk_ref   %8lu kHz\n"
+           "    clk_sys   %8lu kHz   (sdk says %lu, config.h says %lu)\n"
+           "    clk_usb   %8lu kHz   (48000 or USB is gone)\n"
+           "    clk_adc   %8lu kHz   (48000 or the sample rate moved)\n"
+           "    clk_peri  %8lu kHz\n"
+           "    adc rate  %8lu sps  (want %lu)\n",
+           (unsigned long)m.ref_khz,
+           (unsigned long)m.sys_khz, (unsigned long)m.sys_cfg_khz,
+           (unsigned long)(HANDOFF_SYS_CLK_HZ / 1000),
+           (unsigned long)m.usb_khz,
+           (unsigned long)m.adc_khz,
+           (unsigned long)m.peri_khz,
+           (unsigned long)hal_pico_sps(),
+           (unsigned long)HANDOFF_ADC_FS_HZ);
+}
+
 static void tx_help(void)
 {
     printf("\n  c 40|200  carrier, kHz\n"
            "  g [ms]    gap between frames, default %lu\n"
            "  p         pause / resume\n"
            "  1         one frame (while paused)\n"
+           "  f         clock tree, measured\n"
+           "  y [0..4|9] two tones: check, drive A / B, 2 align,\n"
+           "              3 alternating chips, 4 measure the settle\n"
+           "              after one beacon, 9 stop\n"
            "  h         this\n", (unsigned long)(GAP_DEFAULT_US / 1000u));
 }
 
@@ -240,6 +681,8 @@ static void tx_dispatch(const char *line, bool *one_shot)
         printf("    %s\n", s_paused ? "paused: pad high-Z" : "running");
         break;
     case '1': *one_shot = true; break;
+    case 'f': clocks_print(); break;
+    case 'y': fsk_dispatch(arg, have_arg); break;
     case 'h': case '?': tx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }
@@ -425,15 +868,23 @@ static void rx_frame(frame_rx_result_t res)
  * receiver, always, so the receiver is never anything but primed. */
 static void rx_pump(void)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     size_t n, i;
 
     while ((n = hal_rx_chips(s_hal, chips, count_of(chips))) > 0) {
         for (i = 0; i < n; i++) {
             frame_rx_result_t r;
 
-            if (s_stream_decimate)
-                hal_telemetry(s_hal, HAL_TLM_SCORE, &chips[i], sizeof chips[i]);
+            if (s_stream_decimate) {
+                /* The score stream is 16-bit by contract (hal.h, TLM_SCORE),
+                 * so a signed chip goes out as its magnitude: the sign is the
+                 * decision and the magnitude is the level, and a trace of a
+                 * live link wants the level. */
+                const int32_t d = chips[i];
+                const uint32_t a = (uint32_t)(d < 0 ? -(int64_t)d : d);
+                const uint16_t mag = (uint16_t)(a > 0xFFFFu ? 0xFFFFu : a);
+                hal_telemetry(s_hal, HAL_TLM_SCORE, &mag, sizeof mag);
+            }
 
             r = frame_rx_push(&s_rx, chips[i]);
             if (r != FRAME_RX_NONE) rx_frame(r);
@@ -446,31 +897,58 @@ static void rx_pump(void)
  * middle of the measurement and `m` reads the quiet it just caused. */
 static void selfloop_pump(void);
 
-/* Chip energy over a window, mean and max, in tenths of an LSB. The frame
- * receiver keeps running underneath, so the window costs no frames. */
-static uint32_t rx_energy(uint32_t us, uint32_t *max_out)
+/*
+ * Level on the probe bin, mean and max, in tenths of an LSB.
+ *
+ * LINK V2 STEP 6: this used to read CHIP energies off the link's own stream,
+ * because the link WAS one bin and retuning it was how `b` walked the bank.
+ * The link is two tone bins and a signed difference now, and the retunable
+ * Goertzel is an instrument with nothing framing behind it -- so what comes
+ * back is Goertzel WINDOW scores rather than chip energies.
+ *
+ * Two things follow at the console. The max is one window rather than the
+ * mean of three, so it reads a little higher than the same bench did before
+ * step 6. And retuning costs the receiver nothing, because the receiver is
+ * not on this bin any more.
+ *
+ * TAKEN IN SHORT CHUNKS, and that is the self-loop pump trap, not caution:
+ * `x` re-queues its carrier a frame at a time, so anything that spins for
+ * two hundred milliseconds without pumping lets the transmitter fall silent
+ * and then measures the quiet it caused. The frame receiver is pumped in the
+ * same gaps, so a bin walk costs no frames either.
+ */
+#define PROBE_CHUNK_US 10000u
+
+static uint32_t probe_level(uint32_t us, uint32_t *max_out)
 {
-    uint16_t chips[64];
     uint64_t sum = 0, n = 0;
     uint32_t max = 0;
-    uint64_t until = hal_now_us(s_hal) + us;
-    size_t k, i;
+    uint32_t left = us;
 
-    while (hal_now_us(s_hal) < until) {
+    while (left) {
+        const uint32_t want = left > PROBE_CHUNK_US ? PROBE_CHUNK_US : left;
+        const uint32_t windows = (uint32_t)(((uint64_t)want
+                                             * (uint32_t)HANDOFF_WINDOW_RATE_HZ)
+                                            / 1000000u);
+        hal_pico_probe_t p;
+
+        rx_pump();
         selfloop_pump();
-        while ((k = hal_rx_chips(s_hal, chips, count_of(chips))) > 0) {
-            for (i = 0; i < k; i++) {
-                frame_rx_result_t r;
-                sum += chips[i];
-                if (chips[i] > max) max = chips[i];
-                r = frame_rx_push(&s_rx, chips[i]);
-                if (r != FRAME_RX_NONE) rx_frame(r);
-            }
-            n += k;
+
+        memset(&p, 0, sizeof p);
+        (void)hal_pico_probe(windows ? windows : 1u, want + 20000u, &p);
+        if (p.windows) {
+            sum += (uint64_t)p.mean_tenths * p.windows;
+            n   += p.windows;
+            if (p.max > max) max = p.max;
         }
+        left -= want;
     }
+
+    rx_pump();
+    selfloop_pump();
     if (max_out) *max_out = max;
-    return n ? (uint32_t)((sum * 10u + n / 2u) / n) : 0;
+    return n ? (uint32_t)(sum / n) : 0u;
 }
 
 /* RMS of a raw burst about its mean, in tenths of an LSB. */
@@ -509,21 +987,23 @@ static void rx_measure(void)
     uint32_t mean, max, sig, floor;
     int32_t  mean_code, floor_mean;
 
-    printf("\n  --- measure at %lu Hz, %lu ms ---\n",
-           (unsigned long)hal_pico_carrier_hz(), (unsigned long)(MEASURE_US / 1000u));
-    mean = rx_energy(MEASURE_US, &max);
+    printf("\n  --- measure on bin %u (%lu kHz), %lu ms ---\n",
+           (unsigned)hal_pico_rx_bin(),
+           (unsigned long)(hal_pico_rx_bin() * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
+           (unsigned long)(MEASURE_US / 1000u));
+    mean = probe_level(MEASURE_US, &max);
     sig  = raw_rms(&mean_code);
     floor = hal_pico_noise_floor(&floor_mean);
 
-    printf("    chip energy:  mean "); print_tenths(mean);
-    printf(" LSB, max %lu LSB (A, if frames are flowing)\n", (unsigned long)max);
+    printf("    bin level:    mean "); print_tenths(mean);
+    printf(" LSB, max %lu LSB (one Goertzel window)\n", (unsigned long)max);
     printf("    raw samples:  "); print_tenths(sig);
     printf(" LSB RMS about code %ld (sigma, if the transmitter is paused)\n",
            (long)mean_code);
     printf("    M4 floor:     "); print_tenths(floor);
     printf(" LSB RMS about code %ld (on-die sensor, at boot)\n", (long)floor_mean);
     if (max == 0u)
-        printf("    nothing received: is the other board transmitting on this carrier?\n");
+        printf("    nothing on this bin: is the other board transmitting?\n");
 }
 
 /* ---- self loop ---------------------------------------------------------
@@ -568,16 +1048,413 @@ static void selfloop_set(bool on)
            on ? " - own carrier into our own receiver; `m` now reads it" : "");
 }
 
+/*
+ * Link v2 step 2b -- the bin bank, one bin at a time.
+ *
+ * The real bank is step 3; this walks the five bins SEQUENTIALLY with the one
+ * Goertzel core 1 already has, retuning between reads. That cannot show the
+ * two tones alternating -- for that the bins must be scored in the same window
+ * -- but it does show the thing step 4 calls its kill switch, and shows it a
+ * step early and on one board: whether a GUARD bin rises while we transmit.
+ *
+ * Drive one tone with `y 0` or `y 1`, then `b`. Bins 9 and 10 are the tones,
+ * 7, 8 and 11 the guards. A guard reading anywhere near the driven tone means
+ * the transmitter is leaking outside its bins and the noise reference is
+ * poisoned, which is v1's floor in a new hat.
+ */
+#define BANK_SETTLE_US 60000u    /* the retune transient, several chips */
+#define BANK_US       200000u
+
+/*
+ * `b 1` sweeps every bin below Nyquist rather than the five the design uses.
+ * That is what turns "a guard bin rose" into "here is the harmonic comb", and
+ * a comb is readable: a duty-cycle error puts energy in the EVEN harmonics
+ * only, while a non-linearity anywhere in the amplifier fills in bins no
+ * harmonic of the tone can reach at all.
+ */
+static void rx_bank_full(void)
+{
+    uint16_t back = hal_pico_rx_bin();
+    uint16_t bin;
+
+    printf("\n  --- every bin, %lu ms each, generator %s ---\n",
+           (unsigned long)(BANK_US / 1000u),
+           pio_carrier_fsk_active()
+               ? (pio_carrier_is_driving() ? "two-tone, DRIVING" : "two-tone, idle")
+               : "v1");
+
+    for (bin = 1u; 2u * bin < (uint16_t)HANDOFF_GZ_N; bin++) {
+        uint32_t mean, max;
+
+        if (!hal_pico_set_rx_bin(bin)) continue;
+        frame_rx_init(&s_rx);
+        (void)probe_level(BANK_SETTLE_US, 0);
+        mean = probe_level(BANK_US, &max);
+
+        printf("    bin %2u  %3lu kHz  mean ", (unsigned)bin,
+               (unsigned long)(bin * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u));
+        print_tenths(mean);
+        printf(" LSB  max %lu LSB\n", (unsigned long)max);
+    }
+
+    hal_pico_set_rx_bin(back);
+    frame_rx_init(&s_rx);
+    rx_zero();
+    printf("    back on bin %u\n", (unsigned)back);
+}
+
+static void rx_bank(void)
+{
+    static const uint16_t k_bins[] = {
+        HANDOFF_GUARD_LO_BIN, HANDOFF_GUARD_MID_BIN,
+        HANDOFF_TONE_A_BIN, HANDOFF_TONE_B_BIN, HANDOFF_GUARD_HI_BIN
+    };
+    uint16_t back = hal_pico_rx_bin();
+    uint32_t tone_max = 0, guard_max = 0;
+    size_t i;
+
+    printf("\n  --- bin bank, %lu ms a bin, generator %s ---\n",
+           (unsigned long)(BANK_US / 1000u),
+           pio_carrier_fsk_active()
+               ? (pio_carrier_is_driving() ? "two-tone, DRIVING" : "two-tone, idle")
+               : "v1");
+
+    for (i = 0; i < count_of(k_bins); i++) {
+        uint16_t bin = k_bins[i];
+        bool tone = bin == HANDOFF_TONE_A_BIN || bin == HANDOFF_TONE_B_BIN;
+        uint32_t mean, max;
+
+        if (!hal_pico_set_rx_bin(bin)) { printf("    bin %u refused\n", bin); continue; }
+        frame_rx_init(&s_rx);
+        (void)probe_level(BANK_SETTLE_US, 0);        /* discard the transient */
+        mean = probe_level(BANK_US, &max);
+
+        printf("    bin %2u  %3lu kHz  %-7s  mean ", (unsigned)bin,
+               (unsigned long)(bin * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
+               tone ? "TONE" : "guard");
+        print_tenths(mean);
+        printf(" LSB  max %lu LSB\n", (unsigned long)max);
+
+        if (tone) { if (max > tone_max)  tone_max  = max; }
+        else      { if (max > guard_max) guard_max = max; }
+    }
+
+    hal_pico_set_rx_bin(back);
+    frame_rx_init(&s_rx);
+    rx_zero();
+
+    printf("    loudest tone bin %lu LSB, loudest guard %lu LSB",
+           (unsigned long)tone_max, (unsigned long)guard_max);
+    if (guard_max) printf("  (ratio %lu:1)", (unsigned long)(tone_max / guard_max));
+    printf("\n    back on bin %u\n", (unsigned)back);
+}
+
+/* ---- link v2 step 3: the real bank -------------------------------------
+ *
+ * `b` walks the five bins one after another, retuning between them. This
+ * reads all five in the SAME window, which is the only reading the design
+ * ever asks for: a ratio between two numbers that shared a gain, a body and
+ * an amplifier. Sequential reads cannot answer that question at all.
+ *
+ *   n        the budget: bank off, then bank on, in this image
+ *   n 0 / 1  bank off / on and leave it there
+ *   n 2      one capture -- five bins, the guard median, the ratio
+ */
+#define BANK_CAP_WINDOWS  4000u     /* 200 ms at the window rate */
+#define BANK_CAP_WAIT_US  1000000u
+#define BANK_BUDGET_US    2000000u
+#define BANK_ON_SETTLE_US  200000u
+
+static void bank_wait(uint32_t us)
+{
+    uint64_t until = hal_now_us(s_hal) + us;
+    while (hal_now_us(s_hal) < until) { rx_pump(); selfloop_pump(); }
+}
+
+static const char *bank_generator(void)
+{
+    if (!pio_carrier_fsk_active()) return "v1";
+    return pio_carrier_is_driving() ? "two-tone, DRIVING" : "two-tone, idle";
+}
+
+/*
+ * The operating point, printed under every capture -- because a guard-bin
+ * reading only means something at a LINEAR level (design S10, "what 2b could
+ * not do"), and nothing else on the console says whether this capture was
+ * taken at one.
+ *
+ * Two independent tells, neither of them a tuned number:
+ *
+ *   the excursion  an on-bin tone is a sinusoid at the converter, so its peak
+ *                  is sqrt(2) x RMS. Add that to the mean code and compare
+ *                  against the converter's own 0 and 4095. Crest factor and
+ *                  full scale, nothing chosen.
+ *   the mean code   saturation rectifies, so the operating point WALKS. A
+ *                  quiet board and a loud one reading different mean codes is
+ *                  a distortion signature that needs no crest factor assumed
+ *                  at all -- it is the one that settled the back-to-back
+ *                  bench, where the code went 2309 -> 3622.
+ */
+static void bank_operating_point(void)
+{
+    int32_t mean_code;
+    uint32_t rms = raw_rms(&mean_code);          /* both in tenths of an LSB */
+    int32_t  peak = (int32_t)((uint64_t)rms * 1414u / 1000u / 10u);
+    bool railed = mean_code + peak > 4095 || mean_code - peak < 0;
+
+    printf("    raw ");
+    print_tenths(rms);
+    printf(" LSB RMS about code %ld, so %ld..%ld of 0..4095   %s\n",
+           (long)mean_code, (long)(mean_code - peak), (long)(mean_code + peak),
+           railed ? "RAILED -- guard bins mean nothing here" : "linear");
+}
+
+static void rx_bank_capture(void)
+{
+    static const char *k_name[GZB_BINS] = { "TONE A", "TONE B",
+                                            "guard", "guard", "guard" };
+    static const uint16_t k_bin[GZB_BINS] = {
+        HANDOFF_TONE_A_BIN, HANDOFF_TONE_B_BIN,
+        HANDOFF_GUARD_LO_BIN, HANDOFF_GUARD_MID_BIN, HANDOFF_GUARD_HI_BIN
+    };
+    hal_pico_bank_t cap;
+    uint32_t sig = 0, noise;
+    bool was_on = hal_pico_bank_on();
+    size_t i;
+
+    if (!was_on) { hal_pico_set_bank(true); bank_wait(BANK_ON_SETTLE_US); }
+
+    if (!hal_pico_bank_capture(BANK_CAP_WINDOWS, BANK_CAP_WAIT_US, &cap)) {
+        printf("    capture did not finish: %lu of %lu windows\n",
+               (unsigned long)cap.windows, (unsigned long)BANK_CAP_WINDOWS);
+        if (!was_on) hal_pico_set_bank(false);
+        return;
+    }
+
+    printf("\n  --- bank, %lu windows in ONE pass, generator %s ---\n",
+           (unsigned long)cap.windows, bank_generator());
+
+    for (i = 0; i < GZB_BINS; i++) {
+        const uint32_t div = (i >= GZB_G_LO) ? cap.guard_windows : cap.windows;
+        const uint32_t mean = div ? gzb_score(cap.sum[i] / div) : 0u;
+        const uint32_t max  = gzb_score(cap.max[i]);
+
+        printf("    bin %2u  %3lu kHz  %-6s  mean %4lu LSB  max %4lu LSB\n",
+               (unsigned)k_bin[i],
+               (unsigned long)(k_bin[i] * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
+               k_name[i], (unsigned long)mean, (unsigned long)max);
+
+        if (i < GZB_G_LO && mean > sig) sig = mean;
+    }
+
+    noise = cap.windows ? gzb_score(cap.noise_sum / cap.windows) : 0u;
+    printf("    guards ran in %lu of %lu windows (every %d)\n",
+           (unsigned long)cap.guard_windows, (unsigned long)cap.windows,
+           HANDOFF_GUARD_DECIM);
+    printf("    signal %lu LSB, guard median %lu LSB", (unsigned long)sig,
+           (unsigned long)noise);
+    if (noise) printf(", ratio %lu:1", (unsigned long)(sig / noise));
+    printf("\n");
+
+    bank_operating_point();
+
+    if (!was_on) hal_pico_set_bank(false);
+}
+
+/*
+ * ---- link v2 step 5: presence, over an interval ------------------------
+ *
+ * `n 2` answers "what are the five bins doing". This answers the only
+ * question step 5 is gated on: DOES busy TRACK REALITY AS THE LEVEL MOVES.
+ *
+ * It takes two readings of the detector's own counters and divides, so what
+ * comes out is the fraction of windows that read busy over the interval —
+ * a rate, which is what a threshold has to be judged as. One instantaneous
+ * read cannot tell 100 % busy from 5 %.
+ *
+ * It does NOT go through hal_rx_busy(): that clears the latch, and an
+ * instrument must never take an event away from the link.
+ *
+ * HOW TO SWEEP THE LEVEL ON THIS BENCH. There is no gain knob and no
+ * attenuator, so geometry is the only control (step 4, the hard way). Close
+ * the gap in steps with hands withdrawn between them — a hand near a band
+ * beats the transmitter — and alternate the far board silent (`y 9`) with it
+ * driving (`y 0`, `y 1` or `y 3`), so every hold gives a matched pair. The
+ * coupling drifts on its own, so a quiet reading from an earlier run is not a
+ * control for this one.
+ *
+ * WHAT PASSING LOOKS LIKE. Near 0 % busy with the far board silent, at every
+ * level; near 100 % with it driving, at every level down to the weakest the
+ * link is expected to work at. The number in between is the margin.
+ */
+#define PRES_SECONDS_DEFAULT 3u
+#define PRES_SECONDS_MAX     60u
+
+static void rx_presence(uint32_t seconds)
+{
+    hal_pico_presence_t a, b;
+    uint32_t windows, busy;
+
+    if (seconds == 0u) seconds = PRES_SECONDS_DEFAULT;
+    if (seconds > PRES_SECONDS_MAX) seconds = PRES_SECONDS_MAX;
+
+    if (!hal_pico_bank_on()) {
+        printf("    the bank is OFF, so there is no detector. `n 1` first.\n");
+        return;
+    }
+
+    hal_pico_presence(&a);
+    if (!a.ready) {
+        printf("    the CFAR reference is not full yet (%d cells, one "
+               "preamble) — give it a moment\n", (int)HANDOFF_CFAR_CELLS);
+        return;
+    }
+
+    printf("\n  --- presence, %lu s, generator %s ---\n",
+           (unsigned long)seconds, bank_generator());
+
+    bank_wait((uint32_t)seconds * 1000000u);
+    hal_pico_presence(&b);
+
+    windows = b.windows - a.windows;
+    busy    = b.busy_windows - a.busy_windows;
+
+    printf("    busy in %lu of %lu windows", (unsigned long)busy,
+           (unsigned long)windows);
+    if (windows) {
+        const uint32_t pct = (uint32_t)((uint64_t)busy * 1000u / windows);
+        printf("  = %lu.%lu %%", (unsigned long)(pct / 10u),
+               (unsigned long)(pct % 10u));
+    }
+    printf("\n");
+
+    /*
+     * THE RATIO IS PRINTED IN POWER, because k is a power ratio and the two
+     * have to be comparable on one line. The scores either side are
+     * amplitudes -- gz_score_of() takes a square root -- so a signal 18x the
+     * reference in LSB is 324x in power, against a k of 16.8. Printing the
+     * amplitude ratio beside k made a 19x margin read as though it were
+     * scraping past the threshold.
+     */
+    printf("    signal %lu LSB vs reference %lu LSB", (unsigned long)b.signal,
+           (unsigned long)b.noise);
+    if (b.noise) {
+        const uint32_t pwr = (uint32_t)(((uint64_t)b.signal * b.signal)
+                                        / ((uint64_t)b.noise * b.noise));
+        printf(", ratio %lu:1 in POWER", (unsigned long)pwr);
+        printf("  (k = %lu.%lu, so %lu x clear)",
+               (unsigned long)(HANDOFF_CFAR_K_NUM / HANDOFF_CFAR_K_DEN),
+               (unsigned long)((HANDOFF_CFAR_K_NUM * 10u / HANDOFF_CFAR_K_DEN) % 10u),
+               (unsigned long)(pwr * HANDOFF_CFAR_K_DEN / HANDOFF_CFAR_K_NUM));
+    }
+    printf("\n");
+
+    bank_operating_point();
+}
+
+/*
+ * The budget, measured the one way that means anything: the same image, the
+ * same board, the same minute, with the bank switched off and then on.
+ *
+ * Step 1 found core-1 load moving 4 points between two builds of the SAME
+ * code, from one unrelated function and where the linker put the image, so a
+ * number from another image is not evidence. The difference below is.
+ *
+ * Cycles a sample is the figure to quote: busy microseconds times the clock,
+ * over the samples core 1 actually saw in the interval.
+ */
+static void bank_budget_leg(const char *what, bool on)
+{
+    uint64_t b0, t0, b1, t1;
+    uint32_t w0, w1, sm0, sm1, ov0, ov1, sps;
+    uint64_t busy_us, wall_us, samples, ctenths;
+
+    hal_pico_set_bank(on);
+    bank_wait(BANK_ON_SETTLE_US);
+
+    ov0 = hal_pico_overruns();
+    w0  = hal_pico_windows();
+    sm0 = hal_pico_samples();
+    hal_pico_core1_busy(&b0, &t0);
+
+    bank_wait(BANK_BUDGET_US);
+
+    hal_pico_core1_busy(&b1, &t1);
+    w1  = hal_pico_windows();
+    sm1 = hal_pico_samples();
+    ov1 = hal_pico_overruns();
+    sps = hal_pico_sps();
+
+    busy_us = b1 - b0;
+    wall_us = t1 - t0;
+    /* SAMPLES, not windows times GZ_N. With the bank off nothing scores a
+     * window at all since step 6, and that is one of this instrument's two
+     * legs -- the old expression would divide by zero on it. */
+    samples = (uint64_t)(sm1 - sm0);
+    ctenths = samples
+        ? busy_us * ((uint32_t)HANDOFF_SYS_CLK_HZ / 1000000u) * 10u / samples
+        : 0u;
+
+    printf("    %-9s load %2lu %%   windows %6lu   %lu sps   overruns %lu   ",
+           what,
+           (unsigned long)(wall_us ? busy_us * 100u / wall_us : 0u),
+           (unsigned long)(w1 - w0), (unsigned long)sps,
+           (unsigned long)(ov1 - ov0));
+    print_tenths((uint32_t)ctenths);
+    printf(" cycles/sample\n");
+}
+
+static void rx_bank_budget(void)
+{
+    bool was_on = hal_pico_bank_on();
+
+    printf("\n  --- core 1 budget, ONE image, %lu ms a leg, generator %s ---\n",
+           (unsigned long)(BANK_BUDGET_US / 1000u), bank_generator());
+    printf("    (compare like with like: the load moves with whether frames\n"
+           "     are being decoded, so run this idle or with `x` on, not one\n"
+           "     leg of each)\n");
+
+    bank_budget_leg("bank off", false);
+    bank_budget_leg("bank on", true);
+
+    hal_pico_set_bank(was_on);
+    printf("    bank left %s\n", was_on ? "ON" : "off");
+}
+
+static void rx_bank_dispatch(uint32_t arg, bool have_arg)
+{
+    if (!have_arg) { rx_bank_budget(); return; }
+
+    switch (arg) {
+    case 0:
+    case 1:
+        hal_pico_set_bank(arg != 0u);
+        printf("    five-bin bank %s%s\n", arg ? "ON" : "off",
+               arg ? "" : " - THE RECEIVER IS OFF: no chips, no presence");
+        break;
+    case 2: rx_bank_capture(); break;
+    default: printf("    n [0|1|2]\n"); break;
+    }
+}
+
 static void rx_help(void)
 {
     printf("\n  c 40|200  carrier, kHz\n"
            "  s         stats now\n"
            "  z         zero the stats\n"
            "  v         per-frame lines on / off\n"
-           "  m         chip energy mean / max, raw RMS\n"
+           "  m         probe-bin level mean / max, raw RMS\n"
            "  r         raw burst across the next frame, dumped\n"
-           "  t [N]     stream every Nth chip energy; t 0 stops\n"
+           "  t [N]     stream every Nth chip magnitude; t 0 stops\n"
            "  x [0|1]   self loop: our own carrier into our own receiver\n"
+           "  f         clock tree, measured\n"
+           "  y [0..4|9] two tones: check, drive A / B, 2 align,\n"
+           "              3 alternating chips, 4 measure the settle\n"
+           "              after one beacon, 9 stop\n"
+           "  k [bin]   move the PROBE Goertzel to a bin (7..11); the link\n"
+           "              is on bins 9 and 10 and does not move\n"
+           "  b [1]     walk bins 7,8,9,10,11; b 1 walks every bin\n"
+           "  n [0|1|2] five-bin bank: budget, 0 off, 1 on, 2 one capture\n"
            "  h         this\n");
 }
 
@@ -616,6 +1493,24 @@ static void rx_dispatch(const char *line)
     case 'x':
         selfloop_set(have_arg ? arg != 0u : !s_selfloop);
         break;
+    case 'f': clocks_print(); break;
+    case 'y': fsk_dispatch(arg, have_arg); break;
+    case 'k':
+        if (!have_arg) printf("    receive bin %u\n", (unsigned)hal_pico_rx_bin());
+        else if (!hal_pico_set_rx_bin((uint16_t)arg))
+            printf("    bin %lu is DC or above Nyquist for N=%d\n",
+                   (unsigned long)arg, HANDOFF_GZ_N);
+        else {
+            frame_rx_init(&s_rx);
+            rx_zero();
+            printf("    receive bin %lu (%lu kHz), frame receiver reset\n",
+                   (unsigned long)arg,
+                   (unsigned long)(arg * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u));
+        }
+        break;
+    case 'b': if (have_arg && arg) rx_bank_full(); else rx_bank(); break;
+    case 'p': rx_presence(have_arg ? arg : 0u); break;
+    case 'n': rx_bank_dispatch(arg, have_arg); break;
     case 'h': case '?': rx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }

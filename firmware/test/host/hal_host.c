@@ -29,7 +29,7 @@ static bool h_tx_busy(void *ctx)
     return n->tx_sent < n->tx_len;
 }
 
-static size_t h_rx_chips(void *ctx, uint16_t *dst, size_t max)
+static size_t h_rx_chips(void *ctx, int32_t *dst, size_t max)
 {
     halh_node_t *n = (halh_node_t *)ctx;
     size_t out = 0;
@@ -44,12 +44,27 @@ static size_t h_rx_chips(void *ctx, uint16_t *dst, size_t max)
 
 static uint32_t h_rx_carrier_level(void *ctx)
 {
-    /* The link state machine runs its own carrier_t over the chip stream; this
-     * exists for apps that want a level without one. Report the most recent
-     * chip energy in the queue. */
+    /* The level, which under FSK is whichever tone is being sent — so the
+     * magnitude of the last difference, not its sign. Telemetry only. */
     halh_node_t *n = (halh_node_t *)ctx;
-    if (n->rx_tail == n->rx_head) return 0;
-    return n->rx[(n->rx_head + HALH_RX_FIFO - 1u) % HALH_RX_FIFO];
+    return n->rx_level;
+}
+
+/* hal.h's contract: the latch since the last call, or the most recent window
+ * if none has closed since. Reading clears the latch and leaves the level. */
+static bool h_rx_busy(void *ctx)
+{
+    halh_node_t *n = (halh_node_t *)ctx;
+    const bool was = n->busy_latch || n->pres.busy;
+    n->busy_latch = false;
+    return was;
+}
+
+static void h_rx_presence(void *ctx, uint32_t *signal, uint32_t *noise)
+{
+    halh_node_t *n = (halh_node_t *)ctx;
+    if (signal) *signal = presence_signal_score(&n->pres);
+    if (noise)  *noise  = presence_noise_score(&n->pres);
 }
 
 static uint64_t h_now_us(void *ctx)
@@ -100,6 +115,7 @@ void halh_init(halh_node_t *n, const char *name, uint64_t *clock_us, uint64_t se
     n->peer = NULL;
     halh_chan_default(&n->chan);
     rng_seed(&n->rng, seed);
+    presence_init(&n->pres);
 
     n->iface.ctx = n;
     n->iface.tx_drive = h_tx_drive;
@@ -107,6 +123,8 @@ void halh_init(halh_node_t *n, const char *name, uint64_t *clock_us, uint64_t se
     n->iface.tx_busy = h_tx_busy;
     n->iface.rx_chips = h_rx_chips;
     n->iface.rx_carrier_level = h_rx_carrier_level;
+    n->iface.rx_busy = h_rx_busy;
+    n->iface.rx_presence = h_rx_presence;
     n->iface.now_us = h_now_us;
     n->iface.telemetry = h_telemetry;
     n->iface.random = h_random;
@@ -144,37 +162,110 @@ void halh_force_random(halh_node_t *n, const uint32_t *values, size_t count)
 
 /* ---- the medium -------------------------------------------------------- */
 
-static void rx_put(halh_node_t *n, uint16_t energy)
+/*
+ * mag^2 of a Goertzel window that would have produced this score. gz_score_of
+ * is score = 2*sqrt(mag2)/N, so this is its inverse, and it is exact enough
+ * for a ratio — which is all presence ever takes.
+ */
+static uint64_t mag2_of_score(uint32_t score)
+{
+    const uint64_t a = (uint64_t)score * (uint64_t)HANDOFF_GZ_N / 2u;
+    return a * a;
+}
+
+/*
+ * One chip slot, as HANDOFF_WINDOWS_PER_CHIP bank windows. See hal_host.h for
+ * what this models and what it deliberately does not.
+ */
+static void presence_feed(halh_node_t *n, uint16_t energy)
+{
+    const halh_chan_t *c = &n->chan;
+    int w;
+
+    for (w = 0; w < HANDOFF_WINDOWS_PER_CHIP; w++) {
+        /* The bank decides guard windows at the window boundary, by count.
+         * Same rule here, so the decimation being coprime with the windows
+         * per chip is exercised rather than assumed. */
+        const bool fresh = (n->pres_windows % HANDOFF_GUARD_DECIM) == 0u;
+        uint64_t guard = 0;
+
+        if (fresh) {
+            /* An independent draw from the room, never from the signal. */
+            int32_t g = (int32_t)c->energy_off;
+            if (c->noise_lsb) {
+                const int32_t span = (int32_t)c->noise_lsb * 2 + 1;
+                g += (int32_t)(rng_u32(&n->rng) % (uint32_t)span)
+                   - (int32_t)c->noise_lsb;
+            }
+            if (g < 0) g = 0;
+            guard = mag2_of_score((uint32_t)g);
+        }
+        n->pres_windows++;
+        if (presence_push(&n->pres, mag2_of_score(energy), guard, fresh))
+            n->busy_latch = true;
+    }
+}
+
+static void rx_put(halh_node_t *n, int32_t d, uint16_t level)
 {
     const size_t next = (n->rx_head + 1u) % HALH_RX_FIFO;
+
+    presence_feed(n, level);
+    n->rx_level = level;
+
     if (next == n->rx_tail) return;   /* overrun: the real ring drops too */
-    n->rx[n->rx_head] = energy;
+    n->rx[n->rx_head] = d;
     n->rx_head = next;
 }
 
-static uint16_t chip_energy(halh_node_t *rx_node, int chip_on)
+static uint16_t one_bin(halh_node_t *n, uint16_t base)
 {
-    const halh_chan_t *c = &rx_node->chan;
-    int32_t e;
+    const halh_chan_t *c = &n->chan;
+    int32_t e = base;
 
-    if (rx_node->dropout_left > 0) {
-        rx_node->dropout_left--;
-        chip_on = 0;
-    } else if (c->dropout_prob > 0.0 && rng_uniform(&rx_node->rng) < c->dropout_prob) {
-        rx_node->dropout_left = c->dropout_chips;
-        chip_on = 0;
-    } else if (c->chip_error_prob > 0.0 && rng_uniform(&rx_node->rng) < c->chip_error_prob) {
-        chip_on = !chip_on;
-    }
-
-    e = chip_on ? c->energy_on : c->energy_off;
     if (c->noise_lsb) {
         const int32_t span = (int32_t)c->noise_lsb * 2 + 1;
-        e += (int32_t)(rng_u32(&rx_node->rng) % (uint32_t)span) - (int32_t)c->noise_lsb;
+        e += (int32_t)(rng_u32(&n->rng) % (uint32_t)span) - (int32_t)c->noise_lsb;
     }
     if (e < 0) e = 0;
     if (e > 0xFFFF) e = 0xFFFF;
     return (uint16_t)e;
+}
+
+/*
+ * One chip slot as this node hears it: both bins, then their difference.
+ *
+ * LINK V2 STEP 6. There is no "off chip" any more. on_air says whether
+ * anything at all is arriving; chip says which TONE it is. When nothing is
+ * arriving both bins read the off-tone level and their difference is noise
+ * with a random sign, which is what a quiet channel looks like to a detector
+ * that compares two bins instead of remembering a floor.
+ *
+ * The two bins are drawn independently, and that is the point: every
+ * impairment in this model has to be able to move one bin without the other,
+ * or it would be testing a decision the hardware never makes.
+ */
+static int32_t chip_diff(halh_node_t *n, int on_air, int chip, uint16_t *level)
+{
+    const halh_chan_t *c = &n->chan;
+    uint16_t ea, eb;
+
+    if (n->dropout_left > 0) {
+        n->dropout_left--;
+        on_air = 0;
+    } else if (c->dropout_prob > 0.0 && rng_uniform(&n->rng) < c->dropout_prob) {
+        n->dropout_left = c->dropout_chips;
+        on_air = 0;
+    } else if (c->chip_error_prob > 0.0 && rng_uniform(&n->rng) < c->chip_error_prob) {
+        chip = !chip;
+    }
+
+    ea = one_bin(n, (on_air && !chip) ? c->energy_on : c->energy_off);
+    eb = one_bin(n, (on_air &&  chip) ? c->energy_on : c->energy_off);
+
+    /* presence asks max(E_A, E_B), on hardware and here. */
+    *level = (ea > eb) ? ea : eb;
+    return (int32_t)eb - (int32_t)ea;
 }
 
 /*
@@ -187,10 +278,11 @@ static void carry(halh_node_t *src, halh_node_t *dst, size_t chips)
     size_t i;
 
     for (i = 0; i < chips; i++) {
-        int on = 0;
+        int on_air = 0, chip = 0;
 
         if (src->driving && src->tx_sent < src->tx_len) {
-            on = src->tx[src->tx_sent] ? 1 : 0;
+            chip = src->tx[src->tx_sent] ? 1 : 0;
+            on_air = 1;
             src->tx_sent++;
             src->chips_tx++;
         }
@@ -198,13 +290,23 @@ static void carry(halh_node_t *src, halh_node_t *dst, size_t chips)
 
         /* No contact, no channel. The chip was still transmitted — it just had
          * nowhere to go. */
-        if (!src->coupled || !dst->coupled) on = 0;
+        if (!src->coupled || !dst->coupled) on_air = 0;
 
-        /* A node mid-transmission hears its own amplifier, not the far end. */
-        if (dst->driving && dst->tx_sent < dst->tx_len)
-            rx_put(dst, 0xFFFFu);
-        else
-            rx_put(dst, chip_energy(dst, on));
+        /*
+         * A node mid-transmission hears its own amplifier, not the far end —
+         * and under FSK what it hears is its own TONE at full strength, not a
+         * saturated level with no sign. link_sm.c's drain_discard() throws it
+         * away; a simulator that handed back something with no tone in it
+         * would let a missing discard pass.
+         */
+        if (dst->driving && dst->tx_sent < dst->tx_len) {
+            const int mine = dst->tx[dst->tx_sent] ? 1 : 0;
+            rx_put(dst, mine ? 0x7FFF : -0x7FFF, 0xFFFFu);
+        } else {
+            uint16_t level = 0;
+            const int32_t d = chip_diff(dst, on_air, chip, &level);
+            rx_put(dst, d, level);
+        }
     }
 }
 

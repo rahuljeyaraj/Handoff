@@ -32,6 +32,35 @@ include(pico_sdk_import.cmake)
 
 project(handoff C CXX ASM)
 
+# Link v2 §4 — the system clock is 144 MHz, not the SDK's 150 MHz default.
+#
+# Both link tones must be a whole, EVEN number of system cycles per period,
+# because the fsk_out generator builds each period out of two equal halves.
+# At 150 MHz a 180 kHz period is 833.33 cycles and cannot be generated at all.
+# At 144 MHz it is 800, and 200 kHz is 720. See firmware/lib/hal/config.h,
+# which carries the same number as HANDOFF_SYS_CLK_HZ and static-asserts it.
+#
+# This is a BOOT clock, not a runtime switch: clocks_init() brings the PLL up
+# at 144 MHz once and USB never sees a frequency change. The SDK requires the
+# PLL_SYS_* triple whenever SYS_CLK_HZ is overridden, so it is given here:
+#
+#   XOSC 12 MHz, refdiv 1 -> fbdiv 96 -> VCO 1152 MHz  (inside 750..1600)
+#   1152 / (4 * 2) = 144 MHz exactly
+#
+# clk_usb keeps its own PLL (1200 MHz / 5 / 5 = 48 MHz) and clk_adc is left on
+# PLL_USB by the hardware reset default, so 500 ksps is untouched by this —
+# the bench verifies that rather than trusting it. clk_peri is on PLL_USB too
+# (PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK defaults to 0).
+#
+# These must be set BEFORE pico_sdk_init(), because that is when the SDK's own
+# targets are created and inherit this directory's compile definitions.
+add_compile_definitions(
+    SYS_CLK_HZ=144000000
+    PLL_SYS_VCO_FREQ_HZ=1152000000
+    PLL_SYS_POSTDIV1=4
+    PLL_SYS_POSTDIV2=2
+)
+
 pico_sdk_init()
 
 # Collect every app's artifacts in build/ rather than build/firmware/<app>/,

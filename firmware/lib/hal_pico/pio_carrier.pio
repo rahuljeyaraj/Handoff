@@ -46,6 +46,78 @@
 .wrap
 
 ;
+; fsk_out -- link v2's two-tone generator. link-v2-design.md S4, S7.
+;
+; One 32-bit word per chip, and the chip is a TONE rather than a gated square:
+; there is no space, so the mark/space path-length objection above does not
+; apply and the counted toggle loop the old comment rejects becomes available.
+; A frame is 624 words = 2496 bytes, against the 78 kB a bit stream would need
+; to carry two tones on one slot grid.
+;
+; The word is (periods-2) << 16 | half_loop, and the OSR shifts LEFT so the
+; first out takes the top half. config.h derives both fields from the tone
+; frequency and the system clock; nothing here is typed.
+;
+; CYCLE BUDGET, and it has to balance to the cycle.
+;
+;   half-period = set(1) + mov(1) + jmp x-- loop(isr+1)        = isr + 3
+;   plus one delay cycle on the high set, or the jmp y-- makes
+;   the low half one cycle longer                              = isr + 4
+;   period                                                     = 2*isr + 8
+;
+; The [1] on the high set is NOT decoration. Without it the duty cycle is not
+; 50 %, and energy lands in the EVEN harmonics -- the 2nd harmonic of 180 kHz
+; is 360 kHz, which aliases at 500 ksps onto 140 kHz, which is guard bin 7.
+; A contaminated guard is the v1 carrier floor wearing a new hat, and killing
+; that is the whole point of the redesign. Each period must also be an EVEN
+; number of cycles or the two halves cannot be equal; config.h asserts it.
+;
+; THE FIRST PERIOD IS WRITTEN OUT LONGHAND, and that is the one thing this
+; program does that the brief did not plan for. The two out instructions cost
+; two cycles, and in the obvious nine-instruction form they sit OUTSIDE the
+; period loop -- so a chip comes to 45*800 + 2 = 36002 cycles, not 36000. Two
+; cycles is 56 ppm of chip rate, it is the same sign every chip, and it
+; therefore walks the chip clock down the frame: precisely the error the old
+; comment above warns accumulates rather than scatters. Here the two outs are
+; spent INSIDE the first period's own halves (its high half is
+; set + out + mov + loop, its low half is set + mov + loop with no jmp y--),
+; so that period costs 2*isr + 8 like every other one and a chip is exactly
+; 36000 cycles = 250 us. The cost is six duplicated instructions.
+;
+; Consequence worth knowing at the bench: every HIGH half is exactly the tone
+; half-period, and the slack lives in the low halves at the chip boundary
+; (399 and 401 at tone A). Over a whole chip high and low are exactly equal,
+; so the even harmonics are still null.
+;
+; A starved FIFO stalls at the first out with the pad driven LOW, not
+; released -- there is no pindir in this stream (S4: constant envelope). The
+; frame-level release is pio_carrier_drive()'s job and the caller's.
+;
+.program fsk_out
+.wrap_target
+    out y, 16                  ; periods - 2. Pad still low from the last chip.
+    set pins, 1                ; the first period's high half starts here
+    out isr, 16                ; half-period loop count
+    mov x, isr
+first_hi:
+    jmp x--, first_hi
+    set pins, 0                ; its low half: no jmp y--, so one cycle shorter
+    mov x, isr
+first_lo:
+    jmp x--, first_lo
+period:
+    set pins, 1     [1]        ; [1] balances the jmp y-- in the low half
+    mov x, isr
+hi:
+    jmp x--, hi
+    set pins, 0
+    mov x, isr
+lo:
+    jmp x--, lo
+    jmp y--, period
+.wrap
+
+;
 ; edge_count — count rising edges on the same pad.
 ;
 ; x is preloaded with 0xFFFFFFFF by the CPU and decremented once per rising
@@ -61,3 +133,31 @@ count:
     wait 0 pin 0
     wait 1 pin 0
     jmp x--, count
+
+;
+; high_count -- how much of the time the pad is HIGH. An instrument.
+;
+; edge_count above answers "what frequency", which says nothing about the duty
+; cycle, and the duty cycle is what decides whether energy lands in the EVEN
+; harmonics -- one of which aliases onto a guard bin. Reading the guard bins
+; through the amplifier cannot separate "the generator slipped" from "the
+; amplifier distorted"; this can, because it is on the pad itself.
+;
+; Two cycles a pass, whatever the pin does, so the sampling is uniform:
+;
+;   pin low   jmp pin (not taken) + jmp loop      2 cycles, x unchanged
+;   pin high  jmp pin (taken)     + jmp x--       2 cycles, x decremented
+;
+; So duty = decrements / (gate cycles / 2). x is preloaded all-ones by the CPU
+; and the count is the difference, the same way edge_count works. At 144 MHz a
+; 200 ms gate is 14.4 million passes, and 400 of them per period of tone A, so
+; the sampling contributes nothing worth stating.
+;
+; jmp_pin must be set to the pad, and the pad's input buffer must be on.
+;
+.program high_count
+loop:
+    jmp pin, hi
+    jmp loop
+hi:
+    jmp x--, loop

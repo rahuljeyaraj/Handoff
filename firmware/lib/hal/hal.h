@@ -39,13 +39,62 @@ typedef struct hal_iface {
 
     /* --- receive --- */
 
-    /* Chip energies, not samples: this is the core-1/core-0 boundary of
-     * architecture §3.3, and the layer protocol tests inject at. DSP tests
-     * inject one layer lower, at raw samples. Returns chips written. */
-    size_t   (*rx_chips)(void *ctx, uint16_t *dst, size_t max);
+    /*
+     * Chips, not samples: this is the core-1/core-0 boundary of architecture
+     * §3.3, and the layer protocol tests inject at. DSP tests inject one
+     * layer lower, at raw samples. Returns chips written.
+     *
+     * LINK V2 STEP 6: a chip is a SIGNED TONE DIFFERENCE, d = E_B - E_A, in
+     * the bank's mag^2 units — not an energy. Both bins are scored in the
+     * same window, through the same gain and the same body, so the number
+     * that crosses here is already a comparison and the framer needs no
+     * threshold to read it. int32_t rather than link/frame.h's frame_chip_t
+     * because this header sits below link/ and must not reach up into it;
+     * frame.h states the contract and the two are asserted equal there.
+     */
+    size_t   (*rx_chips)(void *ctx, int32_t *dst, size_t max);
 
-    /* Smoothed carrier energy, for listen-before-talk (§7.3). */
+    /* The level on the channel, as a Goertzel score. Under link v2 this is
+     * max(E_A, E_B) — whichever tone is being sent — and it is telemetry, not
+     * a decision: nothing compares it against a remembered number. */
     uint32_t (*rx_carrier_level)(void *ctx);
+
+    /*
+     * LISTEN BEFORE TALK, link v2 §6. "Is anyone on the channel?"
+     *
+     * THE ANSWER COVERS THE WHOLE INTERVAL SINCE YOU LAST ASKED, and that is
+     * the contract, not an implementation detail. True if ANY Goertzel window
+     * since the last call read busy, or — if no window has closed since — if
+     * the most recent one did. Reading clears the first half and leaves the
+     * second.
+     *
+     * Both halves are load-bearing and each one was a bug without the other:
+     *
+     *   - Without the latch, a caller polling a few hundred times a second
+     *     against a detector deciding twenty thousand times a second samples
+     *     one window in a hundred. Real traffic is every window, so it would
+     *     survive; a short burst would not, and neither would the stated
+     *     false-busy rate config.h derives k from.
+     *
+     *   - Without the level, a caller polling FASTER than windows close reads
+     *     true, false, true, false down a continuous carrier, because it
+     *     consumed the latch and no window has refilled it yet. That is not
+     *     hypothetical: it is what the trigger's TRIG_WAIT saw in the host
+     *     simulator, which delivers a chip every 250 us while the state
+     *     machine polls every 100. 126 shouts in a row were read as 126
+     *     carriers too short to be a shout.
+     *
+     * The corollary of the latch is that a caller which is deliberately deaf —
+     * anything driving the pad, TURNAROUND, the trigger's SETTLE — must still
+     * read and discard, exactly as it discards chips. Otherwise our own
+     * transmission is waiting in the latch when the ears open. link_sm.c's
+     * drain_discard() is where that happens.
+     */
+    bool     (*rx_busy)(void *ctx);
+
+    /* The same decision's two sides, for a console or a telemetry block.
+     * Reading them changes nothing and clears nothing. */
+    void     (*rx_presence)(void *ctx, uint32_t *signal, uint32_t *noise);
 
     /* --- time --- */
 
@@ -75,11 +124,20 @@ static inline size_t hal_tx_chips(const hal_iface_t *h, const uint8_t *c, size_t
 static inline bool hal_tx_busy(const hal_iface_t *h) {
     return (h && h->tx_busy) ? h->tx_busy(h->ctx) : false;
 }
-static inline size_t hal_rx_chips(const hal_iface_t *h, uint16_t *d, size_t max) {
+static inline size_t hal_rx_chips(const hal_iface_t *h, int32_t *d, size_t max) {
     return (h && h->rx_chips) ? h->rx_chips(h->ctx, d, max) : 0;
 }
 static inline uint32_t hal_rx_carrier_level(const hal_iface_t *h) {
     return (h && h->rx_carrier_level) ? h->rx_carrier_level(h->ctx) : 0;
+}
+static inline bool hal_rx_busy(const hal_iface_t *h) {
+    return (h && h->rx_busy) ? h->rx_busy(h->ctx) : false;
+}
+static inline void hal_rx_presence(const hal_iface_t *h,
+                                   uint32_t *signal, uint32_t *noise) {
+    if (signal) *signal = 0;
+    if (noise)  *noise  = 0;
+    if (h && h->rx_presence) h->rx_presence(h->ctx, signal, noise);
 }
 static inline uint64_t hal_now_us(const hal_iface_t *h) {
     return (h && h->now_us) ? h->now_us(h->ctx) : 0;

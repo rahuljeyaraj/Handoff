@@ -33,7 +33,6 @@ void link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
     if (cfg) sm->cfg = *cfg; else link_cfg_default(&sm->cfg);
 
     trig_init(&sm->trig, hal);
-    carrier_init(&sm->carrier);
     frame_rx_init(&sm->framer);
     frag_rx_init(&sm->rx);
     carousel_init(&sm->car, own ? own->count : 1u, sm->cfg.carousel_weight);
@@ -44,6 +43,7 @@ void link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
 /* ---- forward declarations, so the entry points can read top-down -------- */
 
 static void queue_frame(link_sm_t *sm);
+static void forget_rx_busy(link_sm_t *sm);
 static void enter_rx(link_sm_t *sm, uint64_t now_us, bool reset_framer);
 static void enter_turnaround(link_sm_t *sm, uint64_t now_us, uint32_t settle_us);
 
@@ -72,58 +72,44 @@ static void open_contact(link_sm_t *sm, uint64_t now_us)
 /*
  * Take up the role the trigger handed out and start the exchange.
  *
- * THE CARRIER DETECTOR. A band arriving here has spent its whole listen window
- * feeding either silence or a peer's full-power shout into the floor EMA, so
- * the floor is not necessarily anywhere near true ambient. Carried into the
- * exchange, a floor several times ambient makes real frames fail the presence
- * test, and handover — which runs on carrier_present() and last_carrier_us —
- * starts talking over the reply it asked for.
+ * THIS USED TO BE THE LONGEST COMMENT IN THE FILE, and link v2 step 5 deleted
+ * what it was about. It argued whether the carrier detector should be reset on
+ * each path, because v1's floor arrived here having spent a whole listen
+ * window averaging either silence or a peer's full-power shout, and a floor
+ * several times ambient made real frames fail the presence test. Resetting it
+ * was worse still: carrier.c re-primed from the very next chip, and landing
+ * that on a Manchester HIGH primed the floor at the carrier's own level, where
+ * the detector never regained presence for the rest of the frame.
  *
- * On the SENDER path it is reset, and unlike the design this replaces, there
- * is nothing for the reset to blind: no listen-before-talk follows it. Strictly
- * simpler than it was.
+ * Neither hazard exists now. v2's noise reference is three bins the signal
+ * cannot enter, measured in the same windows as the signal, so a listen window
+ * full of a peer's shout leaves it exactly where it was. There is nothing to
+ * reset on either path, and both paths are the same.
  *
- * On the RECEIVER path it is NOT reset, and that was the open question in
- * §5.1, which asked for a test rather than an argument. Both were built and
- * measured, over 60 triggered handshakes and 50 host-triggered ones:
+ * The measurement that settled the old question is worth keeping, because it
+ * is what said the question did not matter end to end: over 60 triggered
+ * handshakes and 50 host-triggered ones, reset and no-reset gave bit-identical
+ * counts — 482 frames sent, 663 turnarounds, 0 polls with both ends clocking
+ * out a frame — because handover during a receive turn is driven by counting
+ * decoded frames and the framer is untouched either way.
  *
- *                  frames sent   turnarounds   polls with both ends
- *                                              clocking out a frame
- *   no reset           482           663              0
- *   reset              482           663              0
- *
- * Bit-identical, because handover during a receive turn is driven by counting
- * decoded frames and the framer is untouched either way. So end to end the
- * reset buys nothing — and one layer down it costs something real:
- *
- *   carrier.c re-primes level and floor from the very next chip it is given.
- *   Land that on a LOW Manchester chip and presence returns one chip later.
- *   Land it on a HIGH one and the floor primes at the carrier's own level,
- *   where the >>7 floor EMA falls about two LSB per chip pair — measured, the
- *   detector never regains presence for the whole remaining 624-chip frame.
- *
- * Which chip it lands on is a coin flip. carrier_present() and last_carrier_us
- * are what drive handover, so half the time the reset would blind the thing
- * deciding whose turn it is, for the rest of the frame, to buy nothing. It is
- * therefore not done. test_beacon.c pins the asymmetry so a future change to
- * carrier.c's floor cannot quietly make this the wrong answer.
- *
- * The framer is not reset on this path either, and that one is not a
+ * The framer is still not reset on the RECEIVER path, and that one is not a
  * preference — the lock IS the reason we are here.
  */
 /*
- * from_trigger says the role came from TRIG_SEND — we heard somebody's shout
- * and the channel is ours. That matters for one reason only, and it is the same
- * reason take_channel() exists: THE PEER IS STILL DEAF.
+ * from_trigger says the role came from TRIG_SEND — we decoded somebody's
+ * beacon and the channel is ours. That matters for one reason only, and it is
+ * the same reason take_channel() exists: THE PEER IS STILL DEAF.
  *
- * It has just finished its own shout, and it stays deaf for
- * HANDOFF_TRIG_SETTLE_US while its amplifier recovers. Our decision lands about
- * the carrier detector's hold after that shout stopped, so sending a preamble
- * immediately puts it inside a window the peer cannot hear — and a preamble
- * missed is not merely a lost frame, it is a lost frame, because frame.c's hunt
- * locks on the preamble's start and cannot join one in progress. The peer then
- * hears a long carrier it can never decode, times out on it, shouts again, and
- * the pair never rendezvous at all.
+ * Step 7 made that TIGHTER, not looser. We decode a beacon on its very last
+ * chip, which is the instant the peer stops driving and enters
+ * HANDOFF_TRIG_SETTLE_US of its own amplifier recovering — so our decision now
+ * lands at the START of the peer's deaf window rather than a detector's hold
+ * after it. Sending a preamble immediately would put it squarely inside a
+ * window the peer cannot hear, and a preamble missed is not merely a lost
+ * frame, because frame.c's hunt locks on the preamble's start and cannot join
+ * one in progress. The peer would hear a long carrier it could never decode,
+ * beacon again, and the pair would never rendezvous at all.
  *
  * This went unnoticed while the settle was HANDOFF_TURNAROUND_US: at 1 ms the
  * peer's ears happened to open before the preamble by luck. The phase sweep in
@@ -135,8 +121,7 @@ static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role,
     sm->role = role;
 
     if (role == LINK_ROLE_SENDER) {
-        frame_rx_init(&sm->framer);
-        carrier_reset(&sm->carrier);
+        frame_rx_reset(&sm->framer);
         sm->turn_frames = 0;
         if (from_trigger) {
             /* Their settle, plus our own amplifier's, so the preamble starts
@@ -155,21 +140,21 @@ static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role,
 
 void link_sm_begin(link_sm_t *sm, uint64_t now_us, link_role_t role)
 {
-    /* The carrier detector is deliberately NOT reset here — enter_exchange()
-     * owns that decision and it is not the same on both paths. */
-    frame_rx_init(&sm->framer);
+    frame_rx_reset(&sm->framer);
     trig_stop(&sm->trig);
     open_contact(sm, now_us);
     /* The caller decided the roles itself, so there is no peer coming out of a
-     * shout to wait for — see enter_exchange(). */
+     * beacon to wait for — see enter_exchange(). */
     enter_exchange(sm, now_us, role, false);
 }
 
 void link_sm_idle(link_sm_t *sm, uint64_t now_us)
 {
     hal_tx_drive(sm->hal, false);
-    frame_rx_init(&sm->framer);
-    carrier_reset(&sm->carrier);
+    /* reset, not init: the framer's counters are the bench's lifetime view of
+     * this band and a band re-arms every contact. frame.h says which is which. */
+    frame_rx_reset(&sm->framer);
+    forget_rx_busy(sm);             /* what we heard last was us */
 
     /*
      * The received record is NOT cleared. A contact that ended early left a
@@ -181,28 +166,43 @@ void link_sm_idle(link_sm_t *sm, uint64_t now_us)
     sm->chips_len = 0;
     sm->role = LINK_ROLE_NONE;
     sm->exchange_open = false;
-    sm->idle_syncs = sm->framer.syncs;
     trig_start(&sm->trig, now_us);
     sm->state = LINK_IDLE;
 }
 
 /*
  * Drain whatever the DSP layer has produced since the last poll and run it
- * through carrier detection and the framer. Returns how many good frames
- * landed, and leaves the last one in sm->framer.
+ * through the framer. Returns how many good CARD frames landed, and leaves
+ * the last one in sm->framer. A beacon is reported through trig_in, which is
+ * NULL everywhere but IDLE.
+ *
+ * Presence is NOT drained here. It is decided on core 1 out of the five-bin
+ * bank, not out of these chips, and the callers that want it ask
+ * hal_rx_busy() where they want it — which is not the same set of places.
  */
-static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
+static uint32_t drain_rx(link_sm_t *sm, bool feed_framer, trig_in_t *trig_in)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     uint32_t good = 0;
     size_t n, i;
 
     while ((n = hal_rx_chips(sm->hal, chips, sizeof chips / sizeof chips[0])) > 0) {
         for (i = 0; i < n; i++) {
-            carrier_push(&sm->carrier, chips[i]);
             if (!feed_framer) continue;
 
             switch (frame_rx_push(&sm->framer, chips[i])) {
+            case FRAME_RX_BEACON:
+                /*
+                 * Somebody's rendezvous beacon. Only IDLE has anywhere to put
+                 * one — inside an exchange the two ends are talking cards and
+                 * a beacon is a third band, or a straggler, and either way
+                 * the carousel is not interested.
+                 */
+                if (trig_in) {
+                    trig_in->beacon = true;
+                    trig_in->nonce = frame_rx_nonce(&sm->framer);
+                }
+                break;
             case FRAME_RX_GOOD:
                 sm->frames_rx_good++;
                 if (frame_rx_hdr(&sm->framer)->flags & FRAME_FLAG_HAVE_YOURS)
@@ -227,18 +227,70 @@ static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
 
 /*
  * Drop everything the DSP produced without looking at it. Used while our own
- * transmitter is driving the shared pad: what core 1 reports then is our own
- * amplifier in saturation, and feeding it to the carrier detector poisons the
- * noise floor for the turn that follows — which showed up as an end that had
- * just transmitted believing the channel was silent, and talking straight over
- * the reply it had asked for.
+ * transmitter is driving the shared pad, and while the amplifier is coming
+ * back out of saturation afterwards: what core 1 reports then is us.
+ *
+ * THE BUSY LATCH IS DRAINED HERE TOO, AND IT HAS TO BE. hal.h's rx_busy is
+ * sticky until read, so our own transmission raises it and it would still be
+ * up when the ears open — the band would hear itself, every turn. v1 had the
+ * same hazard in a different shape and answered it the same way, by not
+ * feeding the detector while driving. Here the detector runs regardless, on
+ * core 1, so the discard has to happen on the reading side instead.
  */
 static void drain_discard(link_sm_t *sm)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     while (hal_rx_chips(sm->hal, chips, sizeof chips / sizeof chips[0]) ==
            sizeof chips / sizeof chips[0])
         ;
+    forget_rx_busy(sm);
+}
+
+/*
+ * ---- THE OOK BRIDGE IS GONE, AND THIS IS WHY IT WAS HERE ----------------
+ *
+ * Until step 6 this file held LINK_OOK_BRIDGE_US: the channel was treated as
+ * occupied for MANCHESTER_MAX_RUN_CHIPS + 1 chips after the last busy
+ * reading. It existed because v1 SWITCHED THE CARRIER OFF FOR A ZERO, so half
+ * of every frame was silence and dsp/presence.c — which has no hold and no
+ * memory, by design — answered "nobody is transmitting" in each of those
+ * gaps, truthfully. Measured in this simulator: a band listening to a v1
+ * frame flapped busy/quiet at the chip rate and no rendezvous completed at
+ * any phase.
+ *
+ * FSK HAS NO SPACES. The pad carries tone A or tone B and never nothing, so
+ * presence reads busy for every chip of a frame and there is no gap left to
+ * bridge. Nothing exercises it, and a bridge nothing exercises is machinery
+ * this branch exists to remove. Design link-v2 §4's second "free" benefit of
+ * a constant envelope, arriving as a deletion.
+ *
+ * WHAT REPLACED IT IS NOTHING. Not a shorter hold, not a hysteresis — the
+ * detector's own verdict, which is what §6 says presence is.
+ */
+
+/*
+ * Presence, taken once.
+ *
+ * Still a named wrapper, for the half of the old reason that survives:
+ * hal_rx_busy() CLEARS its latch (hal.h), so two callers in one poll leave
+ * the second one reading a quiet channel. Each poll reads it exactly once,
+ * early, and passes the answer around.
+ */
+static bool drain_rx_busy(link_sm_t *sm, uint64_t now_us)
+{
+    (void)now_us;
+    return hal_rx_busy(sm->hal);
+}
+
+/*
+ * Forget that the channel was busy. For the paths that have just stopped
+ * driving the pad, or are about to open their ears after being deliberately
+ * deaf: what they heard last was themselves. drain_discard() is the usual
+ * way in.
+ */
+static void forget_rx_busy(link_sm_t *sm)
+{
+    (void)hal_rx_busy(sm->hal);
 }
 
 /*
@@ -327,7 +379,7 @@ static void enter_rx(link_sm_t *sm, uint64_t now_us, bool reset_framer)
     if (reset_framer) frame_rx_reset(&sm->framer);
     sm->turn_frames = 0;
     sm->rx_turn_frames = 0;
-    sm->last_carrier_us = now_us;
+    sm->last_busy_us = now_us;
 
     /*
      * The safety net: one turn's worth of frames, plus a frame of slack, plus
@@ -376,7 +428,7 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
 {
     hal_tx_drive(sm->hal, false);
     frame_rx_reset(&sm->framer);
-    carrier_reset(&sm->carrier);
+    forget_rx_busy(sm);             /* what we heard last was us */
     sm->barren_turns = 0;
     sm->chips_len = 0;
 
@@ -388,7 +440,6 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
     }
 
     sm->role = LINK_ROLE_NONE;
-    sm->idle_syncs = sm->framer.syncs;
     trig_start(&sm->trig, now_us);
     sm->state = LINK_IDLE;
 }
@@ -396,23 +447,29 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
 /*
  * IDLE is not a parked state. It runs the trigger of beacon.h, which is what
  * actually starts a handshake on a wrist: there is no button and no touch
- * sensor, so the band shouts into the channel and listens for the same, and
- * hearing anything at all means a body has closed the loop.
+ * sensor, so the band beacons into the channel and listens for the same, and
+ * decoding a beacon means a body has closed the loop.
  *
- * The carrier detector and the framer are fed ONLY in the listening phases.
- * Feeding them while our own amplifier is driving is the drain_discard()
- * problem below, and here it has a sharper edge: the band would trigger on its
- * own shout, every cycle, for ever. The floor is deliberately NOT thrown away
- * between cycles — the ambient floor of a room does not change in the 11 ms we
- * are deaf, and re-priming it against a shout that is already on would hide
- * that shout. carrier.c holds the floor across a reset for the same reason.
+ * The framer is fed, and the busy latch believed, ONLY in the listening
+ * phase. Reading either while our own amplifier is driving is the
+ * drain_discard() problem, and here it used to have a sharper edge: under v1
+ * the band would trigger on its own shout, every cycle, for ever. It cannot
+ * now — a beacon of ours that survives the discard carries our own nonce and
+ * beacon.c throws it away — but the discard stays, because a framer chewing
+ * on our own amplifier is wasted work and one more way to reach a false sync.
+ *
+ * Under link v2 there is nothing to prime, nothing to reprime and nothing to
+ * hold across a cycle. The noise reference lives on core 1, in three bins our
+ * transmitter cannot enter, and it keeps running through our own beacon
+ * because our own beacon is not in it.
  */
 static void poll_idle(link_sm_t *sm, uint64_t now_us)
 {
     const bool listening = trig_listening(&sm->trig);
-    const bool waiting   = (sm->trig.state == TRIG_WAIT);
-    bool locked;
+    trig_in_t in;
     trig_state_t ts;
+
+    memset(&in, 0, sizeof in);
 
     /*
      * A retry is still inside the same contact, so the budget still applies —
@@ -428,7 +485,27 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
     }
 
     if (listening) {
-        drain_rx(sm, true);
+        const uint32_t syncs_before = sm->framer.syncs;
+
+        in.busy = drain_rx_busy(sm, now_us);
+        drain_rx(sm, true, &in);
+
+        /*
+         * A CARD sync, not a beacon one — frame.c counts the two separately
+         * for exactly this. It means the peer decoded our beacon, elected
+         * itself sender, and is already clocking a fragment at us.
+         *
+         * v1 believed a sync only while TRIG_WAIT was open, on the grounds
+         * that noise can drag the framer through a false marker during a long
+         * listen and a band that should send would then wait for a frame
+         * nobody is sending. There is no TRIG_WAIT any more, so this is
+         * believed whenever the ears are open, and the exposure is what
+         * frame.h computes: one false sync per 41 hours across BOTH tails, so
+         * about one per 82 hours for this one. It costs a receive turn and two
+         * barren turns, and suspect_collision() puts the band back in the
+         * trigger. Once every few days, for a few hundred milliseconds.
+         */
+        in.card = (sm->framer.syncs != syncs_before);
     } else {
         drain_discard(sm);
         /* A framer half-way through a hunt on our own amplifier is worse than
@@ -436,35 +513,13 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
         frame_rx_reset(&sm->framer);
     }
 
-    /*
-     * Only a sync that happened while we were ALREADY waiting answers the
-     * question TRIG_WAIT is asking. Noise can drag the framer through a false
-     * marker during a long listen — rarely, but this runs continuously — and
-     * reading that stale lock as "a card is arriving" would turn a band that
-     * should send into one that waits for a frame nobody is sending. Outside
-     * WAIT the baseline just follows, so such a sync is absorbed rather than
-     * remembered.
-     */
-    locked = waiting && (sm->framer.syncs != sm->idle_syncs);
-    if (!waiting) sm->idle_syncs = sm->framer.syncs;
-
-    ts = trig_poll(&sm->trig, now_us,
-                   listening && carrier_present(&sm->carrier), locked);
-
-    /*
-     * §4.3: the quiet-wait cap expired, so the floor may genuinely have moved
-     * under the detector. This is the ONLY site that throws the floor away —
-     * the other three reset presence and let the room's floor carry — and it is
-     * also the only way out of a detector that has latched, because a frozen
-     * floor stops learning by design.
-     */
-    if (trig_take_carrier_reprime(&sm->trig)) carrier_reprime(&sm->carrier);
+    ts = trig_poll(&sm->trig, now_us, &in);
 
     if (trig_take_burst(&sm->trig)) {
-        sm->chips_len = trig_fill(sm->chips, sizeof sm->chips);
+        sm->chips_len = trig_fill(&sm->trig, sm->chips, sizeof sm->chips);
         hal_tx_drive(sm->hal, true);
         hal_tx_chips(sm->hal, sm->chips, sm->chips_len);
-    } else if (ts != TRIG_SHOUT) {
+    } else if (ts != TRIG_BEACON) {
         hal_tx_drive(sm->hal, false);
     }
 
@@ -518,17 +573,24 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
         break;
 
     case LINK_RX_FRAME: {
-        const uint32_t got = drain_rx(sm, true);
+        /* Before drain_rx(), because both read the HAL and only one of them
+         * clears the latch. */
+        const bool     busy = drain_rx_busy(sm, now_us);
+        const uint32_t got  = drain_rx(sm, true, NULL);
 
         /*
-         * A frame in progress keeps the turn alive on its own account. The
-         * carrier detector cannot do this job by itself: its floor tracks up
-         * to meet a carrier that lasts a whole frame, so it reports silence
-         * partway through every one, and the turn was being handed back over
-         * the top of the frame it was waiting for. See frame_rx_busy().
+         * A frame in progress keeps the turn alive on its own account.
+         *
+         * v1 needed that because its detector could not do the job: the floor
+         * tracked up to meet a carrier lasting a whole frame, so it reported
+         * silence partway through every one and the turn was handed back over
+         * the top of the frame it was waiting for. v2's noise reference cannot
+         * be pulled up by the signal, so presence should hold for the whole
+         * frame — but frame_rx_busy() stays, because it is the stronger of the
+         * two statements and costs nothing. See frame_rx_busy().
          */
-        if (carrier_present(&sm->carrier) || frame_rx_busy(&sm->framer))
-            sm->last_carrier_us = now_us;
+        if (busy || frame_rx_busy(&sm->framer))
+            sm->last_busy_us = now_us;
 
         if (got) {
             sm->rx_turn_frames = (uint8_t)(sm->rx_turn_frames + got);
@@ -554,7 +616,7 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
             break;
         }
 
-        if ((uint64_t)(now_us - sm->last_carrier_us) > sm->cfg.rx_idle_us ||
+        if ((uint64_t)(now_us - sm->last_busy_us) > sm->cfg.rx_idle_us ||
             now_us >= sm->deadline_us) {
             /* Count the barren turn BEFORE testing: "they have gone quiet" is
              * one of the two ways we_are_done() is allowed to conclude. */

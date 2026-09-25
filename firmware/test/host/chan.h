@@ -7,8 +7,8 @@
  * mid-handshake" case), mains hum, and burst dropouts.
  *
  * This is the sample-level path. DSP tests and the BER harness inject here.
- * Protocol tests inject one layer higher, at chip energies, through hal_host —
- * see architecture §5.
+ * Protocol tests inject one layer higher, at the signed tone differences of
+ * link v2 step 6, through hal_host — see architecture §5.
  *
  * Everything is deterministic given a seed. A failing BER point must be
  * reproducible or it is not evidence.
@@ -16,10 +16,12 @@
 #ifndef HANDOFF_CHAN_H
 #define HANDOFF_CHAN_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include "config.h"
+#include "frame.h"
 #include "goertzel.h"
 #include "sync.h"
 
@@ -100,13 +102,21 @@ size_t chan_render(const chan_cfg_t *c, const uint8_t *chips, size_t nchips,
 
 /* ---- the receiver's front half ---------------------------------------- */
 
+/*
+ * Two bins scored in the same window, and a signed difference out — the same
+ * thing core 1 hands core 0 on hardware. Link v2 step 6.
+ */
 typedef struct {
-    gz_t   gz;
+    gz_t   a, b;
     sync_t sy;
 } demod_t;
 
 void   demod_init(demod_t *d);
+
+/* One sample. True once per chip, with the tone difference in *chip. */
+bool   demod_push(demod_t *d, int16_t sample, frame_chip_t *chip);
+
 size_t demod_run(demod_t *d, const int16_t *samples, size_t n,
-                 uint16_t *chips, size_t max);
+                 frame_chip_t *chips, size_t max);
 
 #endif /* HANDOFF_CHAN_H */

@@ -79,7 +79,7 @@
  *
  * LOG LINES, all with times in microseconds on this board's clock:
  *
- *   tx S <start> <end>       a 10 ms shout was on the pad
+ *   tx S <start> <end>       a beacon frame was on the pad
  *   tx F <start> <end>       a frame was on the pad
  *   sync <t>                 the GP15 edge; the common reference
  *   cut <t>                  a send in flight was aborted at t (a sync
@@ -192,8 +192,8 @@ typedef struct {
     uint32_t as_sender, as_receiver;
     uint32_t syncs;
     uint32_t dur_max_ms, dur_sum_ms;
-    uint32_t sends;                        /* shouts + frames on the pad     */
-    uint32_t shouts_at_zero, frames_at_zero;
+    uint32_t sends;                        /* beacons + frames on the pad    */
+    uint32_t shouts_at_zero, frames_at_zero;   /* beacons, now */
     uint32_t good_at_zero, bad_at_zero, turns_at_zero;
 } stats_t;
 
@@ -210,7 +210,7 @@ static void zero_stats(void)
 {
     memset(&s_st, 0, sizeof s_st);
     s_st.since          = hal_now_us(s_hal);
-    s_st.shouts_at_zero = s_sm.trig.shouts;
+    s_st.shouts_at_zero = s_sm.trig.beacons;
     s_st.frames_at_zero = s_sm.frames_sent;
     s_st.good_at_zero   = s_sm.frames_rx_good;
     s_st.bad_at_zero    = s_sm.frames_rx_bad;
@@ -287,13 +287,31 @@ static void report_bench(void)
     memset(&b, 0, sizeof b);
     b.tag         = (uint8_t)BLE_BENCH_TAG;
     b.version     = BLE_BENCH_VERSION;
-    b.level       = sat16(carrier_level(&s_sm.carrier));
-    b.noise_floor = sat16(carrier_floor(&s_sm.carrier));
+    {
+        /*
+         * Link v2: the same two sides of the same comparison the detector
+         * made, rather than a level and a remembered floor. The wire format
+         * and the phone's Body link page are untouched — `noise_floor` now
+         * carries the CFAR reference, which is what that column always meant.
+         */
+        uint32_t sig = 0, noi = 0;
+        hal_rx_presence(s_hal, &sig, &noi);
+        b.level       = sat16(sig);
+        b.noise_floor = sat16(noi);
+    }
     b.good        = sat16(s_sm.frames_rx_good - s_st.good_at_zero);
     b.bad         = sat16(s_sm.frames_rx_bad  - s_st.bad_at_zero);
     b.sent        = sat16(s_sm.frames_sent    - s_st.frames_at_zero);
     b.syncs       = sat16(s_sm.framer.syncs);
-    b.present     = carrier_present(&s_sm.carrier) ? 1u : 0u;
+    /* Link v2 step 6: the OOK bridge is deleted, so there is no
+      * busy-until timestamp to read. The detector's own verdict is the
+      * answer now -- hal_pico_presence() reads it without clearing the
+      * latch the link is living off. */
+    {
+        hal_pico_presence_t pr;
+        hal_pico_presence(&pr);
+        b.present = pr.busy ? 1u : 0u;
+    }
     b.link_state  = (uint8_t)s_sm.state;
     b.complete    = sat8(s_st.complete);
     b.aborts      = sat8(s_st.abort);
@@ -820,7 +838,7 @@ static void poll_link(uint64_t now)
 #endif
 
     if (!s_link_on || !s_have_own) {
-        uint16_t sink[64];
+        int32_t sink[64];
         while (hal_rx_chips(s_hal, sink, 64) == 64) {}
         return;
     }
@@ -833,7 +851,7 @@ static void poll_link(uint64_t now)
     }
 
     if (s_parked) {
-        uint16_t sink[64];
+        int32_t sink[64];
         while (hal_rx_chips(s_hal, sink, 64) == 64) {}
         if (now >= s_reidle_at) arm(now);
         return;
@@ -859,22 +877,29 @@ static void poll_link(uint64_t now)
             printf("st %llu %s %s\n", (unsigned long long)now,
                    link_state_name(st), role_name(s_sm.role));
             /*
-             * What the trigger actually heard. Without this a bench cannot
-             * tell a band that triggered on a peer from one that triggered on
-             * its own shout decaying (silent ~0) or on the room (silent
-             * scattered, carrier gone again in about the detector's hold).
+             * What the trigger actually heard, and link v2 step 7 changed
+             * what there is to say. v1 printed how much silence had been
+             * banked and how long the carrier lasted, because those two
+             * numbers were the only way to tell a band triggering on a peer
+             * from one triggering on its own amplifier or on the room.
+             *
+             * There is nothing to infer now. `peers` is beacons that passed a
+             * CRC carrying somebody else's nonce; `echo` is beacons that
+             * passed a CRC carrying OURS, which is the v1 fault made visible
+             * and harmless in the same stroke; `nonce` is who we are this
+             * cycle. A bench that sees echo climbing is looking at a settle
+             * that is too short, and it costs nothing.
              */
             if (left_trigger)
-                printf("trig silent %lu us, carrier %lu us; shouts %lu waits %lu "
-                       "sends %lu receives %lu short %lu timeouts %lu\n",
-                       (unsigned long)s_sm.trig.last_silent_us,
-                       (unsigned long)s_sm.trig.last_wait_us,
-                       (unsigned long)s_sm.trig.shouts,
-                       (unsigned long)s_sm.trig.waits,
+                printf("trig nonce %04x; beacons %lu peers %lu echo %lu "
+                       "redraws %lu sends %lu receives %lu\n",
+                       trig_nonce(&s_sm.trig),
+                       (unsigned long)s_sm.trig.beacons,
+                       (unsigned long)s_sm.trig.peers,
+                       (unsigned long)s_sm.trig.self_echoes,
+                       (unsigned long)s_sm.trig.redraws,
                        (unsigned long)s_sm.trig.sends,
-                       (unsigned long)s_sm.trig.receives,
-                       (unsigned long)s_sm.trig.short_carriers,
-                       (unsigned long)s_sm.trig.quiet_timeouts);
+                       (unsigned long)s_sm.trig.receives);
         }
     }
 
@@ -894,14 +919,21 @@ static void print_stats(void)
            (unsigned long)s_st.abort,
            (unsigned long)s_st.as_sender, (unsigned long)s_st.as_receiver,
            (unsigned long)s_st.syncs);
-    printf("           duration mean %lu max %lu ms; shouts %lu frames sent %lu good %lu "
+    printf("           duration mean %lu max %lu ms; beacons %lu frames sent %lu good %lu "
            "bad %lu turnarounds %lu\n",
            (unsigned long)(n ? s_st.dur_sum_ms / n : 0), (unsigned long)s_st.dur_max_ms,
-           (unsigned long)(s_sm.trig.shouts - s_st.shouts_at_zero),
+           (unsigned long)(s_sm.trig.beacons - s_st.shouts_at_zero),
            (unsigned long)(s_sm.frames_sent - s_st.frames_at_zero),
            (unsigned long)(s_sm.frames_rx_good - s_st.good_at_zero),
            (unsigned long)(s_sm.frames_rx_bad - s_st.bad_at_zero),
            (unsigned long)(s_sm.turnarounds - s_st.turns_at_zero));
+    printf("           trigger: nonce %04x, peers %lu, self-echoes %lu, redraws %lu, "
+           "refused draws %lu; beacons decoded %lu bad-crc %lu\n",
+           trig_nonce(&s_sm.trig),
+           (unsigned long)s_sm.trig.peers, (unsigned long)s_sm.trig.self_echoes,
+           (unsigned long)s_sm.trig.redraws, (unsigned long)s_sm.trig.nonce_rejects,
+           (unsigned long)s_sm.framer.beacons_good,
+           (unsigned long)s_sm.framer.beacons_bad_crc);
     printf("           state %s role %s; own-chips cut %lu, false syncs %lu, overruns %lu, "
            "stalls %lu, core-1 load %u%%\n",
            link_state_name(s_sm.state), role_name(s_sm.role),
@@ -909,34 +941,37 @@ static void print_stats(void)
            (unsigned long)hal_pico_overruns(), (unsigned long)hal_pico_tx_stalls(0),
            hal_pico_core1_load());
     /*
-     * The receive turn ends on "they have gone quiet", and quiet is decided by
-     * carrier_present() alone — so a carrier detector whose floor primed INSIDE
-     * the far end's frame reports silence for the whole frame and the turn is
-     * handed back over the top of it. That failure is invisible in every other
-     * counter: it looks exactly like a peer that never transmitted. level
-     * against floor is what tells them apart — a healthy idle detector sits
-     * with level near floor and present 0, a poisoned one sits with BOTH high.
+     * Link v2: the two sides of the presence comparison, as the detector took
+     * it. signal is max(E_A, E_B) this window; noise is the CFAR reference —
+     * the mean of the guard medians over one preamble, which is the number the
+     * threshold is actually built from, not the last median.
+     *
+     * WHAT TO LOOK FOR. A healthy idle band sits with signal AT OR UNDER noise
+     * and busy 0 — the room measured against itself. There is no floor to
+     * climb any more, so the v1 failure this line was written to catch (both
+     * numbers high together, the detector deaf inside a frame) cannot happen;
+     * what this now catches is a dead coupling path, which reads signal near
+     * zero against a healthy noise.
+     *
+     * busy-windows is a rate where busy is an event: config.h states one false
+     * busy per minute of listening, so on a quiet bench this should crawl.
      */
-    printf("           carrier level %lu floor %lu%s present %u; framer syncs %lu\n",
-           (unsigned long)carrier_level(&s_sm.carrier),
-           (unsigned long)carrier_floor(&s_sm.carrier),
-           carrier_primed(&s_sm.carrier) ? "" : " (stale: re-priming, no chips since reset)",
-           (unsigned)carrier_present(&s_sm.carrier),
-           (unsigned long)s_sm.framer.syncs);
     {
-        /*
-         * What the detector did SINCE THE LAST `s`, which is the only way to
-         * see an 11 ms event from a console a person types at. floor hi/lo is
-         * the answer to "is the floor moving with the level" — a floor doing
-         * its job barely moves while the level swings by ten times as much.
-         */
-        carrier_peak_t pk;
-
-        carrier_take_peak(&s_sm.carrier, &pk);
-        printf("           since last s: peak level %lu (floor %lu then); "
-               "floor ranged %lu..%lu\n",
-               (unsigned long)pk.level, (unsigned long)pk.floor_then,
-               (unsigned long)pk.floor_lo, (unsigned long)pk.floor_hi);
+        uint32_t sig = 0, noi = 0;
+        hal_rx_presence(s_hal, &sig, &noi);
+        /* The ratio in POWER, because k is one and the two scores are
+         * amplitudes. See linktest's `p`, which made the same mistake once. */
+        const uint32_t pwr = noi ? (uint32_t)(((uint64_t)sig * sig)
+                                              / ((uint64_t)noi * noi)) : 0u;
+        printf("           presence signal %lu vs noise %lu = %lu:1 in power "
+               "(k %d/%d over %d cells); busy windows %lu; framer syncs %lu\n",
+               (unsigned long)sig, (unsigned long)noi, (unsigned long)pwr,
+               (int)HANDOFF_CFAR_K_NUM, (int)HANDOFF_CFAR_K_DEN,
+               (int)HANDOFF_CFAR_CELLS,
+               (unsigned long)hal_pico_busy_windows(),
+               (unsigned long)s_sm.framer.syncs);
+        if (!hal_pico_bank_on())
+            printf("           *** the bank is OFF: presence is dead ***\n");
     }
     printf("           chips %lu at %lu sps; vsys %u mV %s, %lu reads %lu failed, last %lu us\n",
            (unsigned long)hal_pico_chips(), (unsigned long)hal_pico_sps(),
@@ -964,6 +999,38 @@ static void cmd_carrier(uint32_t khz)
     printf("    carrier %lu kHz\n", (unsigned long)khz);
 }
 
+/*
+ * Link v2 step 1 instrument. The clock tree, gated against the crystal by the
+ * RP2350 frequency counter rather than read back from the SDK.
+ *
+ * sys moved 150 -> 144 MHz so both link tones are a whole even number of
+ * cycles (link v2 4). usb and adc must NOT have moved with it: clk_adc sets
+ * the 500 ksps sample rate, and every window, chip and bin in the receiver is
+ * derived from it, so a shift there would be silent and fatal.
+ */
+static void clocks_print(void)
+{
+    hal_pico_clocks_t m;
+
+    hal_pico_clocks(&m);
+
+    printf("\n  clocks, measured against the crystal:\n"
+           "    clk_ref   %8lu kHz\n"
+           "    clk_sys   %8lu kHz   (sdk says %lu, config.h says %lu)\n"
+           "    clk_usb   %8lu kHz   (48000 or USB is gone)\n"
+           "    clk_adc   %8lu kHz   (48000 or the sample rate moved)\n"
+           "    clk_peri  %8lu kHz\n"
+           "    adc rate  %8lu sps  (want %lu)\n",
+           (unsigned long)m.ref_khz,
+           (unsigned long)m.sys_khz, (unsigned long)m.sys_cfg_khz,
+           (unsigned long)(HANDOFF_SYS_CLK_HZ / 1000),
+           (unsigned long)m.usb_khz,
+           (unsigned long)m.adc_khz,
+           (unsigned long)m.peri_khz,
+           (unsigned long)hal_pico_sps(),
+           (unsigned long)HANDOFF_ADC_FS_HZ);
+}
+
 static void help(void)
 {
     printf("\n  g         link on / off (now %s)\n"
@@ -978,6 +1045,7 @@ static void help(void)
            "  s         stats           z  zero\n"
            "  v         per-send lines %s\n"
            "  c 40|200  carrier, kHz    h  this\n"
+           "  f         clock tree, measured\n"
            "  u         LED / motor trace %s;  u <event> inject one (u ? lists)\n"
            "  b <ms>    press the button for that long\n"
            "  p [mv]    measure VSYS at the next quiet tick, or feed the wearer side a value\n",
@@ -1124,6 +1192,27 @@ static void dispatch(const char *line)
         printf("    per-send lines %s\n", s_verbose ? "on" : "off");
         break;
     case 'c': cmd_carrier(have_arg ? arg : HANDOFF_CARRIER_HZ / 1000u); break;
+    case 'f': clocks_print(); break;
+    /*
+     * Instrument, link v2 step 5. The five-bin bank off or on, in THIS image
+     * on THIS board, so the core-1 cost can be split from everything else in
+     * the diff. With it off the board is deaf to presence and the link stops
+     * working -- that is expected, and it is the point.
+     */
+    case 'n': {
+        const bool on = have_arg ? (arg != 0u) : !hal_pico_bank_on();
+        uint64_t b0, t0, b1, t1;
+        hal_pico_set_bank(on);
+        hal_pico_core1_busy(&b0, &t0);
+        sleep_ms(2000);
+        hal_pico_core1_busy(&b1, &t1);
+        printf("    bank %s: core-1 load %lu %% over %lu ms, overruns %lu\n",
+               on ? "ON" : "off",
+               (unsigned long)((b1 - b0) * 100u / (t1 - t0)),
+               (unsigned long)((t1 - t0) / 1000u),
+               (unsigned long)hal_pico_overruns());
+        break;
+    }
     case 'h': case '?': help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }
@@ -1143,10 +1232,12 @@ static void print_banner(void)
     printf("  carrier %d Hz, %d chips/s, %d bps, Goertzel N=%d bin %d\n",
            HANDOFF_CARRIER_HZ, HANDOFF_CHIP_RATE_HZ,
            HANDOFF_BIT_RATE_BPS, HANDOFF_GZ_N, HANDOFF_GZ_BIN);
-    printf("  shout %lu ms, listen %lu-%lu ms, frame %lu ms, turnaround %d us\n",
-           (unsigned long)(HANDOFF_SHOUT_US / 1000u),
+    printf("  beacon %lu ms, listen %lu-%lu ms, cycle %lu ms, frame %lu ms, "
+           "turnaround %d us\n",
+           (unsigned long)(HANDOFF_BEACON_AIRTIME_US / 1000u),
            (unsigned long)(HANDOFF_LISTEN_MIN_US / 1000u),
            (unsigned long)(HANDOFF_LISTEN_MAX_US / 1000u),
+           (unsigned long)(HANDOFF_BEACON_CYCLE_US / 1000u),
            (unsigned long)(FRAME_AIRTIME_US / 1000u), HANDOFF_TURNAROUND_US);
     printf("  rx idle %lu ms (ring latency %lu ms), %u frames/turn, budget %lu ms\n",
            (unsigned long)(s_cfg.rx_idle_us / 1000u),
@@ -1269,14 +1360,14 @@ int main(void)
                 next_hb += HEARTBEAT_US;
                 /* chips and sps are the pair that showed the ADC being taken
                  * from the ring: a frozen count over a decaying rate. */
-                printf("hb %lu s %s %s ok %lu part %lu abort %lu shouts %lu frames %lu/%lu/%lu "
+                printf("hb %lu s %s %s ok %lu part %lu abort %lu beacons %lu frames %lu/%lu/%lu "
                        "cut %lu stalls %lu load %u%% chips %lu sps %lu overruns %lu "
                        "vsys %u\n",
                        (unsigned long)elapsed_s(s_st.since), link_state_name(s_sm.state),
                        s_link_on ? (s_parked ? "parked" : "on") : "off",
                        (unsigned long)s_st.complete, (unsigned long)s_st.partial,
                        (unsigned long)s_st.abort,
-                       (unsigned long)(s_sm.trig.shouts - s_st.shouts_at_zero),
+                       (unsigned long)(s_sm.trig.beacons - s_st.shouts_at_zero),
                        (unsigned long)(s_sm.frames_sent - s_st.frames_at_zero),
                        (unsigned long)(s_sm.frames_rx_good - s_st.good_at_zero),
                        (unsigned long)(s_sm.frames_rx_bad - s_st.bad_at_zero),

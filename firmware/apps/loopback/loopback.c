@@ -148,7 +148,7 @@ static void report_stalls(void);
  */
 static frame_rx_result_t pump(void)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     size_t n, i;
     frame_rx_result_t out = FRAME_RX_NONE;
 
@@ -303,10 +303,17 @@ static void cmd_frames(uint32_t n)
 
 /* ---------------------------------------------------------------------- */
 
-/* Mean chip energy over a window, in tenths of an LSB, plus the max. */
+/*
+ * Mean |chip| over a window, in tenths of an LSB, plus the max.
+ *
+ * LINK V2 STEP 6: a chip is a signed tone difference, so the MAGNITUDE is
+ * the level and the sign is the decision. This is an amplitude reading, so
+ * it takes the magnitude -- a mean of the signed value would read near zero
+ * on a live link, where half the chips are each tone.
+ */
 static uint32_t mean_energy(uint32_t us, uint32_t *max_out)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     uint64_t sum = 0, n = 0;
     uint32_t max = 0;
     uint64_t until = hal_now_us(s_hal) + us;
@@ -315,8 +322,10 @@ static uint32_t mean_energy(uint32_t us, uint32_t *max_out)
     while (hal_now_us(s_hal) < until) {
         while ((k = hal_rx_chips(s_hal, chips, count_of(chips))) > 0) {
             for (i = 0; i < k; i++) {
-                sum += chips[i];
-                if (chips[i] > max) max = chips[i];
+                const uint32_t a = (uint32_t)(chips[i] < 0
+                                              ? -(int64_t)chips[i] : chips[i]);
+                sum += a;
+                if (a > max) max = a;
             }
             n += k;
         }

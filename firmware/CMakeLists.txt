@@ -13,8 +13,9 @@
 
 add_library(handoff_lib STATIC
     lib/dsp/goertzel.c
+    lib/dsp/gz_bank.c
     lib/dsp/sync.c
-    lib/dsp/carrier.c
+    lib/dsp/presence.c
 
     lib/link/crc.c
     lib/link/manchester.c
@@ -135,5 +136,15 @@ add_subdirectory(apps/adcbench)   # M4
 add_subdirectory(apps/loopback)   # M5
 add_subdirectory(apps/linktest)   # M6
 add_subdirectory(apps/afe_sweep)  # M7
-add_subdirectory(apps/turnaround) # M13
+# apps/turnaround (M13) is NOT built on redesign/link-v2.
+#
+# It measures v1's released-space turnaround — the trick design §4 retires,
+# because an FSK pad is driven for every chip and never steps to DC — and it
+# does it by running its own carrier_t over chip energies sorted by the sample
+# number each was taken at. Link v2 step 5 deleted carrier.c, and v2's presence
+# is decided on core 1 out of a five-bin bank that core 0 never sees per chip,
+# so there is nothing to port the sample-time sorting onto.
+#
+# The source is left in the tree and the app still builds on `main`, which is
+# where the v1 link lives. If this branch dies, one line brings it back.
 add_subdirectory(apps/handoff)    # M14

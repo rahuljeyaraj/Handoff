@@ -71,6 +71,15 @@ void pio_carrier_sense(bool on);
 uint32_t pio_carrier_measure_hz(uint32_t gate_us);
 
 /*
+ * The pad's DUTY CYCLE, in parts per million of the gate, from a third state
+ * machine counting cycles the pad was high. Needs sense(true), like
+ * measure_hz(). An instrument: measure_hz says the period is right, this says
+ * the two halves of it are equal, and only the second one can tell a
+ * generator that slipped from an amplifier that distorted. 500000 is 50 %.
+ */
+uint32_t pio_carrier_duty_ppm(uint32_t gate_us);
+
+/*
  * Drive an unbroken carrier until told to stop.
  *
  * Measurement needs a carrier that outlasts the gate, and pio_carrier_send()
@@ -148,5 +157,63 @@ typedef struct {
 
 void pio_carrier_state(pio_carrier_state_t *st);
 void pio_carrier_reset(void);
+
+/*
+ * ======================================================================
+ * Link v2 step 2 -- the two-tone generator. brief S3, design S4, S7.
+ * ======================================================================
+ *
+ * A second generator program on the same state machine and the same pad. It
+ * plays TONES rather than a gated square: every chip is carrier, one of two
+ * frequencies, so the envelope is constant and there is no space to release.
+ *
+ *   chip 0 -> tone A, HANDOFF_TONE_A_HZ, Goertzel bin HANDOFF_TONE_A_BIN
+ *   chip 1 -> tone B, HANDOFF_TONE_B_HZ, bin HANDOFF_TONE_B_BIN
+ *
+ * One 32-bit word per chip, so a 624-chip frame is 2496 bytes against the
+ * 78 kB a bit stream would need to carry two tones on one slot grid. The
+ * words come from config.h and are derived from the clock; pio_carrier.pio
+ * has the cycle budget and why it balances to the cycle.
+ *
+ * THE PAD IS NEVER RELEASED BY THE STREAM. v1 carries the pin direction in
+ * its data and releases for every space (S9.8); there are no spaces here, so
+ * the direction is set once and high-Z is entirely pio_carrier_drive()'s job.
+ * A starved FIFO therefore stalls with the pad DRIVEN LOW, and a frame that
+ * ends without a drive(false) after it leaves it there -- which is the 0.28 V
+ * stage-1 bias step S9.8 exists to avoid. The caller releases. Whether the
+ * generator should release itself at the end of a frame is a turnaround
+ * question and belongs to step 6, where turnaround is measured.
+ *
+ * init() and fsk_init() swap the state machine between the two programs;
+ * both are loaded into PIO instruction memory at first use and stay there.
+ */
+void pio_carrier_fsk_init(void);
+bool pio_carrier_fsk_active(void);
+
+/*
+ * Drive one tone unbroken until the next send or abort -- check 2a's
+ * measurement, read back with pio_carrier_measure_hz(). A small looping DMA,
+ * so it costs 32 bytes rather than a buffer proportional to the gate.
+ */
+void pio_carrier_fsk_tone(int tone);
+
+/*
+ * Drive tone A and tone B on alternate chips, unbroken, from the same looping
+ * 32-byte ring. This is the preamble pattern with no end, and it exists for
+ * one reading: with the two tones alternating, a single bank capture sees bin 9
+ * and bin 10 in the SAME windows, through the same coupling and the same
+ * amplifier gain, so the 180/200 imbalance design S8 carries into the body
+ * decisions is measured rather than inferred from two captures taken at
+ * different moments.
+ *
+ * Eight words is four A/B pairs, so the ring is chip-aligned however many
+ * times it wraps.
+ */
+void pio_carrier_fsk_alt(void);
+
+/* Clock out chips, one byte per chip: 0 is tone A, non-zero tone B. One word
+ * per chip, so max_chips is the whole buffer rather than a fraction of it. */
+void   pio_carrier_fsk_send(const uint8_t *chips, size_t n);
+size_t pio_carrier_fsk_max_chips(void);
 
 #endif /* HANDOFF_PIO_CARRIER_H */

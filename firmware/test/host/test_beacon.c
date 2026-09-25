@@ -1,7 +1,7 @@
 /*
- * Handoff — the contact trigger. beacon.h, docs/simple-trigger-spec.md §6.
+ * Handoff — the contact trigger. beacon.h, link v2 step 7.
  *
- * Two claims are on trial here and they are not the same claim.
+ * Three claims are on trial here and they are not the same claim.
  *
  * RENDEZVOUS: two bands free-running at arbitrary relative phase find each
  * other within a bounded time of touching. A test that tried one phase would
@@ -9,37 +9,42 @@
  * resolution.
  *
  * NO TIE: over that same sweep, the pair never ends up both-sending or
- * both-listening. Spec §2 argues that from the timing geometry — your ears
- * open 11 ms after your own shout starts, so the earlier shouter is always too
- * late and the later one is always in time. That argument has not been
- * machine-checked and this file is what turns it into evidence. It is the most
- * important test here.
+ * both-listening. beacon.h §2 argues that from the geometry — decoding a peer
+ * means you had not yet started your own beacon, and a decoder stops
+ * beaconing, so at most one band can ever decode the other. That argument has
+ * not been machine-checked and this file is what turns it into evidence. It is
+ * the most important test here.
+ *
+ * THE NONCE DOES ITS ONE JOB: a band never acts on its own beacon, and two
+ * bands that draw the same sixteen bits notice and redraw rather than both
+ * standing down for ever. Step 7 owes both of those, and they are the last two
+ * tests in the file.
  */
 #include <stdio.h>
 #include <string.h>
 
 #include "beacon.h"
-#include "carrier.h"
 #include "hal_host.h"
 #include "hf_test.h"
 #include "link_sm.h"
 #include "tests.h"
 
-/* Fine enough that no shout, settle or detector latency can be stepped over. */
+/* Fine enough that no beacon, settle or decode can be stepped over. */
 #define STEP_US 100u
 
-/* One whole cycle at its longest: shout, settle, and the longest listen the
+/* One whole cycle at its longest: beacon, settle, and the longest listen the
  * draw can produce. This is the window the phase sweep covers. */
-#define CYCLE_MAX_US (HANDOFF_SHOUT_US + HANDOFF_TRIG_SETTLE_US + \
+#define CYCLE_MAX_US (HANDOFF_BEACON_AIRTIME_US + HANDOFF_TRIG_SETTLE_US + \
                       HANDOFF_LISTEN_MAX_US)
 
 /*
- * The bound rendezvous must meet. Four worst-case cycles: one to notice the
- * other band, and three of slack for the simultaneous-shout case of §4.1 to
- * decorrelate. The sweep prints what it actually took, and the printed number
- * is the one to believe — this is a ceiling, not a prediction.
+ * The bound rendezvous must meet. beacon.h derives an EXPECTED time of 8
+ * beacons — two mean cycles — from a per-cycle failure probability of one
+ * half. That is a mean, and a geometric tail: eight worst-case cycles is
+ * 2^-16 per phase on the arithmetic, and the sweep prints what it actually
+ * took. The printed number is the one to believe; this is a ceiling.
  */
-#define RENDEZVOUS_BOUND_US (4u * CYCLE_MAX_US)
+#define RENDEZVOUS_BOUND_US (8u * CYCLE_MAX_US)
 
 typedef struct {
     uint64_t    clock_us;
@@ -89,9 +94,14 @@ static const char *role_name(link_role_t r)
 
 /*
  * A band alone in a room must stay in IDLE for ever. This is the test that
- * would fail if the carrier detector were fed during a shout: the band would
- * trigger on its own amplifier, every cycle, and burn a contact budget against
- * nobody.
+ * would fail if the receive path were fed during a beacon: the band would
+ * decode its own frame every cycle and burn a contact budget against nobody.
+ *
+ * Under v1 that failure was REAL and this test was the guard against it — a
+ * band on a bench elected itself sender on 60 shouts out of 60. Under v2 the
+ * nonce makes it unwritable, so this test now checks two things at once: that
+ * nothing fires, and that self_echoes is the counter it would have shown up
+ * in if it had.
  */
 static void alone_never_triggers(void)
 {
@@ -114,19 +124,20 @@ static void alone_never_triggers(void)
              link_state_name(s.sm_b.state));
 
     /* It must actually have been trying, or the test above proves nothing. */
-    HF_CHECK_MSG(s.sm_a.trig.shouts >= 15,
-             "A only shouted %u times in 20 worst-case cycles", s.sm_a.trig.shouts);
+    HF_CHECK_MSG(s.sm_a.trig.beacons >= 15,
+             "A only beaconed %u times in 20 worst-case cycles",
+             s.sm_a.trig.beacons);
 
     /* And it must have been listening the whole rest of the time — a band that
-     * shouted but never opened its ears would also pass the check above. */
-    HF_CHECK_MSG(s.sm_a.trig.waits == 0,
-             "A heard %u carriers with nobody there", s.sm_a.trig.waits);
+     * beaconed but never opened its ears would also pass the check above. */
+    HF_CHECK_MSG(s.sm_a.trig.peers == 0,
+             "A decoded %u peer beacons with nobody there", s.sm_a.trig.peers);
 }
 
 /*
- * §6.1 and §6.2, run as one sweep because they are two assertions about the
- * same 112 rendezvous and running them twice would only halve the confidence
- * per unit of time.
+ * The rendezvous sweep, run as one pass because its two assertions are about
+ * the same ~230 rendezvous and running them twice would only halve the
+ * confidence per unit of time.
  *
  * B is armed PHASE microseconds after A, at every offset across a full
  * worst-case cycle. Every offset must rendezvous inside the bound, and every
@@ -135,7 +146,7 @@ static void alone_never_triggers(void)
 static void phase_sweep(void)
 {
     uint32_t phase;
-    uint64_t worst = 0;
+    uint64_t worst = 0, total = 0;
     uint32_t worst_phase = 0;
     uint32_t phases = 0, slow = 0;
     uint32_t both_tx = 0, bad_roles = 0;
@@ -175,6 +186,7 @@ static void phase_sweep(void)
 
         took = s.clock_us - start_us;
         if (took > worst) { worst = took; worst_phase = phase; }
+        total += took;
         if (took > CYCLE_MAX_US) slow++;
         phases++;
 
@@ -184,10 +196,10 @@ static void phase_sweep(void)
                  link_state_name(s.sm_a.state), link_state_name(s.sm_b.state));
 
         /*
-         * THE CLAIM IN §2. One end heard the other's shout and takes the
-         * channel; the other never heard a thing and is already listening to
-         * the card that answers it. Both-send and both-listen are supposed to
-         * be unreachable, not merely unlikely.
+         * THE CLAIM IN beacon.h §2. One end decoded the other's beacon and
+         * takes the channel; the other never decoded a thing and is already
+         * listening to the card that answers it. Both-send and both-listen are
+         * supposed to be unreachable, not merely unlikely.
          */
         if (!((role_a == LINK_ROLE_SENDER) != (role_b == LINK_ROLE_SENDER)) ||
             role_a == LINK_ROLE_NONE || role_b == LINK_ROLE_NONE) {
@@ -205,27 +217,113 @@ static void phase_sweep(void)
              "the pair was clocking out frames simultaneously on %u polls",
              both_tx);
 
-    printf("      rendezvous: worst %llu us (phase %u ms) over %u phases;"
-           " %u past one cycle\n",
+    /*
+     * This is a rendezvous time, but it is NOT the one to quote: arming B
+     * fresh makes it beacon immediately, which is kinder than a wrist.
+     * steady_state_rendezvous() is the number design §2 has to live with.
+     */
+    printf("      rendezvous from a fresh arming: mean %llu us, worst %llu us"
+           " (phase %u ms) over %u phases; %u past one cycle\n",
+           (unsigned long long)(total / phases),
            (unsigned long long)worst, worst_phase, phases, slow);
 }
 
 /*
- * §6.3. The degenerate case §4.1 admits to: two bands shouting close enough
- * together that neither hears the other, because each is deaf for its own
- * burst. Forced by arming both at the same instant, over many seeds.
+ * WHAT A WRIST ACTUALLY DOES, which is not what the phase sweep measures.
  *
- * §4.1 estimates a repeat at about 4 % per round from the ratio of the
- * detector latency to the draw range. That is arithmetic. This is the
- * measurement that replaces it, and the printed number is the one to quote.
+ * The sweep arms B fresh, so B beacons the instant it joins and the rendezvous
+ * is over unusually fast. That is the right shape for "exactly one sender",
+ * which is what the sweep is for, and the wrong shape for a latency: on a
+ * wrist BOTH bands have been beaconing for minutes and what changes is that
+ * skin closes the channel, at a moment neither of them chose.
+ *
+ * So: two bands free-running, already out of step, and the coupling switched
+ * on at every offset across a whole cycle. This is the number design §2's
+ * one-second budget has to be spent out of, and beacon.h derives the beacon
+ * period from an expectation of 8 beacon airtimes — printed beside it, because
+ * the derivation is a rigid-phase bound and the simulator redraws the listen
+ * window every cycle, which can only help.
+ */
+static void steady_state_rendezvous(void)
+{
+    uint32_t phase, n = 0, slow = 0;
+    uint64_t worst = 0, total = 0;
+    uint32_t worst_phase = 0;
+
+    hf_begin("trigger: two bands already running, touched at every offset");
+
+    for (phase = 0; phase <= CYCLE_MAX_US / 2000u; phase++) {
+        bsim_t s;
+        uint64_t touch_us, limit, took;
+
+        bsim_init(&s, 0xB0D1E000u + phase);
+        halh_set_coupled(&s.a, &s.b, false);
+
+        /* Arm both apart, and let them run long enough that neither is
+         * anywhere near the start of its cycle. */
+        link_sm_idle(&s.sm_a, s.clock_us);
+        while (s.clock_us < 13000u) bsim_step(&s);
+        link_sm_idle(&s.sm_b, s.clock_us);
+
+        touch_us = 400000u + (uint64_t)phase * 2000u;
+        while (s.clock_us < touch_us) bsim_step(&s);
+
+        /* Skin meets skin. */
+        halh_set_coupled(&s.a, &s.b, true);
+        limit = s.clock_us + RENDEZVOUS_BOUND_US;
+        while (s.clock_us < limit && !(awake(&s.sm_a) && awake(&s.sm_b)))
+            bsim_step(&s);
+
+        took = s.clock_us - touch_us;
+        HF_CHECK_MSG(awake(&s.sm_a) && awake(&s.sm_b),
+                 "offset %u: no rendezvous in %llu us (A %s, B %s)", phase,
+                 (unsigned long long)took,
+                 link_state_name(s.sm_a.state), link_state_name(s.sm_b.state));
+        HF_CHECK_MSG((link_sm_role(&s.sm_a) == LINK_ROLE_SENDER) !=
+                     (link_sm_role(&s.sm_b) == LINK_ROLE_SENDER),
+                 "offset %u: roles %s / %s", phase,
+                 role_name(link_sm_role(&s.sm_a)),
+                 role_name(link_sm_role(&s.sm_b)));
+
+        total += took;
+        if (took > worst) { worst = took; worst_phase = phase; }
+        if (took > CYCLE_MAX_US) slow++;
+        n++;
+    }
+
+    printf("      touched mid-cycle: mean %llu us, worst %llu us (offset %u)"
+           " over %u contacts; %u past one cycle; beacon.h expects %u us\n",
+           (unsigned long long)(total / n), (unsigned long long)worst,
+           worst_phase, n, slow, (unsigned)(8u * HANDOFF_BEACON_AIRTIME_US));
+
+    /*
+     * Pinned against the derivation rather than against the measurement: the
+     * period was chosen to minimise this, so a change that makes it worse than
+     * the bound the period was derived from has undone the derivation.
+     */
+    HF_CHECK_MSG(total / n <= 8ull * HANDOFF_BEACON_AIRTIME_US,
+             "mean rendezvous %llu us is worse than the %u us beacon.h derives"
+             " the period from",
+             (unsigned long long)(total / n),
+             (unsigned)(8u * HANDOFF_BEACON_AIRTIME_US));
+}
+
+/*
+ * The degenerate case the geometry admits to: two bands beaconing close enough
+ * together that neither decodes the other, because each is deaf for its own
+ * frame. Forced by arming both at the same instant, over many seeds.
+ *
+ * beacon.h puts a whole cycle's failure probability at 2T/C = one half, from
+ * which the draw range is chosen. This is the measurement that replaces the
+ * arithmetic, and the printed number is the one to quote.
  */
 static void simultaneous_start(void)
 {
     const uint32_t trials = 400;
-    uint32_t seed, resolved_in_two = 0, rounds_worst = 0;
+    uint32_t seed, resolved_in_three = 0, rounds_worst = 0;
     uint64_t took_worst = 0;
 
-    hf_begin("trigger: a simultaneous shout resolves on a later round");
+    hf_begin("trigger: a simultaneous beacon resolves on a later round");
 
     for (seed = 0; seed < trials; seed++) {
         bsim_t s;
@@ -254,53 +352,56 @@ static void simultaneous_start(void)
                  role_name(link_sm_role(&s.sm_a)),
                  role_name(link_sm_role(&s.sm_b)));
 
-        /* Round 1 is the collision itself, so "resolved within two rounds"
-         * means neither band shouted more than twice. */
-        rounds = s.sm_a.trig.shouts > s.sm_b.trig.shouts ? s.sm_a.trig.shouts
-                                                         : s.sm_b.trig.shouts;
-        if (rounds <= 2u) resolved_in_two++;
+        /* Round 1 is the collision itself. */
+        rounds = s.sm_a.trig.beacons > s.sm_b.trig.beacons ? s.sm_a.trig.beacons
+                                                           : s.sm_b.trig.beacons;
+        if (rounds <= 3u) resolved_in_three++;
         if (rounds > rounds_worst) rounds_worst = rounds;
 
         took = s.clock_us;
         if (took > took_worst) took_worst = took;
     }
 
-    printf("      simultaneous start: %u/%u resolved within two rounds"
+    printf("      simultaneous start: %u/%u resolved within three rounds"
            " (%.1f%% needed more), worst %u rounds / %llu us\n",
-           resolved_in_two, trials,
-           100.0 * (double)(trials - resolved_in_two) / (double)trials,
+           resolved_in_three, trials,
+           100.0 * (double)(trials - resolved_in_three) / (double)trials,
            rounds_worst, (unsigned long long)took_worst);
 
     /*
      * Pinned, so a change that makes collisions common shows up as a failure
-     * rather than as a slightly slower demo. The threshold is set against the
-     * measured figure with room to move, not against the estimate in §4.1.
+     * rather than as a slightly slower demo. A simultaneous start is the
+     * worst phase there is — the two beacons overlap exactly — so the bar is
+     * set against the measured figure with room to move, not against a
+     * prediction.
      */
-    HF_CHECK_MSG(resolved_in_two * 20u >= trials * 19u,
-             "only %u of %u simultaneous starts resolved within two rounds",
-             resolved_in_two, trials);
+    HF_CHECK_MSG(resolved_in_three * 10u >= trials * 9u,
+             "only %u of %u simultaneous starts resolved within three rounds",
+             resolved_in_three, trials);
 }
 
 /*
- * §6.4, and §4.3's answer to it. A carrier that never clears — noise, a stuck
- * transmitter, a floor that has moved — must not take the band off the air and
- * must not make it transmit into a channel it can see is busy.
+ * A channel that is never quiet must not take the band off the air, and must
+ * not make it beacon into traffic it can hear.
  *
- * Driven at the trigger directly rather than through a simulated channel: the
- * point is what the state machine does when told "still busy" for ever, and a
- * simulated stuck carrier would also be testing carrier.c's floor tracking.
+ * This is what became of v1's stuck-carrier test. v1 needed a cap on TRIG_WAIT
+ * and a rule about what to do when it expired, because a carrier that never
+ * cleared was ambiguous: a peer's shout, the room, or a floor that had moved.
+ * None of that survives. A busy channel holds the silence budget and nothing
+ * else happens, for ever, which is the correct behaviour and needs no
+ * constant.
  */
 static void stuck_carrier(void)
 {
     uint64_t clock_us = 0;
     halh_node_t n;
     trig_t t;
+    trig_in_t in;
     uint64_t at;
-    uint32_t sends = 0, receives = 0, listens = 0;
-    uint64_t first_listen_after_wait = 0;
-    bool waiting = false;
+    uint32_t sends = 0, receives = 0, beacons_while_busy = 0;
+    uint32_t beacons_before = 0;
 
-    hf_begin("trigger: a carrier that never stops never becomes a send");
+    hf_begin("trigger: a channel that is never quiet never becomes a send");
 
     halh_init(&n, "X", &clock_us, 12345);
     trig_init(&t, &n.iface);
@@ -308,257 +409,277 @@ static void stuck_carrier(void)
 
     for (at = 0; at < 20u * CYCLE_MAX_US; at += STEP_US) {
         const bool listening = trig_listening(&t);
-        /* Carrier for ever, and the framer never locks — it is a flat tone,
-         * or noise, not a card. */
-        const trig_state_t st = trig_poll(&t, clock_us, listening, false);
+        trig_state_t st;
+
+        memset(&in, 0, sizeof in);
+        /* Busy for ever, and nothing ever decodes — it is the room, or a
+         * stuck transmitter, not a band. */
+        in.busy = listening;
+
+        beacons_before = t.beacons;
+        st = trig_poll(&t, clock_us, &in);
 
         if (st == TRIG_SEND) sends++;
         if (st == TRIG_RECEIVE) receives++;
+        if (listening && t.beacons != beacons_before) beacons_while_busy++;
 
-        if (st == TRIG_WAIT && !waiting) {
-            waiting = true;
-        } else if (waiting && st == TRIG_LISTEN) {
-            waiting = false;
-            listens++;
-            if (!first_listen_after_wait) first_listen_after_wait = clock_us;
-        }
         clock_us += STEP_US;
     }
 
     HF_CHECK_MSG(sends == 0, "the band sent into a channel it could hear was busy");
-    HF_CHECK_MSG(receives == 0, "the band tried to receive a card that never locked");
-    HF_CHECK_MSG(listens > 0, "the band never came back out of TRIG_WAIT");
-    HF_CHECK_MSG(t.quiet_timeouts > 0, "the quiet-wait cap never fired");
+    HF_CHECK_MSG(receives == 0, "the band tried to receive a card that never arrived");
+    HF_CHECK_MSG(beacons_while_busy == 0,
+             "the band beaconed %u times over a channel it could hear was busy",
+             beacons_while_busy);
 
-    /*
-     * And it came back within the cap, not eventually. The first WAIT starts on
-     * the first listening poll after the shout and settle, so the cap must have
-     * expired by one cycle plus the cap itself.
-     */
-    HF_CHECK_MSG(first_listen_after_wait <=
-                 HANDOFF_SHOUT_US + HANDOFF_TRIG_SETTLE_US +
-                 HANDOFF_QUIET_WAIT_MAX_US + 4u * STEP_US,
-             "took %llu us to give up on a stuck carrier, cap is %u us",
-             (unsigned long long)first_listen_after_wait,
-             (unsigned)HANDOFF_QUIET_WAIT_MAX_US);
+    /* It beaconed exactly once — the arming beacon, before it had heard
+     * anything — and then held. A band that kept beaconing would be talking
+     * over whatever is out there; one that never beaconed at all would have
+     * been asleep. */
+    HF_CHECK_MSG(t.beacons == 1u,
+             "beaconed %u times against a permanently busy channel", t.beacons);
+    HF_CHECK_MSG(trig_listening(&t),
+             "the band did not end up listening (state %d)", (int)t.state);
 }
 
 /*
- * §6.5. The shout must not look like a frame. A constant-on burst has no
- * transitions, so frame.c's preamble hunt can never lock to it — if this ever
- * fails, someone made the shout alternate and turned it into a preamble, which
- * is the decision §7 of the spec re-examined and kept.
- */
-static void shout_is_not_a_preamble(void)
-{
-    uint8_t chips[TRIG_SHOUT_CHIPS];
-    frame_rx_t r;
-    size_t n, i, cycle;
-
-    hf_begin("trigger: a shout cannot be mistaken for a frame");
-
-    n = trig_fill(chips, sizeof chips);
-    HF_CHECK_MSG(n == (size_t)TRIG_SHOUT_CHIPS, "filled %u chips", (unsigned)n);
-
-    for (i = 0; i < n; i++)
-        HF_CHECK_MSG(chips[i] == 1u,
-                 "chip %u is not on: the shout has a transition", (unsigned)i);
-
-    /*
-     * Forty shout cycles through one framer — burst, then the silence a real
-     * listen window would be, so the burst edges are in the stream too. A
-     * preamble shout would sync on almost every one of these.
-     */
-    frame_rx_init(&r);
-    for (cycle = 0; cycle < 40u; cycle++) {
-        for (i = 0; i < n; i++)          (void)frame_rx_push(&r, 400);
-        for (i = 0; i < 4u * n; i++)     (void)frame_rx_push(&r, 6);
-    }
-
-    HF_CHECK_MSG(r.syncs == 0, "framer synced %u times on a shout", r.syncs);
-    HF_CHECK_MSG(r.frames_good == 0 && r.frames_bad_crc == 0,
-             "framer produced %u good and %u bad frames from a shout",
-             r.frames_good, r.frames_bad_crc);
-}
-
-/*
- * Ambient chip energies with a known mean, pushed until the floor has settled
- * on them. The mean is returned because that is what the floor is supposed to
- * land on: an average that can only walk downward lands on the MINIMUM
- * instead, which is what the old floor did and what these checks have to be
- * able to tell apart.
- */
-static uint32_t settle_on_ambient(carrier_t *c, uint32_t *rng, int chips)
-{
-    const uint16_t lo = 6;
-    uint64_t sum = 0;
-    int i;
-
-    for (i = 0; i < chips; i++) {
-        uint16_t e;
-        *rng = *rng * 1664525u + 1013904223u;
-        e = (uint16_t)(lo + (*rng >> 28));      /* lo .. lo+15 */
-        sum += e;
-        carrier_push(c, e);
-    }
-    return (uint32_t)(sum / (uint64_t)chips);
-}
-
-/*
- * §5.1, answered. The receive path still does not reset the carrier detector,
- * but it is no longer a coin flip on blinding it: carrier.c's floor is a
- * property of the room now, reset() leaves it alone, and only reprime() throws
- * it away. The asymmetry this test used to pin — primed on a low Manchester
- * chip presence returns at once, primed on a high one it never returns — does
- * not exist any more, and the old behaviour was load-bearing for exactly one
- * reason: the floor could only ever walk downward, so a poisoned floor was
- * dragged back by the same accident that made the ratio test meaningless.
+ * THE FIRST THING STEP 7 OWES. A band must never act on its own beacon.
  *
- * What is pinned instead is the five things the redesign has to be true for at
- * once. Each one is a way the detector has actually failed, on hardware or in
- * the phase sweep.
+ * Driven at the trigger directly and with its OWN frame fed back into it,
+ * which is the one thing the paired simulator cannot do: there the settle is
+ * long enough that a self-echo never reaches the ears, so a test built on it
+ * would be testing the settle rather than the nonce. This bypasses the settle
+ * entirely and asks the harder question — if the echo DOES arrive, what
+ * happens?
+ *
+ * Under v1 the answer was "the band elects itself sender", sixty times out of
+ * sixty. Under v2 it is arithmetic: the nonce is ours.
  */
-static void the_floor_is_the_room_not_the_carrier(void)
+static void own_beacon_is_never_a_peer(void)
 {
-    /* design §5's link budget at the ADC, as halh_chan_default uses. */
-    const uint16_t hi = 200, lo = 6;
-    carrier_t c;
-    uint32_t rng = 0xA5A51234u;
-    uint32_t settled, mean;
-    int i, ph;
+    uint64_t clock_us = 0;
+    halh_node_t n;
+    trig_t t;
+    uint32_t cycle;
 
-    hf_begin("carrier: the floor tracks the room, not the carrier");
+    hf_begin("trigger: a band never acts on its own beacon");
 
-    /*
-     * ONE. It must not collapse. The old update rounded every move toward minus
-     * infinity, so the floor walked down until it sat on the MINIMUM of what it
-     * was watching, and where ambient reaches zero that is the clamp at 1 — the
-     * ratio test then spent its life comparing against 1. The distance between
-     * a mean and a minimum is the whole check, so the ambient here is generated
-     * with a known mean and the floor has to land on that rather than on `lo`.
-     * 200000 chips because the collapse is slow: 8000 is not enough to see it.
-     */
-    carrier_init(&c);
-    mean = settle_on_ambient(&c, &rng, 200000);   /* ~50 s on a shelf */
-    settled = carrier_floor(&c);
-    HF_CHECK_MSG(settled + 3u >= mean && settled <= mean + 3u,
-             "floor settled at %u on ambient whose mean is %u",
-             (unsigned)settled, (unsigned)mean);
-    HF_CHECK_MSG(!carrier_present(&c), "ambient alone read as a carrier");
+    halh_init(&n, "X", &clock_us, 777);
+    trig_init(&t, &n.iface);
+    trig_start(&t, clock_us);
 
-    /*
-     * TWO. It must not climb to meet a carrier. An honest average run through
-     * a frame converges on the carrier's own mean, and a detector whose floor
-     * is the carrier's mean cannot hear it — measured on the first assembled
-     * board as `level 548 floor 256 present 0` with a known-good transmitter
-     * mid-frame, which ended every receive turn over the top of the frame it
-     * was waiting for.
-     */
-    for (i = 0; i < FRAME_TOTAL_CHIPS; i++) carrier_push(&c, (i & 1) ? hi : lo);
-    HF_CHECK_MSG(carrier_present(&c),
-             "went deaf inside one frame: floor %u against level %u",
-             (unsigned)carrier_floor(&c), (unsigned)carrier_level(&c));
-    /* One chip is learned before presence latches, so a hair of movement is
-     * honest; what this rejects is a floor walking up toward (hi+lo)/2. */
-    HF_CHECK_MSG(carrier_floor(&c) <= settled + 2u,
-             "the floor climbed from %u to %u across a frame",
-             (unsigned)settled, (unsigned)carrier_floor(&c));
+    for (cycle = 0; cycle < 40u; cycle++) {
+        trig_in_t in;
+        trig_state_t st;
+        uint16_t mine;
+        uint64_t guard;
 
-    /*
-     * THREE. A reset mid-frame must not blind it. This is §5.1 itself. The
-     * detector is reset at three points during a handshake and the chip that
-     * arrives next is a Manchester chip, high half the time; the old code
-     * primed the floor from it and lost the rest of the frame on the high
-     * phase. Both phases now come back inside the detector's own latency.
-     */
-    for (ph = 0; ph < 2; ph++) {
-        int first = -1;
-        carrier_reset(&c);
-        for (i = 0; i < FRAME_TOTAL_CHIPS; i++) {
-            carrier_push(&c, ((i + ph) & 1) ? hi : lo);
-            if (carrier_present(&c)) { first = i; break; }
+        memset(&in, 0, sizeof in);
+
+        /*
+         * Run the free silent channel forward to the next beacon, then out
+         * through the deaf phases to LISTEN, feeding nothing — exactly what
+         * the real caller does while its own amplifier is driving. Both waits
+         * are needed: after an echo the band is already in LISTEN, so waiting
+         * only for LISTEN would stand still for ever.
+         */
+        guard = clock_us + 100ull * CYCLE_MAX_US;
+        while (t.state != TRIG_BEACON && clock_us < guard) {
+            (void)trig_poll(&t, clock_us, &in);
+            clock_us += STEP_US;
         }
-        HF_CHECK_MSG(first >= 0 && first <= 4,
-                 "reset on a %s chip: presence took %d chips",
-                 ph ? "high" : "low", first);
+        mine = trig_nonce(&t);
+        while (t.state != TRIG_LISTEN && clock_us < guard) {
+            (void)trig_poll(&t, clock_us, &in);
+            clock_us += STEP_US;
+        }
+
+        /* Now hand it back exactly what it just transmitted. */
+        in.beacon = true;
+        in.nonce = mine;
+        st = trig_poll(&t, clock_us, &in);
+        clock_us += STEP_US;
+
+        HF_CHECK_MSG(st == TRIG_LISTEN,
+                 "cycle %u: the band left LISTEN on its own beacon (state %d)",
+                 cycle, (int)st);
     }
 
-    /*
-     * FOUR. A reprime taken at the worst moment must recover inside one frame,
-     * not inside a rendezvous budget. §4.3's quiet-wait cap is allowed to throw
-     * the floor away, and it can do it mid-frame. The prime is a minimum, so a
-     * Manchester high cannot set it: the next chip is a low one.
-     */
-    for (ph = 0; ph < 2; ph++) {
-        int first = -1;
-        carrier_reprime(&c);
-        for (i = 0; i < FRAME_TOTAL_CHIPS; i++) {
-            carrier_push(&c, ((i + ph) & 1) ? hi : lo);
-            if (carrier_present(&c)) { first = i; break; }
-        }
-        HF_CHECK_MSG(first >= 0 && first <= 8,
-                 "reprime on a %s chip: presence took %d chips",
-                 ph ? "high" : "low", first);
-    }
+    HF_CHECK_MSG(t.sends == 0, "the band elected itself sender %u times", t.sends);
+    HF_CHECK_MSG(t.peers == 0, "the band read its own beacon as a peer %u times",
+             t.peers);
+    HF_CHECK_MSG(t.self_echoes == 40u,
+             "only %u of 40 self-echoes were recognised", t.self_echoes);
 
     /*
-     * FIVE. It must barely move across a preamble, which is the window
-     * listen-before-talk has to decide in. That was the original comment's
-     * argument for a slow average and it still stands.
+     * And it went out under a new name each time, which is the tie's half of
+     * the same rule — the redraw happens at the NEXT beacon, never when the
+     * echo arrives, so the stragglers of the beacon already on the wire keep
+     * being rejected. beacon.h has the argument.
      */
-    carrier_init(&c);
-    (void)settle_on_ambient(&c, &rng, 8000);
-    settled = carrier_floor(&c);
-    for (i = 0; i < FRAME_PREAMBLE_CHIPS; i++) carrier_push(&c, (i & 1) ? hi : lo);
-    HF_CHECK_MSG(carrier_floor(&c) <= settled + 1u,
-             "the floor moved %u to %u across a %d-chip preamble",
-             (unsigned)settled, (unsigned)carrier_floor(&c),
-             (int)FRAME_PREAMBLE_CHIPS);
-
-    /*
-     * SIX. Spikes must not train it. The freeze is armed by presence, and
-     * presence is decided against the floor, so anything too brief or too weak
-     * to raise the flag was averaged straight in — which lifts the floor, which
-     * lifts the gate, which makes the next one weaker still. The ratchet the
-     * other way up.
-     *
-     * It was seen on the bench before it was seen here: 93D1 idled at floor
-     * 85-177 against 379E's 10-23 on the same afternoon, and the phone's plot
-     * showed its floor STEPPING UP WITH THE LEVEL rather than sitting under it.
-     *
-     * One chip in eight, high enough to be nothing but signal and short enough
-     * that the four-chip `level` EMA never reaches the gate — so the freeze
-     * never arms and only the chip test can reject it. The old code settled
-     * this floor near a tenth of the way to the spike; the check is that it
-     * does not move at all beyond the ambient it was already on.
-     */
-    carrier_init(&c);
-    mean = settle_on_ambient(&c, &rng, 8000);
-    settled = carrier_floor(&c);
-    ph = 0;                                   /* spikes that raised presence */
-    for (i = 0; i < 8000; i++) {
-        if ((i & 7) == 0) {
-            carrier_push(&c, 70);
-            if (carrier_present(&c)) ph++;
-        } else {
-            rng = rng * 1664525u + 1013904223u;
-            carrier_push(&c, (uint16_t)(6u + (rng >> 28)));
-        }
-    }
-    HF_CHECK_MSG(ph == 0,
-             "%d spikes raised presence, so this measured the freeze and not "
-             "the chip test", ph);
-    HF_CHECK_MSG(carrier_floor(&c) <= settled + 2u,
-             "spikes trained the floor from %u to %u (ambient mean %u)",
-             (unsigned)settled, (unsigned)carrier_floor(&c), (unsigned)mean);
+    HF_CHECK_MSG(t.redraws + 1u >= t.beacons,
+             "%u redraws over %u beacons after 40 echoes: a tie would not break",
+             t.redraws, t.beacons);
 }
 
 /*
- * §6.6. Triggering is not the point; handshaking is. The band must go on to
- * exchange a record with no host call anywhere in the path — and the frames it
- * spends doing so are the regression canary for §5.1's carrier-detector
- * question, because a detector left mis-primed makes handover talk over the
- * reply it asked for and the count goes up several fold.
+ * THE SECOND THING STEP 7 OWES, and the one the design puts a number on: two
+ * bands that draw the same sixteen bits. Probability 2^-16 per contact, so it
+ * is forced rather than waited for.
+ *
+ * Both bands are given a random source that hands out the SAME values, so
+ * their nonces and their listen draws are identical — the worst case there
+ * is. Each must read the other as an echo, redraw, and go on to rendezvous
+ * with exactly one sender.
+ */
+static void nonce_tie_redraws(void)
+{
+    bsim_t s;
+    /*
+     * trig_start draws the nonce FIRST and the listen window after it, so the
+     * head of each array is the forced tie and the tail is timing. The two
+     * arrays agree in their low sixteen bits and in nothing else — forcing the
+     * timing to match as well would put the pair in perfect lockstep, where
+     * neither ever hears the other and the tie is never even discovered. That
+     * is what the first version of this test did, and it passed for the wrong
+     * reason until the check three lines from the end caught it.
+     */
+    static const uint32_t k_a[6] = { 0x00001234u, 61000u,  9000u, 33000u,
+                                     51000u, 17000u };
+    static const uint32_t k_b[6] = { 0xFFFF1234u, 20000u, 47000u,  5000u,
+                                     38000u, 26000u };
+    uint64_t limit;
+
+    hf_begin("trigger: two bands that draw the same nonce redraw and rendezvous");
+
+    bsim_init(&s, 31337);
+    halh_force_random(&s.a, k_a, 6);
+    halh_force_random(&s.b, k_b, 6);
+
+    link_sm_idle(&s.sm_a, s.clock_us);
+    link_sm_idle(&s.sm_b, s.clock_us);
+
+    HF_CHECK_MSG(trig_nonce(&s.sm_a.trig) == trig_nonce(&s.sm_b.trig),
+             "the tie was not actually forced: %u vs %u",
+             trig_nonce(&s.sm_a.trig), trig_nonce(&s.sm_b.trig));
+
+    limit = s.clock_us + RENDEZVOUS_BOUND_US;
+    while (s.clock_us < limit && !(awake(&s.sm_a) && awake(&s.sm_b)))
+        bsim_step(&s);
+
+    HF_CHECK_MSG(awake(&s.sm_a) && awake(&s.sm_b),
+             "a nonce tie never resolved (A %s, B %s)",
+             link_state_name(s.sm_a.state), link_state_name(s.sm_b.state));
+
+    HF_CHECK_MSG((link_sm_role(&s.sm_a) == LINK_ROLE_SENDER) !=
+                 (link_sm_role(&s.sm_b) == LINK_ROLE_SENDER),
+             "roles %s / %s", role_name(link_sm_role(&s.sm_a)),
+             role_name(link_sm_role(&s.sm_b)));
+
+    /*
+     * The tie has to have been SEEN, or this passed by never colliding at all
+     * and proves nothing about the redraw.
+     */
+    HF_CHECK_MSG(s.sm_a.trig.self_echoes + s.sm_b.trig.self_echoes > 0,
+             "neither band ever decoded the shared nonce, so no tie occurred");
+    HF_CHECK_MSG(s.sm_a.trig.redraws + s.sm_b.trig.redraws > 0,
+             "the tie was seen but nobody redrew");
+
+    printf("      nonce tie: %u echoes / %u redraws on A, %u / %u on B;"
+           " resolved in %llu us\n",
+           s.sm_a.trig.self_echoes, s.sm_a.trig.redraws,
+           s.sm_b.trig.self_echoes, s.sm_b.trig.redraws,
+           (unsigned long long)s.clock_us);
+}
+
+/*
+ * THE THIRD THING STEP 7 OWES. A beacon whose CRC is damaged must be IGNORED,
+ * not acted on. Half of that is frame.c's job and test_frame.c pins it; this
+ * is the other half — that the trigger, handed a stream with a broken beacon
+ * in it, does nothing at all.
+ *
+ * Driven through the framer with real chips, because the interesting failure
+ * is not "the trigger ignored a flag" but "the framer handed the trigger a
+ * nonce out of a frame that did not survive its checksum".
+ */
+static void damaged_beacon_is_ignored(void)
+{
+    uint8_t chips[FRAME_BEACON_TOTAL_CHIPS];
+    frame_rx_t r;
+    size_t n, i, bit;
+    uint32_t acted = 0, ignored = 0;
+
+    hf_begin("trigger: a beacon with a damaged CRC is never acted on");
+
+    n = frame_beacon_encode(0x1234u, chips, sizeof chips);
+    HF_CHECK_MSG(n == (size_t)FRAME_BEACON_TOTAL_CHIPS,
+             "encoded %u chips, expected %u", (unsigned)n,
+             (unsigned)FRAME_BEACON_TOTAL_CHIPS);
+
+    /*
+     * Flip one chip of the BODY at a time — every one of them, so this is not
+     * a spot check. A flipped chip inside a Manchester pair makes the pair a
+     * tie, which is a coin toss, so some flips land on the value that was
+     * already there and the frame survives. Those must decode CORRECTLY; the
+     * rest must not decode at all.
+     */
+    for (bit = FRAME_PREAMBLE_CHIPS + FRAME_MARKER_CHIPS; bit < n; bit++) {
+        uint8_t bad[FRAME_BEACON_TOTAL_CHIPS];
+        frame_rx_result_t res = FRAME_RX_NONE;
+
+        memcpy(bad, chips, n);
+        bad[bit] = (uint8_t)!bad[bit];
+
+        frame_rx_init(&r);
+        for (i = 0; i < n; i++) {
+            const frame_rx_result_t one = frame_rx_push(&r, bad[i] ? 400 : -400);
+            if (one != FRAME_RX_NONE) res = one;
+        }
+
+        if (res == FRAME_RX_BEACON) {
+            acted++;
+            HF_CHECK_MSG(frame_rx_nonce(&r) == 0x1234u,
+                     "chip %u: a damaged beacon decoded to nonce %04x",
+                     (unsigned)bit, frame_rx_nonce(&r));
+        } else {
+            ignored++;
+            HF_CHECK_MSG(res == FRAME_RX_NONE,
+                     "chip %u: a damaged beacon returned %d, not silence",
+                     (unsigned)bit, (int)res);
+        }
+    }
+
+    HF_CHECK_MSG(ignored > 0, "no single-chip flip damaged the beacon at all");
+    printf("      damaged beacon: %u of %u body-chip flips rejected, %u"
+           " survived intact\n", ignored, ignored + acted, acted);
+}
+
+/*
+ * THE FLOOR TESTS ARE GONE, WITH THE FLOOR. Link v2 step 5 deleted
+ * dsp/carrier.c, and six checks went with it: that the floor lands on the mean
+ * of ambient rather than its minimum; that it does not climb to meet a carrier
+ * lasting a whole frame; that a reset mid-frame does not blind it on either
+ * Manchester phase; that a reprime recovers inside a frame; that it barely
+ * moves across a preamble; and that brief spikes do not train it upward.
+ *
+ * Every one of those was a way a REMEMBERED number could be poisoned by the
+ * signal it was meant to measure. v2 remembers nothing about the signal: the
+ * reference is three bins the transmitter cannot enter, measured in the same
+ * windows as the signal. test_presence.c tests what replaced them.
+ *
+ * THE SHOUT TEST WENT AT STEP 7. It checked that a shout could not be mistaken
+ * for a frame, because v1's shout was a flat tone deliberately chosen to have
+ * no transitions. The beacon IS a frame, on purpose, and what stops a peer's
+ * framer mistaking it for the front of a card is frame.h's second marker —
+ * tested in test_frame.c, where the format lives.
+ */
+
+/*
+ * Triggering is not the point; handshaking is. The band must go on to exchange
+ * a record with no host call anywhere in the path — and the frames it spends
+ * doing so are the regression canary for handover, because an end that
+ * misreads the channel talks over the reply it asked for and the count goes up
+ * several fold.
  */
 static void trigger_completes_a_handshake(void)
 {
@@ -600,7 +721,7 @@ static void trigger_completes_a_handshake(void)
                  role_name(link_sm_role(&s.sm_b)));
 
         /* The point of the whole exercise: each end is holding the other's
-         * card, having been started by nothing but a shout. */
+         * card, having been started by nothing but a beacon. */
         n = link_sm_received(&s.sm_a, &got);
         HF_CHECK_MSG(n >= sizeof k_blob_b &&
                      memcmp(got, k_blob_b, sizeof k_blob_b) == 0,
@@ -623,7 +744,7 @@ static void trigger_completes_a_handshake(void)
     /*
      * Two single-fragment cards need one frame each way, plus an acknowledging
      * frame each way. Anything far above that means an end is transmitting into
-     * a channel it should have heard was busy — see §5.1.
+     * a channel it should have heard was busy.
      */
     HF_CHECK_MSG(frames_worst <= 12,
              "%u frames to exchange two one-fragment cards: handover is"
@@ -674,10 +795,12 @@ void test_beacon(void)
 {
     alone_never_triggers();
     phase_sweep();
+    steady_state_rendezvous();
     simultaneous_start();
     stuck_carrier();
-    shout_is_not_a_preamble();
-    the_floor_is_the_room_not_the_carrier();
+    own_beacon_is_never_a_peer();
+    nonce_tie_redraws();
+    damaged_beacon_is_ignored();
     trigger_completes_a_handshake();
     re_arms_after_a_contact();
 }

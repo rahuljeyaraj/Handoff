@@ -15,8 +15,9 @@
  *
  * §7.2's fourth case, the election tie, is gone: there is no election. IDLE
  * runs the trigger of beacon.h, which decides who sends by timing geometry
- * rather than by a draw, and exits straight to TX_FRAME or RX_FRAME. See
- * docs/simple-trigger-spec.md §2.
+ * rather than by a draw, and exits straight to TX_FRAME or RX_FRAME. Link v2
+ * step 7 replaced the flat-tone shout that geometry runs on with a
+ * CRC-checked nonce beacon, and kept the geometry — beacon.h §2.
  */
 #ifndef HANDOFF_LINK_SM_H
 #define HANDOFF_LINK_SM_H
@@ -26,10 +27,10 @@
 
 #include "beacon.h"
 #include "carousel.h"
-#include "carrier.h"
 #include "frag.h"
 #include "frame.h"
 #include "hal.h"
+#include "manchester.h"
 
 typedef enum {
     LINK_IDLE = 0,     /* no contact: running the trigger, see beacon.h     */
@@ -46,13 +47,13 @@ const char *link_state_name(link_state_t s);
 
 /*
  * Which end of the exchange this band is. NOT an election result — the trigger
- * hands it out, and §2 of the spec is the argument that exactly one band can
- * get SENDER. It survives as telemetry, and because the frame header carries a
+ * hands it out, and beacon.h §2 is the argument that exactly one band can get
+ * SENDER. It survives as telemetry, and because the frame header carries a
  * REPLY bit and the carousel is asymmetric for the first turn.
  */
 typedef enum {
     LINK_ROLE_NONE = 0,
-    LINK_ROLE_SENDER,     /* heard a shout: the channel is ours, talk first */
+    LINK_ROLE_SENDER,     /* decoded a beacon: the channel is ours, talk first */
     LINK_ROLE_RECEIVER    /* a card is already arriving: listen first       */
 } link_role_t;
 
@@ -75,9 +76,12 @@ typedef struct {
 
     /*
      * A gap of silence after which the channel is considered free. This, and
-     * counting the far end's frames, are what actually drive handover. Must
-     * exceed the carrier detector's hold (8 chips) so it cannot fire between
-     * the chips of a frame, and stay well under a frame so handover is prompt.
+     * counting the far end's frames, are what actually drive handover.
+     *
+     * Under link v2 presence has no hold and no hysteresis, so this no longer
+     * has to outlast one: it has to outlast the gap a real frame can leave in
+     * the busy latch, which frame_rx_busy() covers anyway. It still has to
+     * stay well under a frame so handover is prompt.
      *
      * There is deliberately no separate receive-window setting: a fixed window
      * that could be shorter than a turn is a foot-gun — set it a little too
@@ -108,7 +112,6 @@ typedef struct {
 
     trig_t       trig;
     carousel_t   car;
-    carrier_t    carrier;
     frame_rx_t   framer;
     frag_rx_t    rx;
 
@@ -116,7 +119,7 @@ typedef struct {
 
     uint64_t     started_us;
     uint64_t     deadline_us;
-    uint64_t     last_carrier_us;
+    uint64_t     last_busy_us;   /* last poll the channel read busy        */
     uint8_t      turn_frames;    /* frames sent in the current turn        */
     uint8_t      rx_turn_frames; /* frames heard since we last transmitted */
     uint8_t      barren_turns;   /* consecutive receive turns that heard nothing */
@@ -130,13 +133,6 @@ typedef struct {
      * the half-built record that architecture §8.4 says is worth keeping.
      */
     bool         exchange_open;
-
-    /*
-     * frame_rx_t::syncs as of the last poll in which the trigger was not
-     * waiting. Only a sync newer than this counts as "a card is arriving" —
-     * see poll_idle().
-     */
-    uint32_t     idle_syncs;
 
     uint8_t      chips[FRAME_TOTAL_CHIPS];
     size_t       chips_len;

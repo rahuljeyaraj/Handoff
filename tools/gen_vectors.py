@@ -8,7 +8,7 @@ loopback test passes and the link still fails on the bench. An independently
 written generator is the only thing that catches that class of bug, so nothing
 here imports, links to, or consults the C. It is written from the documents:
 
-    design section 9.1  OOK, carrier gated on for a mark
+    link-v2 section 4   two tones, one per chip value, constant envelope
     design section 9.2  Manchester, mark = on-then-off
     design section 9.4  preamble 32 alternating chips, marker 11110000
     architecture 8.3    2-byte header, fixed payload, CRC-16
@@ -42,11 +42,15 @@ DEFAULT_OUT = REPO_ROOT / "firmware" / "test" / "vectors" / "generated"
 
 ADC_FS_HZ = 500_000          # design 10.2
 
-# design 3.2. 200 kHz is the operating carrier; 40 kHz is the bring-up one, and
-# only the PIO divider changes between them. --carrier-hz follows whatever the
-# build under test is configured for, because a vector generated at the wrong
-# carrier lands in the wrong Goertzel bin and decodes as silence.
-CARRIER_HZ = 200_000
+# link-v2 section 4. Two tones, on ADJACENT bins, and the frequencies are
+# DERIVED rather than typed: the bin spacing is the window rate, so a tone is
+# its bin index times ADC_FS_HZ / gz_n. Chip 0 is tone A, chip 1 is tone B.
+#
+# The bins follow whatever the build under test is configured for, because a
+# vector generated on the wrong bins lands in the wrong place in the transform
+# and decodes as silence.
+TONE_A_BIN = 9
+TONE_B_BIN = 10
 WINDOWS_PER_CHIP = 5         # design 9.3
 PREAMBLE_CHIPS = 32          # design 9.4
 START_MARKER = 0xF0          # design 9.4, "11110000"
@@ -113,16 +117,25 @@ def build_frame(payload: bytes, frag_index=0, frag_count=1, record_id=0, flags=0
 
 def modulate(chips, gz_n, *, amplitude=200.0, noise_rms=0.0, dc=2048.0,
              carrier_ppm=0.0, clock_ppm=0.0, ramp_db=0.0, seed=1,
-             carrier_hz=None):
+             tone_bins=(TONE_A_BIN, TONE_B_BIN)):
     """
-    design 9.1: gate the carrier on for a mark, off for a space.
+    link-v2 section 4: a tone for every chip, tone A for 0 and tone B for 1.
+    The pad is driven throughout the burst -- there is no space to render.
 
     Deliberately a different implementation from chan.c: a straight sine
     against absolute time rather than an integrated phase, its own LCG rather
     than xorshift. Agreement between the two is then evidence.
+
+    THE TWO AGREE EXACTLY EVEN THOUGH THE TONE CHANGES MID-BURST, and that is
+    arithmetic rather than luck. A chip is a whole number of periods of either
+    tone (config.h asserts it), so at every chip boundary an integrated phase
+    is back at zero -- which is where sin(2*pi*f*t) is too. Inside a chip both
+    then reduce to the same sine of the same offset.
     """
     spc = gz_n * WINDOWS_PER_CHIP
-    fc = (carrier_hz or CARRIER_HZ) * (1.0 + carrier_ppm * 1e-6)
+    bin_hz = ADC_FS_HZ / gz_n
+    ftone = [tone_bins[0] * bin_hz * (1.0 + carrier_ppm * 1e-6),
+             tone_bins[1] * bin_hz * (1.0 + carrier_ppm * 1e-6)]
     chip_samples = spc * (1.0 + clock_ppm * 1e-6)
     # Sized off the OFFSET chip period, not the nominal one: a slow transmitter
     # needs more receiver samples for the same chips, and a buffer sized at the
@@ -141,8 +154,8 @@ def modulate(chips, gz_n, *, amplitude=200.0, noise_rms=0.0, dc=2048.0,
             amp *= 10.0 ** ((ramp_db * ci / (len(chips) - 1)) / 20.0)
 
         v = dc
-        if ci < len(chips) and chips[ci]:
-            v += amp * math.sin(2.0 * math.pi * fc * t)
+        if ci < len(chips):
+            v += amp * math.sin(2.0 * math.pi * ftone[1 if chips[ci] else 0] * t)
 
         if noise_rms:
             # Irwin-Hall: twelve uniforms sum to something near gaussian with
@@ -211,8 +224,10 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--gz-n", type=int, default=25,
                     help="Goertzel window length; sets samples per chip (default 25)")
-    ap.add_argument("--carrier-hz", type=int, default=CARRIER_HZ,
-                    help="200000 to operate, 40000 to bring up (design 3.2)")
+    ap.add_argument("--tone-a-bin", type=int, default=TONE_A_BIN,
+                    help="Goertzel bin of tone A, chip value 0 (link-v2 4)")
+    ap.add_argument("--tone-b-bin", type=int, default=TONE_B_BIN,
+                    help="Goertzel bin of tone B, chip value 1 (link-v2 4)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -222,7 +237,8 @@ def main() -> int:
     manifest = {
         "generated_by": "tools/gen_vectors.py",
         "adc_fs_hz": ADC_FS_HZ,
-        "carrier_hz": args.carrier_hz,
+        "tone_a_hz": args.tone_a_bin * ADC_FS_HZ // args.gz_n,
+        "tone_b_hz": args.tone_b_bin * ADC_FS_HZ // args.gz_n,
         "gz_n": args.gz_n,
         "windows_per_chip": WINDOWS_PER_CHIP,
         "samples_per_chip": spc,
@@ -239,7 +255,8 @@ def main() -> int:
 
         chip_path.write_text("".join("%d\n" % c for c in chips), encoding="ascii")
         samp_path.write_bytes(modulate(chips, args.gz_n,
-                                       carrier_hz=args.carrier_hz, **kw))
+                                       tone_bins=(args.tone_a_bin, args.tone_b_bin),
+                                       **kw))
 
         manifest["vectors"].append({
             "name": name,

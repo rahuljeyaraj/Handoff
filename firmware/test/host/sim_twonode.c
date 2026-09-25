@@ -18,9 +18,31 @@ static void build_record(const char *card, frag_tx_t *out, uint8_t record_id)
     frag_split(blob, len, store_record_id(&st), out);
 }
 
+/*
+ * THE ROOM, BEFORE ANYBODY ARRIVES. Link v2 step 5.
+ *
+ * dsp/presence.c answers nothing until its CFAR reference holds
+ * HANDOFF_CFAR_CELLS guard windows — one preamble of airtime, by derivation.
+ * A band on a wrist filled that in the first eight milliseconds after boot and
+ * has held it ever since; a simulator that builds two fresh nodes per contact
+ * has not, so without this every contact begins against a detector that is
+ * still deaf and the receiving end walks away before the preamble decodes.
+ *
+ * This cannot be done by lengthening the lead-in above, because the lead-in is
+ * capped by rx_idle_us at six milliseconds and the reference wants eight. So
+ * the channel is run BEFORE either end is armed, which is what actually
+ * happened on the wrist.
+ *
+ * Twice the reference, so the boxcar is full and settled rather than exactly
+ * full on the last chip.
+ */
+#define SIM_ROOM_CHIPS (2u * (unsigned)HANDOFF_CFAR_REF_CHIPS)
+
 void sim_init(sim_t *s, const char *card_a, const char *card_b,
               const link_cfg_t *cfg, uint64_t seed)
 {
+    unsigned i;
+
     memset(s, 0, sizeof *s);
 
     if (cfg) s->cfg = *cfg; else link_cfg_default(&s->cfg);
@@ -31,6 +53,13 @@ void sim_init(sim_t *s, const char *card_a, const char *card_b,
     s->a_sends = ((seed & 1u) == 0u);
 
     halh_pair(&s->node_a, &s->node_b, &s->clock_us, seed);
+
+    /* Let the room exist before anybody arrives — see SIM_ROOM_CHIPS. Here
+     * rather than in sim_run(), because several tests drive the two state
+     * machines themselves and every one of them needs it. */
+    for (i = 0; i < SIM_ROOM_CHIPS; i++)
+        halh_advance(&s->node_a, &s->node_b, HANDOFF_CHIP_US);
+
     link_sm_init(&s->sm_a, &s->node_a.iface, &s->cfg, &s->rec_a);
     link_sm_init(&s->sm_b, &s->node_b.iface, &s->cfg, &s->rec_b);
 }
@@ -39,20 +68,16 @@ void sim_init(sim_t *s, const char *card_a, const char *card_b,
  * Quiet handed to the receiving end before the sender starts.
  *
  * Not a fudge, and not tuning. On a wrist the receiving end has been listening
- * for a whole window before a card arrives, so carrier.c's floor is primed on
- * ambient silence and the frame reads as three times that floor. Start both
- * ends in the same microsecond and the detector primes instead on the frame's
- * first preamble chip, which is a HIGH one: the floor sits at the carrier's own
- * level and, measured, never recovers inside the frame. Handover then decides
- * the channel is idle and talks over it. Costed at 650 frames for the same 50
- * handshakes against 450 with the lead-in — and the first frame of a contact,
- * which is the one a brief contact has.
+ * for a whole window before a card arrives. Start both ends in the same
+ * microsecond and the receiver meets the frame with a detector that has never
+ * seen the channel.
  *
- * One millisecond is four chips; the floor primes on the first. It stays well
- * inside rx_idle_us, so the receiver cannot mistake the lead-in for the far end
- * having gone quiet.
+ * It stays well inside rx_idle_us, so the receiver cannot mistake the lead-in
+ * for the far end having gone quiet — which is what bounds it, and which is
+ * why the room below is settled separately rather than by making this longer.
  */
 #define SIM_RX_PRIME_US 1000u
+
 
 sim_result_t sim_run(sim_t *s, uint64_t contact_us)
 {

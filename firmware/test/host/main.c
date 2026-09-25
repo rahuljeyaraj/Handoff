@@ -39,6 +39,8 @@ static const suite_t k_suites[] = {
     { "crc",        test_crc },
     { "manchester", test_manchester },
     { "goertzel",   test_goertzel },
+    { "gz_bank",    test_gz_bank },
+    { "presence",   test_presence },
     { "sync",       test_sync },
     { "frame",      test_frame },
     { "chunk",      test_chunk },
@@ -54,6 +56,8 @@ static const suite_t k_suites[] = {
     { "vectors",    test_vectors },
     { "channel",    test_channel },
     { "budget",     test_budget },
+    { "clock",      test_clock },
+    { "fsk",        test_fsk },
 };
 
 int main(int argc, char **argv)

@@ -5,8 +5,16 @@
 #include "crc.h"
 #include "manchester.h"
 
-/* The seven chips that must follow the 00, per the sync rule in frame.h. */
-static const uint8_t k_marker_tail[7] = { 1, 0, 1, 0, 1, 0, 1 };
+/*
+ * The seven chips that must follow the 00, per the sync rule in frame.h — one
+ * row per frame type. Manchester of 1111 0xyz, from the chip after the 00:
+ * the second half of bit 4, then bits 5, 6 and 7.
+ *
+ *      0xF0  1 0 1 0 1 0 1   a card
+ *      0xF5  1 1 0 0 1 1 0   a beacon
+ */
+static const uint8_t k_marker_tail[FRAME_MARKER_TAIL] = { 1, 0, 1, 0, 1, 0, 1 };
+static const uint8_t k_beacon_tail[FRAME_MARKER_TAIL] = { 1, 1, 0, 0, 1, 1, 0 };
 
 void frame_hdr_pack(const frame_hdr_t *h, uint8_t out[FRAME_HDR_BYTES])
 {
@@ -58,6 +66,67 @@ size_t frame_encode(const frame_hdr_t *h, const uint8_t *payload, size_t n,
     return out;
 }
 
+size_t frame_beacon_encode(uint16_t nonce, uint8_t *chips, size_t max_chips)
+{
+    uint8_t body[FRAME_BEACON_BODY_BYTES];
+    uint16_t crc;
+    size_t out = 0, i;
+
+    if (max_chips < (size_t)FRAME_BEACON_TOTAL_CHIPS) return 0;
+
+    for (i = 0; i < FRAME_PREAMBLE_CHIPS; i++)
+        chips[out++] = (uint8_t)((i % 2u) ? 0u : 1u);   /* 1010... */
+
+    body[0] = (uint8_t)(nonce >> 8);
+    body[1] = (uint8_t)(nonce & 0xFFu);
+    crc = crc16(body, FRAME_BEACON_NONCE_BYTES);
+    body[FRAME_BEACON_NONCE_BYTES]     = (uint8_t)(crc >> 8);
+    body[FRAME_BEACON_NONCE_BYTES + 1] = (uint8_t)(crc & 0xFFu);
+
+    {
+        const uint8_t marker = FRAME_BEACON_MARKER_BYTE;
+        out += manchester_encode(&marker, 1, chips + out, max_chips - out);
+        out += manchester_encode(body, FRAME_BEACON_BODY_BYTES,
+                                 chips + out, max_chips - out);
+    }
+
+    return out;
+}
+
+bool frame_beacon_nonce_ok(uint16_t nonce)
+{
+    uint8_t chips[FRAME_BEACON_TOTAL_CHIPS];
+    uint32_t hist = 0;
+    size_t i, j;
+
+    if (frame_beacon_encode(nonce, chips, sizeof chips) != sizeof chips)
+        return false;
+
+    for (i = 1; i < sizeof chips; i++) {
+        hist = (hist << 1) | (uint32_t)(chips[i] != chips[i - 1]);
+
+        /* Not enough history yet for the hunt to believe anything. */
+        if (i < (size_t)FRAME_ALT_WINDOW + 1u) continue;
+
+        /* The hunt triggers on a 00, and only on a 00. */
+        if (chips[i] || chips[i - 1]) continue;
+
+        {
+            uint32_t v = hist & ((1u << FRAME_ALT_WINDOW) - 1u);
+            unsigned n = 0;
+            while (v) { n += v & 1u; v >>= 1; }
+            if (n < FRAME_ALT_MIN) continue;
+        }
+
+        /* A sync here is unavoidable; what matters is which tail follows. */
+        if (i + FRAME_MARKER_TAIL >= sizeof chips) break;
+        for (j = 0; j < FRAME_MARKER_TAIL; j++)
+            if (chips[i + 1 + j] != k_marker_tail[j]) break;
+        if (j == FRAME_MARKER_TAIL) return false;   /* a card marker. Redraw. */
+    }
+    return true;
+}
+
 /* ---- receive ---------------------------------------------------------- */
 
 void frame_rx_init(frame_rx_t *r)
@@ -73,8 +142,14 @@ void frame_rx_reset(frame_rx_t *r)
     r->alt_hist = 0;
     r->seen = 0;
     r->marker_pos = 0;
+    r->card_alive = false;
+    r->beacon_alive = false;
     r->chip_pos = 0;
+    r->body_bytes = FRAME_BODY_BYTES;
+    r->body_is_beacon = false;
     r->margin_acc = 0;
+    r->pre_a = r->pre_b = 0;
+    r->pre_na = r->pre_nb = 0;
 }
 
 /* Record one chip in the transition history the preamble hunt runs on. */
@@ -83,6 +158,65 @@ static void observe(frame_rx_t *r, uint8_t c)
     r->alt_hist = (r->alt_hist << 1) | (uint32_t)(c != r->prev_chip);
     if (r->seen < 0xFFFFu) r->seen++;
     r->prev_chip = c;
+}
+
+/*
+ * Integer square root, for the two numbers a HUMAN reads: the margin and the
+ * imbalance. Both are computed once per frame on core 0, so design §6's "no
+ * square roots" — which is about a hot path running twenty thousand times a
+ * second — does not reach here. Written out rather than taken from
+ * dsp/goertzel.h so that lib/link keeps owing lib/dsp nothing.
+ */
+static uint32_t isqrt_u64(uint64_t v)
+{
+    uint64_t root = 0, bit;
+
+    for (bit = 1ull << 31; bit; bit >>= 1) {
+        const uint64_t t = root | bit;
+        if (t * t <= v) root = t;
+    }
+    return (uint32_t)root;
+}
+
+/*
+ * mag^2 to the amplitude-like LSB score every console in this tree prints.
+ * The same relation dsp/goertzel.h states: score = 2 * sqrt(mag2) / N.
+ */
+static uint32_t score_of(uint64_t mag2)
+{
+    return (uint32_t)((2ull * isqrt_u64(mag2)) / (uint64_t)HANDOFF_GZ_N);
+}
+
+/*
+ * The 180/200 imbalance, taken off the run that led into this sync. Not a
+ * correction — see frame.h. Through an alternating run the negative d's are
+ * tone A and the positive ones tone B, so their magnitudes are the two tones
+ * measured through the same coupling within a few chips of each other.
+ *
+ * mag^2, so the percentage is taken on the square root to be an AMPLITUDE
+ * ratio: that is what step 4's 9.1 % is stated in, and a reading that could
+ * not be compared with it would be worth nothing.
+ */
+static uint16_t imbalance_pct(const frame_rx_t *r)
+{
+    uint64_t a, b, root;
+
+    if (!r->pre_na || !r->pre_nb) return 0;
+    a = r->pre_a / r->pre_na;
+    b = r->pre_b / r->pre_nb;
+    if (!a) return 0;
+
+    /* 100 * sqrt(b/a) = sqrt(10000 * b / a), in integers. */
+    root = isqrt_u64(b * 10000ull / a);
+    return (uint16_t)(root > 0xFFFFu ? 0xFFFFu : root);
+}
+
+/* Collect one chip into the imbalance instrument. Hunt and marker only: the
+ * body is data, and a run of one tone would bias it. */
+static void observe_tone(frame_rx_t *r, frame_chip_t d)
+{
+    if (d > 0)      { r->pre_b += (uint64_t)d;  r->pre_nb++; }
+    else if (d < 0) { r->pre_a += (uint64_t)(-(int64_t)d); r->pre_na++; }
 }
 
 /* How many of the last FRAME_ALT_WINDOW transitions alternated. */
@@ -95,37 +229,29 @@ static unsigned alt_count(const frame_rx_t *r)
 }
 
 /*
- * Adaptive slicer. Hard chip decisions are needed only during the preamble
- * hunt — once locked, every decision is Manchester's relative comparison and
- * no threshold is involved at all (design §9.2). hi tracks fast up and decays
- * slow; lo mirrors it. The midpoint slices.
+ * A beacon's body: two bytes of nonce and two of CRC. Short enough that the
+ * margin is not worth reporting off it — the card frames that follow a
+ * rendezvous carry twenty times the bits and are what a bench should read.
  *
- * Every step is at least one LSB. Found on the bench at M5: with the decay
- * written as a plain shift, (hi - lo) >> 6 is zero once the gap is under 64,
- * so after one loud transient hi froze at lo + 63 and a 3 LSB frame could
- * never slice high again. The receiver was deaf until re-initialised — and a
- * wristband receiver is never re-initialised between a firm grip and a light
- * one. test_frame pins it.
+ * A FAILED CRC RETURNS NONE, not BAD_CRC. See frame_rx_result_t: a beacon
+ * that did not survive its checksum is not news, and the whole point of
+ * giving the trigger a frame was that "was that a peer?" stops being a
+ * judgement call. Counted for a human, and otherwise it never happened.
  */
-static inline int32_t step_toward(int32_t gap, int shift)
+static frame_rx_result_t finish_beacon(frame_rx_t *r)
 {
-    const int32_t s = gap >> shift;
-    return s > 0 ? s : (gap > 0 ? 1 : 0);
-}
+    const uint16_t want = crc16(r->body, FRAME_BEACON_NONCE_BYTES);
+    const uint16_t got  = (uint16_t)(((uint16_t)r->body[FRAME_BEACON_NONCE_BYTES] << 8)
+                                    | r->body[FRAME_BEACON_NONCE_BYTES + 1]);
+    const uint16_t nonce = (uint16_t)(((uint16_t)r->body[0] << 8) | r->body[1]);
 
-static bool slice(frame_rx_t *r, uint16_t e)
-{
-    const int32_t x = (int32_t)e;
+    frame_rx_reset(r);
 
-    if (!r->primed) { r->hi = x; r->lo = x; r->primed = true; }
+    if (want != got) { r->beacons_bad_crc++; return FRAME_RX_NONE; }
 
-    if (x > r->hi) r->hi += step_toward(x - r->hi, 1);
-    else           r->hi -= step_toward(r->hi - r->lo, 6);
-    if (x < r->lo) r->lo -= step_toward(r->lo - x, 1);
-    else           r->lo += step_toward(r->hi - r->lo, 6);
-    if (r->hi < r->lo) { const int32_t t = r->hi; r->hi = r->lo; r->lo = t; }
-
-    return x * 2 > (r->hi + r->lo);
+    r->last_nonce = nonce;
+    r->beacons_good++;
+    return FRAME_RX_BEACON;
 }
 
 static frame_rx_result_t finish_body(frame_rx_t *r)
@@ -133,8 +259,17 @@ static frame_rx_result_t finish_body(frame_rx_t *r)
     const uint16_t want = crc16(r->body, FRAME_HDR_BYTES + HANDOFF_FRAG_PAYLOAD);
     const uint16_t got  = (uint16_t)(((uint16_t)r->body[FRAME_HDR_BYTES + HANDOFF_FRAG_PAYLOAD] << 8)
                                     | r->body[FRAME_HDR_BYTES + HANDOFF_FRAG_PAYLOAD + 1]);
+    const uint64_t mean = r->margin_acc / (FRAME_BODY_BYTES * 8u);
 
-    r->last_margin = (uint16_t)(r->margin_acc / (FRAME_BODY_BYTES * 8u));
+    /*
+     * THE MARGIN IS REPORTED IN LSB, not in mag^2, so that a bench number
+     * means the same thing it did before step 6. |d(first) - d(second)| is
+     * S_A^2 + S_B^2 — both tones, because every Manchester bit holds one of
+     * each — so its root is sqrt(2) times the amplitude of one tone where
+     * they are equal. v1's margin was one tone's amplitude minus silence.
+     * Same units, within that factor; nothing else to know.
+     */
+    r->last_margin = score_of(mean);
     frame_hdr_unpack(r->body, &r->hdr);
     frame_rx_reset(r);
 
@@ -144,12 +279,15 @@ static frame_rx_result_t finish_body(frame_rx_t *r)
     return FRAME_RX_BAD_CRC;
 }
 
-frame_rx_result_t frame_rx_push(frame_rx_t *r, uint16_t chip_energy)
+frame_rx_result_t frame_rx_push(frame_rx_t *r, frame_chip_t d)
 {
-    const uint8_t c = slice(r, chip_energy) ? 1u : 0u;
+    /* THE WHOLE CHIP DECISION. No slicer, no threshold, nothing remembered:
+     * tone B louder than tone A, measured in the same window. */
+    const uint8_t c = (d > 0) ? 1u : 0u;
 
     switch (r->state) {
     case FRAME_ST_HUNT:
+        observe_tone(r, d);
         if (!r->have_prev) {
             r->prev_chip = c;
             r->have_prev = true;
@@ -167,12 +305,20 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, uint16_t chip_energy)
             r->seen > FRAME_ALT_WINDOW && alt_count(r) >= FRAME_ALT_MIN) {
             r->state = FRAME_ST_MARKER;
             r->marker_pos = 0;
+            /* Both frame types are still possible until a tail chip says
+             * otherwise. frame.h: they differ at chip 1, so this is settled
+             * fast — but nothing below assumes it. */
+            r->card_alive = true;
+            r->beacon_alive = true;
         }
         observe(r, c);
         return FRAME_RX_NONE;
 
     case FRAME_ST_MARKER:
-        if (c != k_marker_tail[r->marker_pos]) {
+        if (r->card_alive   && c != k_marker_tail[r->marker_pos]) r->card_alive = false;
+        if (r->beacon_alive && c != k_beacon_tail[r->marker_pos]) r->beacon_alive = false;
+
+        if (!r->card_alive && !r->beacon_alive) {
             /*
              * A corrupted preamble chip can manufacture a 00; the tail check
              * is what rejects it. Resume hunting — but KEEP the transition
@@ -184,22 +330,29 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, uint16_t chip_energy)
              */
             r->false_syncs++;
             r->state = FRAME_ST_HUNT;
+            observe_tone(r, d);
             observe(r, c);
             return FRAME_RX_NONE;
         }
+        observe_tone(r, d);
         observe(r, c);
-        if (++r->marker_pos == sizeof k_marker_tail) {
+        if (++r->marker_pos == FRAME_MARKER_TAIL) {
             r->state = FRAME_ST_BODY;
             r->chip_pos = 0;
             r->margin_acc = 0;
-            r->syncs++;
+            r->last_imbalance_pct = imbalance_pct(r);
+            /* Distance 6 between the tails, so both cannot have survived. */
+            r->body_is_beacon = r->beacon_alive;
+            r->body_bytes = r->beacon_alive ? FRAME_BEACON_BODY_BYTES
+                                            : FRAME_BODY_BYTES;
+            if (r->beacon_alive) r->beacon_syncs++; else r->syncs++;
         }
         return FRAME_RX_NONE;
 
     case FRAME_ST_BODY:
     default:
         if ((r->chip_pos & 1u) == 0u) {
-            r->first_energy = chip_energy;
+            r->first_d = d;
             r->chip_pos++;
             return FRAME_RX_NONE;
         }
@@ -207,18 +360,18 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, uint16_t chip_energy)
             const uint16_t bit_index = (uint16_t)(r->chip_pos >> 1);
             const size_t   byte = bit_index >> 3;
             const int      shift = 7 - (bit_index & 7u);
-            const bool     bit = manchester_bit(r->first_energy, chip_energy);
+            const bool     bit = manchester_bit(r->first_d, d);
 
-            r->margin_acc += manchester_margin(r->first_energy, chip_energy);
+            r->margin_acc += manchester_margin(r->first_d, d);
 
-            if (byte < FRAME_BODY_BYTES) {
+            if (byte < r->body_bytes) {
                 if (shift == 7) r->body[byte] = 0;
                 r->body[byte] = (uint8_t)(r->body[byte] | ((bit ? 1u : 0u) << shift));
             }
             r->chip_pos++;
 
-            if (r->chip_pos >= (uint16_t)(FRAME_BODY_BYTES * 16))
-                return finish_body(r);
+            if (r->chip_pos >= (uint16_t)(r->body_bytes * 16))
+                return r->body_is_beacon ? finish_beacon(r) : finish_body(r);
         }
         return FRAME_RX_NONE;
     }
@@ -226,6 +379,7 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, uint16_t chip_energy)
 
 const frame_hdr_t *frame_rx_hdr(const frame_rx_t *r)     { return &r->hdr; }
 const uint8_t     *frame_rx_payload(const frame_rx_t *r) { return r->body + FRAME_HDR_BYTES; }
+uint16_t           frame_rx_nonce(const frame_rx_t *r)   { return r->last_nonce; }
 
 /* MARKER counts as well as BODY: the preamble really did arrive, so somebody
  * is transmitting, and walking away between the marker and the body would

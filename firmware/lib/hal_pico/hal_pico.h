@@ -16,6 +16,7 @@
 #define HANDOFF_HAL_PICO_H
 
 #include "adc_ring.h"
+#include "gz_bank.h"
 #include "hal.h"
 #include "pio_carrier.h"
 
@@ -47,8 +48,7 @@
  * rx_idle_us at its 6 ms default giving up on a reply that was still in
  * the ring, and the two boards talking over each other every turn.
  */
-#define HAL_PICO_RX_LATENCY_US \
-    ((uint32_t)ADC_RING_BLOCK * 1000000u / (uint32_t)HANDOFF_ADC_FS_HZ)
+#define HAL_PICO_RX_LATENCY_US    HANDOFF_RX_LATENCY_US
 
 /*
  * How long hal_tx_chips() takes to get a frame onto the pad: pio_carrier_send
@@ -111,6 +111,11 @@ uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last);
  * the pair that prove it is not: both belong on any heartbeat. */
 uint32_t hal_pico_chips(void);
 uint32_t hal_pico_windows(void);
+
+/* ADC samples core 1 has taken from the ring. The denominator of a
+ * cycles-per-sample budget, and unlike the window count it keeps
+ * advancing with the bank switched off. */
+uint32_t hal_pico_samples(void);
 uint32_t hal_pico_sps(void);
 
 /*
@@ -137,7 +142,7 @@ uint16_t hal_pico_read_vsys_mv(void);
  * is up to a DMA block, 4 ms, which is four turnaround budgets. Same ring
  * as hal_rx_chips(); pop from one or the other.
  */
-size_t   hal_pico_rx_chips_at(uint16_t *dst, uint32_t *idx, size_t max);
+size_t   hal_pico_rx_chips_at(int32_t *dst, uint32_t *idx, size_t max);
 uint64_t hal_pico_sample_us(uint64_t idx);
 
 /* When the last send's final chip ended on the pad (the DMA start plus the
@@ -161,5 +166,154 @@ bool     hal_pico_tx_abort(void);
  * hal_pico_rx_chips_at(), which hands over the raw stream.
  */
 uint32_t hal_pico_rx_cut(void);
+
+/*
+ * ---- link v2 step 1: the clock tree, measured ---------------------------
+ *
+ * An instrument, not behaviour. Moving sys_clk 150 -> 144 MHz (link v2 §4)
+ * is only safe if the ADC and USB clocks do not move with it, and the brief
+ * says verify that rather than assume it. clock_get_hz() would only repeat
+ * what the SDK was told; this counts each clock against the crystal with the
+ * RP2350 frequency counter, so a clock that is not where it is supposed to
+ * be shows up as a number rather than as a dead link.
+ *
+ * Fills *m and returns it. Every field is kHz as measured, except the two
+ * *_cfg fields, which are what the SDK believes — print both and compare.
+ */
+typedef struct {
+    uint32_t sys_khz;       /* measured clk_sys  */
+    uint32_t usb_khz;       /* measured clk_usb  — must stay 48000 */
+    uint32_t adc_khz;       /* measured clk_adc  — must stay 48000 */
+    uint32_t peri_khz;      /* measured clk_peri */
+    uint32_t ref_khz;       /* measured clk_ref  — the crystal path */
+    uint32_t sys_cfg_khz;   /* what the SDK was told clk_sys is */
+    uint32_t adc_cfg_khz;   /* what the SDK was told clk_adc is */
+} hal_pico_clocks_t;
+
+void hal_pico_clocks(hal_pico_clocks_t *m);
+
+/*
+ * ---- link v2 step 2: read any bin -------------------------------------
+ *
+ * An instrument, not behaviour. hal_pico_set_carrier() moves the transmitter
+ * and the receiver together, which is right for the link and useless for the
+ * bin bank: the guards at 140, 160 and 220 kHz are RECEIVE-ONLY and are not
+ * PIO dividers at all, so set_carrier() refuses them.
+ *
+ * This retunes the PROBE — one Goertzel that has no other job since step 6 —
+ * to any bin the window can hold, and leaves the generator exactly where it
+ * is. With the two-tone generator driving one tone continuously, walking the
+ * bank is then five reads, and the one that matters is that bins 7, 8 and 11
+ * stay at the noise while a tone is being transmitted. A guard that rises
+ * with our own transmitter is v1's floor again (design §4).
+ *
+ * THE PROBE IS NOT IN THE LINK. Retuning it does not disturb the receiver:
+ * the chip stream comes off the bank's two tone bins, which this cannot
+ * move. Before step 6 it was the link, and a retune cost every frame in
+ * flight.
+ *
+ * Blocks until core 1 has re-tuned. Returns false, changing nothing, for a
+ * bin at or above Nyquist for the window.
+ */
+bool     hal_pico_set_rx_bin(uint16_t bin);
+uint16_t hal_pico_rx_bin(void);
+
+/*
+ * Run the probe for `windows` Goertzel windows and report the mean and the
+ * max of its score. Mean is in TENTHS of an LSB, which is how every console
+ * here prints a level.
+ *
+ * It runs only while this call is outstanding — a board nobody is looking at
+ * pays nothing for it (see the probe's comment in hal_pico.c). Bounded: on a
+ * timeout it returns false with whatever it collected.
+ */
+typedef struct {
+    uint32_t windows;
+    uint32_t mean_tenths;
+    uint32_t max;
+} hal_pico_probe_t;
+
+bool hal_pico_probe(uint32_t windows, uint32_t timeout_us, hal_pico_probe_t *out);
+
+/*
+ * ---- link v2: the five-bin bank ----------------------------------------
+ *
+ * STEP 5 PROMOTED THIS. The bank (dsp/gz_bank.h) is now the receiver's
+ * presence front end — dsp/presence.c decides busy off every one of its
+ * windows and hal.h's rx_busy publishes it — so it runs by DEFAULT, and
+ * dsp/carrier.c is gone.
+ *
+ * The switch stays because the budget instrument is still worth having. Step
+ * 1 found a 4-point swing in core-1 load from adding one unrelated function
+ * and moving the image in XIP, so two images cannot be compared and the only
+ * measurement worth anything is the bank switched on and off inside ONE
+ * image. That is exactly what these do.
+ *
+ * SWITCHING IT OFF MAKES THE BOARD DEAF TO PRESENCE. There is no second
+ * detector any more. Off is for a budget reading, not for a link run.
+ *
+ * hal_pico_set_bank() blocks until core 1 has obeyed.
+ */
+bool hal_pico_set_bank(bool on);
+bool hal_pico_bank_on(void);
+
+/* Windows that read busy since boot — a rate, where rx_busy is an event.
+ * Instrument only; nothing in the link reads it. */
+uint32_t hal_pico_busy_windows(void);
+
+/*
+ * The presence detector, read without disturbing it — hal.h's rx_busy CLEARS
+ * its latch, and an instrument must never take an event away from the link.
+ * Nothing here clears anything.
+ *
+ * `busy` is the last window's verdict, not the latch; `windows` and
+ * `busy_windows` are since boot, so two readings and a subtraction give the
+ * busy FRACTION over an interval, which is what a level sweep wants.
+ */
+typedef struct {
+    uint32_t windows;
+    uint32_t busy_windows;
+    uint32_t signal;      /* max(E_A, E_B) this window, as a score   */
+    uint32_t noise;       /* the CFAR reference: mean of the boxcar  */
+    bool     busy;
+    bool     ready;       /* the reference is full; false means "no answer" */
+} hal_pico_presence_t;
+
+void hal_pico_presence(hal_pico_presence_t *out);
+
+/*
+ * One capture of the bank: core 1 accumulates `windows` windows and core 0
+ * reads the result afterwards, so nothing is read while it is being written.
+ *
+ * sum[] and max[] are mag^2 — no square root is taken anywhere near the hot
+ * path (link v2 §5). gz_bank.h's gzb_score() turns one into the amplitude a
+ * human reads. The guard entries are summed only over the windows they
+ * actually ran in, which is what guard_windows divides by.
+ *
+ * False if the bank is off, or if core 1 did not finish inside timeout_us —
+ * *out then holds however far it got.
+ */
+typedef struct {
+    uint64_t sum[GZB_BINS];
+    uint64_t max[GZB_BINS];
+    uint64_t noise_sum;      /* the guard median, per window */
+    uint64_t noise_max;
+    uint32_t windows;
+    uint32_t guard_windows;
+} hal_pico_bank_t;
+
+bool hal_pico_bank_capture(uint32_t windows, uint32_t timeout_us,
+                           hal_pico_bank_t *out);
+
+/*
+ * Core-1 busy time and the clock it is measured against, read together.
+ *
+ * hal_pico_core1_load() averages over everything since boot and cannot see a
+ * change made a second ago. Two of these, subtracted, give the load over an
+ * interval the caller chooses — and multiplied by the system clock and
+ * divided by the samples in that interval, they give cycles per sample, which
+ * is the number the budget is actually about.
+ */
+void hal_pico_core1_busy(uint64_t *busy_us, uint64_t *now_us);
 
 #endif /* HANDOFF_HAL_PICO_H */

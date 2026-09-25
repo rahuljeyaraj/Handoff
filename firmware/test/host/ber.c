@@ -71,12 +71,10 @@ static void run_frame(const chan_cfg_t *cfg, uint8_t seq, point_t *p)
     demod_init(&d);
 
     for (i = 0; i < ns; i++) {
-        uint32_t score;
-        uint16_t chip;
+        frame_chip_t chip;
         frame_rx_result_t res;
 
-        if (!gz_push(&d.gz, g_samples[i], &score)) continue;
-        if (!sync_push(&d.sy, score, &chip)) continue;
+        if (!demod_push(&d, g_samples[i], &chip)) continue;
 
         res = frame_rx_push(&rx, chip);
         if (res == FRAME_RX_GOOD) {

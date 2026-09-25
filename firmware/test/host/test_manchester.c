@@ -59,6 +59,44 @@ void test_manchester(void)
     }
 
     /*
+     * MANCHESTER_MAX_RUN_CHIPS, checked rather than argued.
+     *
+     * link_sm.c's OOK bridge is exactly this long, because on v1 a run of
+     * identical chips at level 0 is a run of silence and the bridge has to
+     * outlast it. If this number were ever wrong the bridge would be too
+     * short, the receiver would read a live frame as a free channel, and
+     * nothing here would say so — which is why it is walked rather than
+     * reasoned about.
+     *
+     * Every byte, so every bit pair, including across the byte boundary.
+     */
+    hf_begin("manchester: no run of identical chips exceeds the stated maximum");
+    {
+        uint8_t bytes[2], chips[32];
+        unsigned a_byte, b_byte;
+        size_t i;
+        int worst = 0;
+
+        for (a_byte = 0; a_byte < 256u; a_byte++) {
+            for (b_byte = 0; b_byte < 256u; b_byte++) {
+                int run = 1;
+
+                bytes[0] = (uint8_t)a_byte;
+                bytes[1] = (uint8_t)b_byte;
+                if (manchester_encode(bytes, 2, chips, sizeof chips) != 32u) {
+                    HF_CHECK_MSG(0, "encode refused %02x %02x", a_byte, b_byte);
+                    break;
+                }
+                for (i = 1; i < 32u; i++) {
+                    run = (chips[i] == chips[i - 1]) ? run + 1 : 1;
+                    if (run > worst) worst = run;
+                }
+            }
+        }
+        HF_EQ_INT(worst, MANCHESTER_MAX_RUN_CHIPS);
+    }
+
+    /*
      * The decision is relative, never against an absolute threshold — that is
      * the whole reason design §9.2 chose Manchester. A bit whose two halves
      * are 30 and 20 decodes the same as one whose halves are 3000 and 2000.
