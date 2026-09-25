@@ -35,15 +35,34 @@ Nothing is built. This is step 0.
 
 ---
 
-## 1. Answer these before step 1
+## 1. Settled. Start at step 1.
 
-The user has not answered these yet. Ask, do not assume.
+All three opening questions are answered. Do not re-ask them.
 
-| # | Question | Why it blocks |
+| # | Question | Answer |
 |---|---|---|
-| 1 | Moving `sys_clk` 150 → 144 MHz: anything else timed off it? | §2 lists what to check, but the user knows the board |
-| 2 | *(settled)* Tones are adjacent bins, 180/200 kHz. Minimum imbalance the transform allows, both at the top of the band. | — |
-| 3 | Scope is the radio only — record store, carousel, BLE, app, wearer UI untouched. Confirm. | bounds the branch |
+| 1 | Move `sys_clk` 150 → 144 MHz? | **Yes.** Go ahead. §2 still lists what to check on hardware. |
+| 2 | Tone pair | **180/200 kHz, bins 9 and 10.** Adjacent — the minimum imbalance the transform allows. Not open. |
+| 3 | Scope | Radio only for behaviour, but **instruments are unrestricted**. See below. |
+
+### Instruments are unrestricted. Behaviour is not.
+
+The user has explicitly allowed touching working code to make debugging
+easier. The line is:
+
+**Change what observes. Do not change what does.**
+
+| | |
+|---|---|
+| Console commands, counters, log lines, telemetry — anywhere in the tree | **free** |
+| Finishing `ble_trig_t` / `BLE_CTRL_*` so the bins can be watched on the phone | **in scope** — it is an instrument |
+| How the record store, carousel, ownership, or the app behave | **out** |
+| Repurposing an existing BLE field or wire format | **out** — add fields, never reuse one |
+| An instrument turns up a bug in working code | **report it, do not fix it here** unless it blocks a step |
+
+That last row is the one that matters. A debugging session that quietly fixes
+three unrelated things is how a failed experiment takes working code down with
+it. This branch must stay cheap to throw away.
 
 ---
 
@@ -374,10 +393,13 @@ and the ~30 % FER is no worse.
 
 ---
 
-## 10. What this branch does not touch
+## 10. What this branch does not change
 
-Record store, `carousel.c`, fragment reassembly, BLE, the phone app, the wearer
-UI, ownership, the enclosure. If a change reaches any of them, stop and ask.
+**Behaviour** of: record store, `carousel.c`, fragment reassembly, the phone
+app, ownership, the wearer UI, the enclosure.
+
+**Instruments** in those files are fair game — see §1. Adding a counter to the
+carousel is fine; changing which fragment it picks is not.
 
 ---
 
