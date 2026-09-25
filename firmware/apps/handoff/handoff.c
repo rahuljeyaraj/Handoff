@@ -79,7 +79,7 @@
  *
  * LOG LINES, all with times in microseconds on this board's clock:
  *
- *   tx S <start> <end>       a 10 ms shout was on the pad
+ *   tx S <start> <end>       a beacon frame was on the pad
  *   tx F <start> <end>       a frame was on the pad
  *   sync <t>                 the GP15 edge; the common reference
  *   cut <t>                  a send in flight was aborted at t (a sync
@@ -192,8 +192,8 @@ typedef struct {
     uint32_t as_sender, as_receiver;
     uint32_t syncs;
     uint32_t dur_max_ms, dur_sum_ms;
-    uint32_t sends;                        /* shouts + frames on the pad     */
-    uint32_t shouts_at_zero, frames_at_zero;
+    uint32_t sends;                        /* beacons + frames on the pad    */
+    uint32_t shouts_at_zero, frames_at_zero;   /* beacons, now */
     uint32_t good_at_zero, bad_at_zero, turns_at_zero;
 } stats_t;
 
@@ -210,7 +210,7 @@ static void zero_stats(void)
 {
     memset(&s_st, 0, sizeof s_st);
     s_st.since          = hal_now_us(s_hal);
-    s_st.shouts_at_zero = s_sm.trig.shouts;
+    s_st.shouts_at_zero = s_sm.trig.beacons;
     s_st.frames_at_zero = s_sm.frames_sent;
     s_st.good_at_zero   = s_sm.frames_rx_good;
     s_st.bad_at_zero    = s_sm.frames_rx_bad;
@@ -877,22 +877,29 @@ static void poll_link(uint64_t now)
             printf("st %llu %s %s\n", (unsigned long long)now,
                    link_state_name(st), role_name(s_sm.role));
             /*
-             * What the trigger actually heard. Without this a bench cannot
-             * tell a band that triggered on a peer from one that triggered on
-             * its own shout decaying (silent ~0) or on the room (silent
-             * scattered, carrier gone again in about the detector's hold).
+             * What the trigger actually heard, and link v2 step 7 changed
+             * what there is to say. v1 printed how much silence had been
+             * banked and how long the carrier lasted, because those two
+             * numbers were the only way to tell a band triggering on a peer
+             * from one triggering on its own amplifier or on the room.
+             *
+             * There is nothing to infer now. `peers` is beacons that passed a
+             * CRC carrying somebody else's nonce; `echo` is beacons that
+             * passed a CRC carrying OURS, which is the v1 fault made visible
+             * and harmless in the same stroke; `nonce` is who we are this
+             * cycle. A bench that sees echo climbing is looking at a settle
+             * that is too short, and it costs nothing.
              */
             if (left_trigger)
-                printf("trig silent %lu us, carrier %lu us; shouts %lu waits %lu "
-                       "sends %lu receives %lu short %lu timeouts %lu\n",
-                       (unsigned long)s_sm.trig.last_silent_us,
-                       (unsigned long)s_sm.trig.last_wait_us,
-                       (unsigned long)s_sm.trig.shouts,
-                       (unsigned long)s_sm.trig.waits,
+                printf("trig nonce %04x; beacons %lu peers %lu echo %lu "
+                       "redraws %lu sends %lu receives %lu\n",
+                       trig_nonce(&s_sm.trig),
+                       (unsigned long)s_sm.trig.beacons,
+                       (unsigned long)s_sm.trig.peers,
+                       (unsigned long)s_sm.trig.self_echoes,
+                       (unsigned long)s_sm.trig.redraws,
                        (unsigned long)s_sm.trig.sends,
-                       (unsigned long)s_sm.trig.receives,
-                       (unsigned long)s_sm.trig.short_carriers,
-                       (unsigned long)s_sm.trig.quiet_timeouts);
+                       (unsigned long)s_sm.trig.receives);
         }
     }
 
@@ -912,14 +919,21 @@ static void print_stats(void)
            (unsigned long)s_st.abort,
            (unsigned long)s_st.as_sender, (unsigned long)s_st.as_receiver,
            (unsigned long)s_st.syncs);
-    printf("           duration mean %lu max %lu ms; shouts %lu frames sent %lu good %lu "
+    printf("           duration mean %lu max %lu ms; beacons %lu frames sent %lu good %lu "
            "bad %lu turnarounds %lu\n",
            (unsigned long)(n ? s_st.dur_sum_ms / n : 0), (unsigned long)s_st.dur_max_ms,
-           (unsigned long)(s_sm.trig.shouts - s_st.shouts_at_zero),
+           (unsigned long)(s_sm.trig.beacons - s_st.shouts_at_zero),
            (unsigned long)(s_sm.frames_sent - s_st.frames_at_zero),
            (unsigned long)(s_sm.frames_rx_good - s_st.good_at_zero),
            (unsigned long)(s_sm.frames_rx_bad - s_st.bad_at_zero),
            (unsigned long)(s_sm.turnarounds - s_st.turns_at_zero));
+    printf("           trigger: nonce %04x, peers %lu, self-echoes %lu, redraws %lu, "
+           "refused draws %lu; beacons decoded %lu bad-crc %lu\n",
+           trig_nonce(&s_sm.trig),
+           (unsigned long)s_sm.trig.peers, (unsigned long)s_sm.trig.self_echoes,
+           (unsigned long)s_sm.trig.redraws, (unsigned long)s_sm.trig.nonce_rejects,
+           (unsigned long)s_sm.framer.beacons_good,
+           (unsigned long)s_sm.framer.beacons_bad_crc);
     printf("           state %s role %s; own-chips cut %lu, false syncs %lu, overruns %lu, "
            "stalls %lu, core-1 load %u%%\n",
            link_state_name(s_sm.state), role_name(s_sm.role),
@@ -1218,10 +1232,12 @@ static void print_banner(void)
     printf("  carrier %d Hz, %d chips/s, %d bps, Goertzel N=%d bin %d\n",
            HANDOFF_CARRIER_HZ, HANDOFF_CHIP_RATE_HZ,
            HANDOFF_BIT_RATE_BPS, HANDOFF_GZ_N, HANDOFF_GZ_BIN);
-    printf("  shout %lu ms, listen %lu-%lu ms, frame %lu ms, turnaround %d us\n",
-           (unsigned long)(HANDOFF_SHOUT_US / 1000u),
+    printf("  beacon %lu ms, listen %lu-%lu ms, cycle %lu ms, frame %lu ms, "
+           "turnaround %d us\n",
+           (unsigned long)(HANDOFF_BEACON_AIRTIME_US / 1000u),
            (unsigned long)(HANDOFF_LISTEN_MIN_US / 1000u),
            (unsigned long)(HANDOFF_LISTEN_MAX_US / 1000u),
+           (unsigned long)(HANDOFF_BEACON_CYCLE_US / 1000u),
            (unsigned long)(FRAME_AIRTIME_US / 1000u), HANDOFF_TURNAROUND_US);
     printf("  rx idle %lu ms (ring latency %lu ms), %u frames/turn, budget %lu ms\n",
            (unsigned long)(s_cfg.rx_idle_us / 1000u),
@@ -1344,14 +1360,14 @@ int main(void)
                 next_hb += HEARTBEAT_US;
                 /* chips and sps are the pair that showed the ADC being taken
                  * from the ring: a frozen count over a decaying rate. */
-                printf("hb %lu s %s %s ok %lu part %lu abort %lu shouts %lu frames %lu/%lu/%lu "
+                printf("hb %lu s %s %s ok %lu part %lu abort %lu beacons %lu frames %lu/%lu/%lu "
                        "cut %lu stalls %lu load %u%% chips %lu sps %lu overruns %lu "
                        "vsys %u\n",
                        (unsigned long)elapsed_s(s_st.since), link_state_name(s_sm.state),
                        s_link_on ? (s_parked ? "parked" : "on") : "off",
                        (unsigned long)s_st.complete, (unsigned long)s_st.partial,
                        (unsigned long)s_st.abort,
-                       (unsigned long)(s_sm.trig.shouts - s_st.shouts_at_zero),
+                       (unsigned long)(s_sm.trig.beacons - s_st.shouts_at_zero),
                        (unsigned long)(s_sm.frames_sent - s_st.frames_at_zero),
                        (unsigned long)(s_sm.frames_rx_good - s_st.good_at_zero),
                        (unsigned long)(s_sm.frames_rx_bad - s_st.bad_at_zero),

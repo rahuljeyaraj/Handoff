@@ -97,18 +97,19 @@ static void open_contact(link_sm_t *sm, uint64_t now_us)
  * preference — the lock IS the reason we are here.
  */
 /*
- * from_trigger says the role came from TRIG_SEND — we heard somebody's shout
- * and the channel is ours. That matters for one reason only, and it is the same
- * reason take_channel() exists: THE PEER IS STILL DEAF.
+ * from_trigger says the role came from TRIG_SEND — we decoded somebody's
+ * beacon and the channel is ours. That matters for one reason only, and it is
+ * the same reason take_channel() exists: THE PEER IS STILL DEAF.
  *
- * It has just finished its own shout, and it stays deaf for
- * HANDOFF_TRIG_SETTLE_US while its amplifier recovers. Our decision lands about
- * the carrier detector's hold after that shout stopped, so sending a preamble
- * immediately puts it inside a window the peer cannot hear — and a preamble
- * missed is not merely a lost frame, it is a lost frame, because frame.c's hunt
- * locks on the preamble's start and cannot join one in progress. The peer then
- * hears a long carrier it can never decode, times out on it, shouts again, and
- * the pair never rendezvous at all.
+ * Step 7 made that TIGHTER, not looser. We decode a beacon on its very last
+ * chip, which is the instant the peer stops driving and enters
+ * HANDOFF_TRIG_SETTLE_US of its own amplifier recovering — so our decision now
+ * lands at the START of the peer's deaf window rather than a detector's hold
+ * after it. Sending a preamble immediately would put it squarely inside a
+ * window the peer cannot hear, and a preamble missed is not merely a lost
+ * frame, because frame.c's hunt locks on the preamble's start and cannot join
+ * one in progress. The peer would hear a long carrier it could never decode,
+ * beacon again, and the pair would never rendezvous at all.
  *
  * This went unnoticed while the settle was HANDOFF_TURNAROUND_US: at 1 ms the
  * peer's ears happened to open before the preamble by luck. The phase sweep in
@@ -143,7 +144,7 @@ void link_sm_begin(link_sm_t *sm, uint64_t now_us, link_role_t role)
     trig_stop(&sm->trig);
     open_contact(sm, now_us);
     /* The caller decided the roles itself, so there is no peer coming out of a
-     * shout to wait for — see enter_exchange(). */
+     * beacon to wait for — see enter_exchange(). */
     enter_exchange(sm, now_us, role, false);
 }
 
@@ -163,21 +164,21 @@ void link_sm_idle(link_sm_t *sm, uint64_t now_us)
     sm->chips_len = 0;
     sm->role = LINK_ROLE_NONE;
     sm->exchange_open = false;
-    sm->idle_syncs = sm->framer.syncs;
     trig_start(&sm->trig, now_us);
     sm->state = LINK_IDLE;
 }
 
 /*
  * Drain whatever the DSP layer has produced since the last poll and run it
- * through the framer. Returns how many good frames landed, and leaves the
- * last one in sm->framer.
+ * through the framer. Returns how many good CARD frames landed, and leaves
+ * the last one in sm->framer. A beacon is reported through trig_in, which is
+ * NULL everywhere but IDLE.
  *
  * Presence is NOT drained here. It is decided on core 1 out of the five-bin
  * bank, not out of these chips, and the callers that want it ask
  * hal_rx_busy() where they want it — which is not the same set of places.
  */
-static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
+static uint32_t drain_rx(link_sm_t *sm, bool feed_framer, trig_in_t *trig_in)
 {
     int32_t chips[64];
     uint32_t good = 0;
@@ -188,6 +189,18 @@ static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
             if (!feed_framer) continue;
 
             switch (frame_rx_push(&sm->framer, chips[i])) {
+            case FRAME_RX_BEACON:
+                /*
+                 * Somebody's rendezvous beacon. Only IDLE has anywhere to put
+                 * one — inside an exchange the two ends are talking cards and
+                 * a beacon is a third band, or a straggler, and either way
+                 * the carousel is not interested.
+                 */
+                if (trig_in) {
+                    trig_in->beacon = true;
+                    trig_in->nonce = frame_rx_nonce(&sm->framer);
+                }
+                break;
             case FRAME_RX_GOOD:
                 sm->frames_rx_good++;
                 if (frame_rx_hdr(&sm->framer)->flags & FRAME_FLAG_HAVE_YOURS)
@@ -425,7 +438,6 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
     }
 
     sm->role = LINK_ROLE_NONE;
-    sm->idle_syncs = sm->framer.syncs;
     trig_start(&sm->trig, now_us);
     sm->state = LINK_IDLE;
 }
@@ -433,26 +445,29 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
 /*
  * IDLE is not a parked state. It runs the trigger of beacon.h, which is what
  * actually starts a handshake on a wrist: there is no button and no touch
- * sensor, so the band shouts into the channel and listens for the same, and
- * hearing anything at all means a body has closed the loop.
+ * sensor, so the band beacons into the channel and listens for the same, and
+ * decoding a beacon means a body has closed the loop.
  *
  * The framer is fed, and the busy latch believed, ONLY in the listening
- * phases. Reading either while our own amplifier is driving is the
- * drain_discard() problem, and here it has a sharper edge: the band would
- * trigger on its own shout, every cycle, for ever.
+ * phase. Reading either while our own amplifier is driving is the
+ * drain_discard() problem, and here it used to have a sharper edge: under v1
+ * the band would trigger on its own shout, every cycle, for ever. It cannot
+ * now — a beacon of ours that survives the discard carries our own nonce and
+ * beacon.c throws it away — but the discard stays, because a framer chewing
+ * on our own amplifier is wasted work and one more way to reach a false sync.
  *
  * Under link v2 there is nothing to prime, nothing to reprime and nothing to
  * hold across a cycle. The noise reference lives on core 1, in three bins our
- * transmitter cannot enter, and it keeps running through our own shout
- * because our own shout is not in it.
+ * transmitter cannot enter, and it keeps running through our own beacon
+ * because our own beacon is not in it.
  */
 static void poll_idle(link_sm_t *sm, uint64_t now_us)
 {
     const bool listening = trig_listening(&sm->trig);
-    const bool waiting   = (sm->trig.state == TRIG_WAIT);
-    bool heard = false;
-    bool locked;
+    trig_in_t in;
     trig_state_t ts;
+
+    memset(&in, 0, sizeof in);
 
     /*
      * A retry is still inside the same contact, so the budget still applies —
@@ -468,8 +483,27 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
     }
 
     if (listening) {
-        heard = drain_rx_busy(sm, now_us);
-        drain_rx(sm, true);
+        const uint32_t syncs_before = sm->framer.syncs;
+
+        in.busy = drain_rx_busy(sm, now_us);
+        drain_rx(sm, true, &in);
+
+        /*
+         * A CARD sync, not a beacon one — frame.c counts the two separately
+         * for exactly this. It means the peer decoded our beacon, elected
+         * itself sender, and is already clocking a fragment at us.
+         *
+         * v1 believed a sync only while TRIG_WAIT was open, on the grounds
+         * that noise can drag the framer through a false marker during a long
+         * listen and a band that should send would then wait for a frame
+         * nobody is sending. There is no TRIG_WAIT any more, so this is
+         * believed whenever the ears are open, and the exposure is what
+         * frame.h computes: one false sync per 41 hours across BOTH tails, so
+         * about one per 82 hours for this one. It costs a receive turn and two
+         * barren turns, and suspect_collision() puts the band back in the
+         * trigger. Once every few days, for a few hundred milliseconds.
+         */
+        in.card = (sm->framer.syncs != syncs_before);
     } else {
         drain_discard(sm);
         /* A framer half-way through a hunt on our own amplifier is worse than
@@ -477,25 +511,13 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
         frame_rx_reset(&sm->framer);
     }
 
-    /*
-     * Only a sync that happened while we were ALREADY waiting answers the
-     * question TRIG_WAIT is asking. Noise can drag the framer through a false
-     * marker during a long listen — rarely, but this runs continuously — and
-     * reading that stale lock as "a card is arriving" would turn a band that
-     * should send into one that waits for a frame nobody is sending. Outside
-     * WAIT the baseline just follows, so such a sync is absorbed rather than
-     * remembered.
-     */
-    locked = waiting && (sm->framer.syncs != sm->idle_syncs);
-    if (!waiting) sm->idle_syncs = sm->framer.syncs;
-
-    ts = trig_poll(&sm->trig, now_us, heard, locked);
+    ts = trig_poll(&sm->trig, now_us, &in);
 
     if (trig_take_burst(&sm->trig)) {
-        sm->chips_len = trig_fill(sm->chips, sizeof sm->chips);
+        sm->chips_len = trig_fill(&sm->trig, sm->chips, sizeof sm->chips);
         hal_tx_drive(sm->hal, true);
         hal_tx_chips(sm->hal, sm->chips, sm->chips_len);
-    } else if (ts != TRIG_SHOUT) {
+    } else if (ts != TRIG_BEACON) {
         hal_tx_drive(sm->hal, false);
     }
 
@@ -552,7 +574,7 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
         /* Before drain_rx(), because both read the HAL and only one of them
          * clears the latch. */
         const bool     busy = drain_rx_busy(sm, now_us);
-        const uint32_t got  = drain_rx(sm, true);
+        const uint32_t got  = drain_rx(sm, true, NULL);
 
         /*
          * A frame in progress keeps the turn alive on its own account.

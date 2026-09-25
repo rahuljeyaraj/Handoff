@@ -63,6 +63,7 @@
 #include "hardware/gpio.h"
 
 #include "adc_ring.h"
+#include "beacon.h"   /* the settle and the cycle it belongs to */
 #include "config.h"
 #include "frame.h"
 #include "hal_pico.h"
@@ -379,10 +380,116 @@ static void fsk_align(void)
     pio_carrier_drive(false);
 }
 
+/*
+ * ---- y 4: THE SETTLE, MEASURED (link v2 step 7) -------------------------
+ *
+ * HANDOFF_TRIG_SETTLE_US is how long a band stays deaf after its own beacon,
+ * and until now it was 6000 because 6000 worked: brief §8 asks for the AFE's
+ * own recovery read directly instead. This reads it.
+ *
+ * Drive one beacon's worth of tone into our own pad, release it, and watch
+ * the presence detector — which is the same detector the trigger listens
+ * through — until it stops calling the channel busy. That interval IS the
+ * quantity, and it needs no second board and no scope: the thing being
+ * measured is our own amplifier coming out of saturation into our own input,
+ * which is a one-board fault by definition.
+ *
+ * WHAT IT MEASURES IS NOT ONLY THE AMPLIFIER. The reading includes the ADC
+ * block latency, because presence is decided on core 1 from samples the DMA
+ * has already delivered, and the trigger sees the channel through that same
+ * delay. That is correct rather than a contaminant: the settle has to cover
+ * both, and a figure that left the ring out would be short by exactly the
+ * amount that matters.
+ *
+ * THE LAST BUSY WINDOW, NOT THE FIRST QUIET ONE. A decaying burst crosses the
+ * CFAR threshold and comes back over it, so the first quiet verdict is an
+ * underestimate and a noisy one. The whole observation window is watched and
+ * the LAST busy verdict in it is what is reported.
+ */
+#define SETTLE_RUNS       16u
+#define SETTLE_WATCH_US   40000u
+
+static void fsk_settle(void)
+{
+    uint32_t run, worst = 0, sum = 0, best = 0xFFFFFFFFu, never = 0;
+
+    if (!hal_pico_bank_on()) {
+        printf("    the bank is OFF, so there is no detector. `n 1` first.\n");
+        return;
+    }
+
+    printf("\n  --- settle: our own amplifier, after one beacon of drive ---\n");
+    printf("    beacon %lu us, watching %lu us after release, %lu runs\n",
+           (unsigned long)FRAME_BEACON_AIRTIME_US,
+           (unsigned long)SETTLE_WATCH_US, (unsigned long)SETTLE_RUNS);
+
+    fsk_start();
+
+    for (run = 0; run < SETTLE_RUNS; run++) {
+        hal_pico_presence_t pr;
+        absolute_time_t t0;
+        uint32_t last_busy_us = 0;
+        bool saw_busy = false;
+
+        /* One beacon's worth of unbroken drive. Tone B, because a beacon's
+         * worst case for the amplifier is a chip of either tone and the two
+         * are the same amplitude — the pad does not know which it is. */
+        pio_carrier_fsk_tone(1);
+        pio_carrier_drive(true);
+        sleep_us(FRAME_BEACON_AIRTIME_US);
+
+        /* Release to high-Z, exactly as the trigger does. Not driven low: a
+         * driven pad still loads the electrode (design §6.3). */
+        pio_carrier_drive(false);
+        t0 = get_absolute_time();
+
+        for (;;) {
+            const uint32_t at = (uint32_t)absolute_time_diff_us(t0,
+                                                get_absolute_time());
+            if (at >= SETTLE_WATCH_US) break;
+            hal_pico_presence(&pr);
+            if (pr.busy) { last_busy_us = at; saw_busy = true; }
+        }
+
+        if (!saw_busy) { never++; continue; }
+        sum += last_busy_us;
+        if (last_busy_us > worst) worst = last_busy_us;
+        if (last_busy_us < best)  best  = last_busy_us;
+
+        /* Let the CFAR reference re-settle before the next run, or each burst
+         * is measured against a boxcar still holding the previous one. */
+        sleep_ms(50);
+    }
+
+    if (never == SETTLE_RUNS) {
+        printf("    the detector never read busy at all: the pad is not "
+               "driven, or the bank is not scoring. `y 0` then `m`.\n");
+        return;
+    }
+
+    printf("    last busy verdict: min %lu us, mean %lu us, max %lu us"
+           " (%lu runs, %lu silent)\n",
+           (unsigned long)best,
+           (unsigned long)(sum / (SETTLE_RUNS - never)),
+           (unsigned long)worst,
+           (unsigned long)(SETTLE_RUNS - never), (unsigned long)never);
+    printf("    of which ADC block latency %lu us\n",
+           (unsigned long)HAL_PICO_RX_LATENCY_US);
+    printf("    HANDOFF_TRIG_SETTLE_US is %lu us: %s\n",
+           (unsigned long)HANDOFF_TRIG_SETTLE_US,
+           worst < HANDOFF_TRIG_SETTLE_US ? "covers the worst run"
+                                          : "SHORTER THAN THE WORST RUN");
+    printf("    a band deaf for %lu us spends %lu %% of its cycle deaf\n",
+           (unsigned long)HANDOFF_TRIG_SETTLE_US,
+           (unsigned long)((FRAME_BEACON_AIRTIME_US + HANDOFF_TRIG_SETTLE_US)
+                           * 100u / HANDOFF_BEACON_CYCLE_US));
+}
+
 static void fsk_dispatch(uint32_t arg, bool have_arg)
 {
     if (!have_arg)    { fsk_walk(); return; }
     if (arg == 2u)    { fsk_align(); return; }
+    if (arg == 4u)    { fsk_settle(); return; }
     if (arg == 9u)    { fsk_stop(); return; }
 
     fsk_start();
@@ -488,8 +595,9 @@ static void tx_help(void)
            "  p         pause / resume\n"
            "  1         one frame (while paused)\n"
            "  f         clock tree, measured\n"
-           "  y [0|1|2|3|9] two tones: check, drive A / B, 2 align,\n"
-           "              3 drive alternating chips, 9 stop\n"
+           "  y [0..4|9] two tones: check, drive A / B, 2 align,\n"
+           "              3 alternating chips, 4 measure the settle\n"
+           "              after one beacon, 9 stop\n"
            "  h         this\n", (unsigned long)(GAP_DEFAULT_US / 1000u));
 }
 
@@ -1277,8 +1385,9 @@ static void rx_help(void)
            "  t [N]     stream every Nth chip magnitude; t 0 stops\n"
            "  x [0|1]   self loop: our own carrier into our own receiver\n"
            "  f         clock tree, measured\n"
-           "  y [0|1|2|3|9] two tones: check, drive A / B, 2 align,\n"
-           "              3 drive alternating chips, 9 stop\n"
+           "  y [0..4|9] two tones: check, drive A / B, 2 align,\n"
+           "              3 alternating chips, 4 measure the settle\n"
+           "              after one beacon, 9 stop\n"
            "  k [bin]   move the PROBE Goertzel to a bin (7..11); the link\n"
            "              is on bins 9 and 10 and does not move\n"
            "  b [1]     walk bins 7,8,9,10,11; b 1 walks every bin\n"

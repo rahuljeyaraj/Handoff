@@ -5,8 +5,16 @@
 #include "crc.h"
 #include "manchester.h"
 
-/* The seven chips that must follow the 00, per the sync rule in frame.h. */
-static const uint8_t k_marker_tail[7] = { 1, 0, 1, 0, 1, 0, 1 };
+/*
+ * The seven chips that must follow the 00, per the sync rule in frame.h — one
+ * row per frame type. Manchester of 1111 0xyz, from the chip after the 00:
+ * the second half of bit 4, then bits 5, 6 and 7.
+ *
+ *      0xF0  1 0 1 0 1 0 1   a card
+ *      0xF5  1 1 0 0 1 1 0   a beacon
+ */
+static const uint8_t k_marker_tail[FRAME_MARKER_TAIL] = { 1, 0, 1, 0, 1, 0, 1 };
+static const uint8_t k_beacon_tail[FRAME_MARKER_TAIL] = { 1, 1, 0, 0, 1, 1, 0 };
 
 void frame_hdr_pack(const frame_hdr_t *h, uint8_t out[FRAME_HDR_BYTES])
 {
@@ -58,6 +66,67 @@ size_t frame_encode(const frame_hdr_t *h, const uint8_t *payload, size_t n,
     return out;
 }
 
+size_t frame_beacon_encode(uint16_t nonce, uint8_t *chips, size_t max_chips)
+{
+    uint8_t body[FRAME_BEACON_BODY_BYTES];
+    uint16_t crc;
+    size_t out = 0, i;
+
+    if (max_chips < (size_t)FRAME_BEACON_TOTAL_CHIPS) return 0;
+
+    for (i = 0; i < FRAME_PREAMBLE_CHIPS; i++)
+        chips[out++] = (uint8_t)((i % 2u) ? 0u : 1u);   /* 1010... */
+
+    body[0] = (uint8_t)(nonce >> 8);
+    body[1] = (uint8_t)(nonce & 0xFFu);
+    crc = crc16(body, FRAME_BEACON_NONCE_BYTES);
+    body[FRAME_BEACON_NONCE_BYTES]     = (uint8_t)(crc >> 8);
+    body[FRAME_BEACON_NONCE_BYTES + 1] = (uint8_t)(crc & 0xFFu);
+
+    {
+        const uint8_t marker = FRAME_BEACON_MARKER_BYTE;
+        out += manchester_encode(&marker, 1, chips + out, max_chips - out);
+        out += manchester_encode(body, FRAME_BEACON_BODY_BYTES,
+                                 chips + out, max_chips - out);
+    }
+
+    return out;
+}
+
+bool frame_beacon_nonce_ok(uint16_t nonce)
+{
+    uint8_t chips[FRAME_BEACON_TOTAL_CHIPS];
+    uint32_t hist = 0;
+    size_t i, j;
+
+    if (frame_beacon_encode(nonce, chips, sizeof chips) != sizeof chips)
+        return false;
+
+    for (i = 1; i < sizeof chips; i++) {
+        hist = (hist << 1) | (uint32_t)(chips[i] != chips[i - 1]);
+
+        /* Not enough history yet for the hunt to believe anything. */
+        if (i < (size_t)FRAME_ALT_WINDOW + 1u) continue;
+
+        /* The hunt triggers on a 00, and only on a 00. */
+        if (chips[i] || chips[i - 1]) continue;
+
+        {
+            uint32_t v = hist & ((1u << FRAME_ALT_WINDOW) - 1u);
+            unsigned n = 0;
+            while (v) { n += v & 1u; v >>= 1; }
+            if (n < FRAME_ALT_MIN) continue;
+        }
+
+        /* A sync here is unavoidable; what matters is which tail follows. */
+        if (i + FRAME_MARKER_TAIL >= sizeof chips) break;
+        for (j = 0; j < FRAME_MARKER_TAIL; j++)
+            if (chips[i + 1 + j] != k_marker_tail[j]) break;
+        if (j == FRAME_MARKER_TAIL) return false;   /* a card marker. Redraw. */
+    }
+    return true;
+}
+
 /* ---- receive ---------------------------------------------------------- */
 
 void frame_rx_init(frame_rx_t *r)
@@ -73,7 +142,11 @@ void frame_rx_reset(frame_rx_t *r)
     r->alt_hist = 0;
     r->seen = 0;
     r->marker_pos = 0;
+    r->card_alive = false;
+    r->beacon_alive = false;
     r->chip_pos = 0;
+    r->body_bytes = FRAME_BODY_BYTES;
+    r->body_is_beacon = false;
     r->margin_acc = 0;
     r->pre_a = r->pre_b = 0;
     r->pre_na = r->pre_nb = 0;
@@ -155,6 +228,32 @@ static unsigned alt_count(const frame_rx_t *r)
     return n;
 }
 
+/*
+ * A beacon's body: two bytes of nonce and two of CRC. Short enough that the
+ * margin is not worth reporting off it — the card frames that follow a
+ * rendezvous carry twenty times the bits and are what a bench should read.
+ *
+ * A FAILED CRC RETURNS NONE, not BAD_CRC. See frame_rx_result_t: a beacon
+ * that did not survive its checksum is not news, and the whole point of
+ * giving the trigger a frame was that "was that a peer?" stops being a
+ * judgement call. Counted for a human, and otherwise it never happened.
+ */
+static frame_rx_result_t finish_beacon(frame_rx_t *r)
+{
+    const uint16_t want = crc16(r->body, FRAME_BEACON_NONCE_BYTES);
+    const uint16_t got  = (uint16_t)(((uint16_t)r->body[FRAME_BEACON_NONCE_BYTES] << 8)
+                                    | r->body[FRAME_BEACON_NONCE_BYTES + 1]);
+    const uint16_t nonce = (uint16_t)(((uint16_t)r->body[0] << 8) | r->body[1]);
+
+    frame_rx_reset(r);
+
+    if (want != got) { r->beacons_bad_crc++; return FRAME_RX_NONE; }
+
+    r->last_nonce = nonce;
+    r->beacons_good++;
+    return FRAME_RX_BEACON;
+}
+
 static frame_rx_result_t finish_body(frame_rx_t *r)
 {
     const uint16_t want = crc16(r->body, FRAME_HDR_BYTES + HANDOFF_FRAG_PAYLOAD);
@@ -206,12 +305,20 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, frame_chip_t d)
             r->seen > FRAME_ALT_WINDOW && alt_count(r) >= FRAME_ALT_MIN) {
             r->state = FRAME_ST_MARKER;
             r->marker_pos = 0;
+            /* Both frame types are still possible until a tail chip says
+             * otherwise. frame.h: they differ at chip 1, so this is settled
+             * fast — but nothing below assumes it. */
+            r->card_alive = true;
+            r->beacon_alive = true;
         }
         observe(r, c);
         return FRAME_RX_NONE;
 
     case FRAME_ST_MARKER:
-        if (c != k_marker_tail[r->marker_pos]) {
+        if (r->card_alive   && c != k_marker_tail[r->marker_pos]) r->card_alive = false;
+        if (r->beacon_alive && c != k_beacon_tail[r->marker_pos]) r->beacon_alive = false;
+
+        if (!r->card_alive && !r->beacon_alive) {
             /*
              * A corrupted preamble chip can manufacture a 00; the tail check
              * is what rejects it. Resume hunting — but KEEP the transition
@@ -229,12 +336,16 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, frame_chip_t d)
         }
         observe_tone(r, d);
         observe(r, c);
-        if (++r->marker_pos == sizeof k_marker_tail) {
+        if (++r->marker_pos == FRAME_MARKER_TAIL) {
             r->state = FRAME_ST_BODY;
             r->chip_pos = 0;
             r->margin_acc = 0;
             r->last_imbalance_pct = imbalance_pct(r);
-            r->syncs++;
+            /* Distance 6 between the tails, so both cannot have survived. */
+            r->body_is_beacon = r->beacon_alive;
+            r->body_bytes = r->beacon_alive ? FRAME_BEACON_BODY_BYTES
+                                            : FRAME_BODY_BYTES;
+            if (r->beacon_alive) r->beacon_syncs++; else r->syncs++;
         }
         return FRAME_RX_NONE;
 
@@ -253,14 +364,14 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, frame_chip_t d)
 
             r->margin_acc += manchester_margin(r->first_d, d);
 
-            if (byte < FRAME_BODY_BYTES) {
+            if (byte < r->body_bytes) {
                 if (shift == 7) r->body[byte] = 0;
                 r->body[byte] = (uint8_t)(r->body[byte] | ((bit ? 1u : 0u) << shift));
             }
             r->chip_pos++;
 
-            if (r->chip_pos >= (uint16_t)(FRAME_BODY_BYTES * 16))
-                return finish_body(r);
+            if (r->chip_pos >= (uint16_t)(r->body_bytes * 16))
+                return r->body_is_beacon ? finish_beacon(r) : finish_body(r);
         }
         return FRAME_RX_NONE;
     }
@@ -268,6 +379,7 @@ frame_rx_result_t frame_rx_push(frame_rx_t *r, frame_chip_t d)
 
 const frame_hdr_t *frame_rx_hdr(const frame_rx_t *r)     { return &r->hdr; }
 const uint8_t     *frame_rx_payload(const frame_rx_t *r) { return r->body + FRAME_HDR_BYTES; }
+uint16_t           frame_rx_nonce(const frame_rx_t *r)   { return r->last_nonce; }
 
 /* MARKER counts as well as BODY: the preamble really did arrive, so somebody
  * is transmitting, and walking away between the marker and the body would

@@ -230,7 +230,7 @@ void test_link(void)
         /* The path has to have been taken, or the rest of this proves nothing. */
         HF_CHECK_MSG(s.sm_b.retries > 0,
                      "B never fell back into the trigger, so nothing was tested");
-        HF_CHECK_MSG(s.sm_b.trig.shouts > 0,
+        HF_CHECK_MSG(s.sm_b.trig.beacons > 0,
                      "B fell back but never actually re-armed the trigger");
 
         held = link_sm_received(&s.sm_b, &blob);

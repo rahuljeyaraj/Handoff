@@ -291,17 +291,19 @@
 #define HANDOFF_FSK_WORD_B  HANDOFF_FSK_WORD(HANDOFF_FSK_Y_B, HANDOFF_FSK_ISR_B)
 
 /*
- * How long carrier detection takes to raise its flag.
+ * ---- HANDOFF_DETECT_US IS GONE, and step 7 is what took it --------------
  *
- * LINK V2, STEP 5: this no longer describes the detector. dsp/presence.h
- * decides in ONE window with no hysteresis, so the real figure is a window
- * plus core 0's poll interval, far under what is written here. It is left at
- * its v1 value on purpose: the only things that read it are beacon.h's shout
- * and listen constants, and those go out whole at step 7 (brief §8) when the
- * flat-tone shout becomes a nonce beacon. Re-deriving it now would move the
- * rendezvous timing inside a step that is not about rendezvous.
+ * It said how long carrier detection took to raise its flag, and it was the
+ * unit v1's trigger was built out of: the shout was ten of them, the gate was
+ * nine milliseconds against it, the listen draw range was sixteen of them.
+ *
+ * Step 5 already made it a fiction — dsp/presence.h decides in ONE window with
+ * no hysteresis — but it was left alone on purpose, because the only things
+ * reading it were constants due to be deleted whole at step 7. They were, and
+ * nothing measures a detector's latency any more: the trigger asks whether a
+ * CRC passed, which is an event rather than a delay. beacon.h derives its
+ * whole cycle from the beacon's airtime and the amplifier's settle instead.
  */
-#define HANDOFF_DETECT_US         (4 * HANDOFF_CHIP_US)
 
 /* Windows actually summed into a chip energy, after guarding. */
 #define HANDOFF_CHIP_INTEGRATE    (HANDOFF_WINDOWS_PER_CHIP - 2 * HANDOFF_CHIP_GUARD)

@@ -190,32 +190,51 @@ _Static_assert(sizeof(ble_bench_t) == 20, "bench must fit one notify at the 23-b
  * differences two blocks and gets a rate over a window it chose, which is what
  * the USB bench did by hand. BLE_CTRL_ZERO_STATS does not touch them.
  *
- * READ waits AGAINST short_carriers. waits counts every time the gate tripped;
- * short_carriers counts the ones too brief to have been a peer's shout. The
- * difference is REAL SHOUTS HEARD, and it is the one number that says whether
- * two bands can hear each other. 379E heard 2 of 93D1's 107; 93D1 heard 20 of
- * 379E's 60. That asymmetry was the fault, and nothing else on this band
- * reports it.
+ * READ peers AGAINST beacons. beacons is how many this band transmitted;
+ * peers is how many it decoded from the other one. The pair is the one thing
+ * that says whether two bands can hear each other, and it is a far better
+ * pair than the one it replaces: v1 could only report how many carriers
+ * tripped a gate and how many of those were too brief to have been a shout,
+ * and the difference between those two was an inference. 379E heard 2 of
+ * 93D1's 107; 93D1 heard 20 of 379E's 60. That asymmetry was the fault.
  *
- * Versioned by offset like the others: append fields, never move them.
+ * AND READ self_echoes, WHICH v1 COULD NOT SEE AT ALL. It is beacons that
+ * passed a CRC carrying this band's OWN nonce — its amplifier still ringing
+ * past HANDOFF_TRIG_SETTLE_US. Under v1 that was a band electing itself
+ * sender and there was no counter for it, only a symptom; under v2 it is
+ * caught, discarded, and counted.
+ *
+ * REDEFINED AT STEP 7, NOT EXTENDED. The v1 layout described a mechanism that
+ * no longer exists — there is no gate, no quiet-wait cap and no floor — and
+ * the block is full at 20 bytes, so there is nowhere to append. Nothing has
+ * ever emitted one of these (ble_trig_t is a finished shape waiting for a
+ * caller, brief §1), so no reader can be holding the old layout. The version
+ * byte goes up regardless: that is what it is for.
  */
 #define BLE_TRIG_TAG     0xB2u
-#define BLE_TRIG_VERSION 1
+#define BLE_TRIG_VERSION 2
 
 typedef struct {
     uint8_t  tag;            /* BLE_TRIG_TAG                                 */
     uint8_t  version;        /* BLE_TRIG_VERSION                             */
-    uint16_t shouts;         /* trigger cycles that reached SHOUT            */
-    uint16_t waits;          /* gate trips while listening                   */
-    uint16_t short_carriers; /* ...of those, too brief to be a shout         */
+    uint16_t nonce;          /* who this band is, this arming                */
+    uint16_t beacons;        /* beacon frames transmitted                    */
+    uint16_t peers;          /* beacons decoded carrying somebody else       */
+    uint16_t self_echoes;    /* ...carrying OUR nonce: the settle is short   */
     uint16_t sends;          /* elected sender                               */
     uint16_t receives;       /* elected receiver                             */
-    uint16_t last_wait_ms;   /* how long the last thing heard lasted         */
-    uint16_t peak_level;     /* highest carrier level since the last block   */
-    uint16_t peak_floor;     /* the floor as it stood at that peak           */
-    uint8_t  quiet_timeouts; /* §4.3 caps hit, saturating at 255             */
+    uint16_t peak_level;     /* highest signal since the last block          */
+    uint16_t peak_noise;     /* the CFAR reference as it stood at that peak  */
+    uint8_t  beacons_bad_crc;/* framed as a beacon, failed the CRC, at 255   */
     uint8_t  trig_state;     /* proto/beacon.h trig_state_t                  */
 } ble_trig_t;
+
+/*
+ * WHAT DID NOT FIT, AND WHY IT IS NOT MISSED. redraws — nonces abandoned
+ * after an echo — is one per self_echo by construction (beacon.c redraws at
+ * the next beacon after any echo), so it is the same number twice and the
+ * block has room for one of them. The USB console prints both.
+ */
 
 _Static_assert(sizeof(ble_trig_t) == 20, "trig must fit one notify at the 23-byte floor");
 
