@@ -583,6 +583,146 @@ range, tethered. The 379E state from `carrier-floor-still-climbing-brief.md` —
 peak 133–150, floor 61–83, deaf — must be unreproducible, because there is
 nothing left to climb.
 
+### What step 5 actually measured, 25 Sep 2026 (`1fd27d0`)
+
+**PASSED.** `busy` tracks the level, the crossover lands on the derived `k`,
+and both regressions are clean. `carrier.c` is deleted.
+
+#### The sweep
+
+Two boards plate to plate, level swept by geometry with hands withdrawn
+between holds, a matched quiet/tone pair at every one, every capture linear.
+`linktest p [s]` reports the FRACTION of windows that read busy, which is what
+a threshold has to be judged as — one instantaneous read cannot tell 100 %
+busy from 5 %.
+
+| gap | quiet | tone A | power ratio | against `k` = 16.76 |
+|---|---|---|---|---|
+| 1 m | 0 % | **0 %** | 1:1 | out of range |
+| 30 cm | 0 % | **0 %** | 2:1 | out of range |
+| **15 cm** | 0 % | **58.5 %** | 12:1 | **ON THE LINE** |
+| 10 cm | 0 % | **100 %** | 77:1 | 4x clear |
+| 5 cm | 0 % | **100 %** | 651:1 | 38x clear |
+
+**The 58.5 % row is the one to keep.** At that hold the instantaneous ratio is
+12:1 against a threshold of 16.76, so half the windows fall over the line and
+half under it — the detector sitting exactly on its own threshold. `k` was
+computed from a stated false-busy rate and never touched; the crossover landed
+there on its own.
+
+Quiet, both silent and settled: **0 busy windows in 100024**, on both boards.
+Tone A at 5 cm: 100024 of 100024, 1245:1 in power, 74x clear.
+
+The 379E state from `carrier-floor-still-climbing-brief.md` — peak 133–150,
+floor 61–83, deaf — is unreproducible, as §6 said it would be. There is
+nothing to climb.
+
+#### THE REAL FINDING: the core-1 loop was stalling on flash
+
+`apps/handoff` went to **98 % core-1 load with 1709 DMA overruns in thirty
+seconds** and not one handshake out of eight completing. `main` on the same
+bench at the same gap: 13 complete, 0 abort, 35 % load, 0 overruns. So the
+branch broke it, and the bench said so before any argument could.
+
+**The instrument said the opposite of the obvious answer.** A live two-second
+interval read **46 %**, not 98 %, while overruns kept arriving at 47 a second.
+You do not drop DMA blocks at 46 % load — you drop them when something STALLS
+core 1 rather than keeping it busy.
+
+Core 1 runs from XIP, and `apps/handoff` has BTstack on core 0 using the same
+flash. The bank's window end runs 20 000 times a second and every one of those
+was a chance to stall. Average load was fine; worst-case latency was not.
+`linktest` never showed it because core 0 there is an idle console.
+
+So the whole core-1 path is in RAM now — the bank, presence, the v1 Goertzel,
+`sync`, the ipc push and `core1_main` itself. `HANDOFF_HOT_FUNC` in `config.h`
+spells out the section attribute rather than using the SDK's
+`__not_in_flash_func`, because `.time_critical.*` is plain GCC and `lib/dsp`
+must not see an SDK header. **Not one instruction of arithmetic changed; only
+where it lives.**
+
+§4 decided against this at step 3 on the grounds that the bank fits without
+it. It fits without it in `linktest`. It does not fit without it beside a
+Bluetooth stack, and that is a measurement step 3 could not have made.
+
+#### Two mistakes the bench caught, both mine
+
+1. **Two square roots per window.** The first `core1_presence_window()`
+   computed both telemetry scores every window — two `isqrt64` and a 64-bit
+   divide at 20 kHz, on a part with no 64-bit divider. Core 1 read 73 %
+   against a 55 % baseline. Design §6 says no square roots on the hot path,
+   and four expensive operations were sitting there for numbers nobody reads
+   more than once a second. Core 0 now raises a flag and the next window
+   answers it. `gzb_ratio_gt()`'s divide-based overflow guard came off the
+   decision at the same time — `config.h` static-asserts why it cannot be
+   needed there.
+
+2. **The ratio was printed in amplitude next to a `k` in power.** A 19x margin
+   read as though it were scraping past 16.76. Both consoles now print the
+   power ratio and how many times clear it is.
+
+#### The OOK bridge, and why it exists
+
+`presence` has no hold, which is right for a radio whose two symbols are both
+tones. It is wrong for the radio still on the air: **v1 switches the carrier
+OFF for a zero**, so half of every frame is silence and an envelope detector
+with no memory answers "nobody is transmitting" in each gap — truthfully.
+Measured in the host simulator: a band listening to a v1 frame flapped
+busy/quiet at the chip rate and **no rendezvous completed at any phase**.
+
+So `link_sm.c` carries a bridge, and its length is derived rather than tuned:
+`MANCHESTER_MAX_RUN_CHIPS + 1` chips — the longest silence the line code can
+produce, plus one because `hal_rx_busy()` answers about an interval rather
+than an instant. `manchester.h` states the run length and `test_manchester.c`
+walks all 65 536 bit pairs to prove it.
+
+**It deletes at step 6.** FSK has no spaces, so nothing will exercise it once
+the framer changes.
+
+#### `hal_rx_busy()` took two goes
+
+Sticky-until-read alone flaps for a caller polling faster than windows close.
+The last window's verdict alone misses a short burst. It is both, and `hal.h`
+says why each half is there — each one was a bug without the other, and each
+showed up as a different failure.
+
+#### Two things the simulator had to be told
+
+Both honest gaps, not fudges. The CFAR reference is empty for one preamble
+after init, so `sim_twonode` now runs the channel before either band is armed
+— a band on a wrist filled that in the first eight milliseconds after boot and
+has held it since. And the host HAL runs the **real** `presence_t` off a
+two-bin model of the channel, so the real `k`, the real reference length and
+the real decimation are in the loop.
+
+A VSYS read no longer throws the reference away: the converter being borrowed
+for three blocks says nothing about the room.
+
+#### Regression at this coupling
+
+| | |
+|---|---|
+| v1 link | good 200, crc 0, lost 0, **FER 0.0000**, BER 0, margin 437, overruns 0, false syncs 1 |
+| `apps/handoff` | **12 and 13 complete handshakes in 35 and 36 s**, 0 partial, 0 abort, 0 stalls, 0 overruns |
+| core 1 | bank off 85.6 cycles/sample, bank on 132.4 — bank AND presence together cost **46.8**, against step 3's 46.0 for the bank alone. **Presence is under one cycle a sample.** |
+| load | 46–47 % in `linktest`, 47 % in `handoff` against `main`'s 35 % |
+| suite | **25536 checks**, 0 failures |
+
+#### What is NOT built on this branch
+
+`apps/turnaround` is off the build. It measures v1's released-space
+turnaround, which design §4 retires, and it does it with its own `carrier_t`
+over chips sorted by sample number — which v2's core-1 bank does not hand core
+0. The source stays; it still builds on `main`.
+
+New instruments:
+
+| | |
+|---|---|
+| `linktest p [s]` | the busy FRACTION over an interval, with signal, reference, the power ratio and the operating point. Does not go through `hal_rx_busy()` — that clears the latch, and an instrument must never take an event away from the link. |
+| `handoff n [0\|1]` | the bank off or on, in THIS image on THIS board. It is what split the bank's cost from the rest of the diff, inside the app where the problem actually was. |
+| `hal_pico_presence()` | the detector read without disturbing it |
+
 ---
 
 ## 7. Step 6 — the framer, without a slicer

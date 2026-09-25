@@ -333,7 +333,7 @@ Each step is a bench measurement, not a feature. Stop at any step that fails.
 | 2 | Two-tone PIO generator | see below — no external hardware needed — **PASSED baa2782** |
 | 3 | 5-bin Goertzel bank on core 1 | no dropped windows at 500 ksps; budget printed — **PASSED**, 46 cycles a sample, 16 points of core 1 |
 | 4 | Passive: one board TX, one RX, plate to plate | `E_A`/`E_B` separate cleanly; guards do not rise while transmitting — **PASSED**, guard median flat across an 11× signal sweep |
-| 5 | Presence by guard median, tethered | busy tracks reality with the amplifier gain swept |
+| 5 | Presence by guard median, tethered | busy tracks reality with the level swept — **PASSED 1fd27d0**, crossover on the derived k |
 | 6 | Frame decode with no slicer | BER at least as good as v1 on the same bench |
 | 7 | Nonce beacon and election | two boards, no double-send, no self-trigger |
 | 8 | Skin path, on cells, floating | §14.1's 447-frame result matched or beaten |
@@ -458,6 +458,67 @@ noise is 1/f. It is a slope, not scatter, so `median` of three **always selects
 bin 8**, the guard between the tones, with 7 and 11 serving as the outlier
 protection CFAR wants them for. §6's reasoning survives; its arithmetic should
 say bin 8 is the reference rather than implying an average of three.
+
+### What step 5 measured, 25 Sep 2026 — and the one thing §11 missed
+
+**PASSED.** `carrier.c` is deleted. `busy` tracks the level across an
+eleven-fold sweep, and the crossover lands on the `k` §6 derives — not near
+it, on it: at the hold where the instantaneous ratio read 12:1 against a
+threshold of 16.76, exactly 58.5 % of windows read busy. Brief §6 has the
+tables.
+
+#### Correction 4 — §11's kill list is missing the one that nearly killed it
+
+§11 lists four ways this design dies. None of them is what actually went
+wrong, and the real one is not about the DSP at all: **core 1 runs from
+flash.**
+
+`apps/handoff` hit 98 % core-1 load with 1709 DMA overruns in thirty seconds
+and not one handshake completing, while `main` on the same bench at the same
+gap managed 13 complete with 0 overruns at 35 % load. The obvious reading —
+"the bank does not fit" — was wrong, and the instrument said so: a live
+two-second interval read **46 %**, not 98 %, while overruns kept arriving.
+Blocks are not dropped at 46 % load. They are dropped when something STALLS
+core 1 rather than keeping it busy.
+
+Core 1 executes from XIP, and `apps/handoff` has BTstack on core 0 using the
+same flash. The bank's window end runs 20 000 times a second, and every one of
+those was a chance to stall on an instruction fetch. Average load was fine;
+worst-case latency was not. `linktest` never showed it because core 0 there is
+an idle console — **which means every core-1 budget taken in `linktest` is a
+lower bound, not a budget.**
+
+The whole core-1 path now runs from RAM. Not one instruction of arithmetic
+changed; only where it lives. Step 3 decided against this because the bank fit
+without it, and it does — beside an idle console.
+
+**So add to §11's list, above all four of the others:** the core-1 loop must
+be measured in the app that carries the Bluetooth stack, not in the one that
+carries a console. A DSP budget taken with core 0 idle does not transfer.
+
+#### Correction 5 — §6's "no square roots" is a hard requirement, not advice
+
+The first presence implementation took two `isqrt64` and a 64-bit divide every
+window, for telemetry nobody reads more than once a second. Core 1 went to
+73 % against a 55 % baseline: **eighteen points, for two numbers a human looks
+at.** Core 0 now raises a flag and the next window answers it, and the
+decision itself cross-multiplies in line rather than through
+`gzb_ratio_gt()`, whose overflow guard divides. Measured after: presence costs
+**under one cycle a sample** on top of the bank.
+
+#### What §6 did not anticipate: v1's waveform
+
+§6 assumes both symbols are tones. Until step 6 they are not — **v1 switches
+the carrier off for a zero** — so half of every v1 frame is silence and a
+detector with no memory answers "nobody is transmitting" in each gap,
+truthfully. No rendezvous completed at any phase in the simulator.
+
+`link_sm.c` therefore carries a bridge whose length is DERIVED: the longest
+run of identical chips Manchester can produce, plus one because `hal_rx_busy()`
+answers about an interval rather than an instant. `manchester.h` states the run
+length and a host test walks all 65 536 bit pairs to prove it. **It deletes at
+step 6**, when constant envelope makes it unreachable — which is §4's second
+"free" benefit arriving as a requirement rather than a bonus.
 
 ---
 
