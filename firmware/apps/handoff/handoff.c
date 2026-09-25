@@ -917,9 +917,10 @@ static void print_stats(void)
      * against floor is what tells them apart — a healthy idle detector sits
      * with level near floor and present 0, a poisoned one sits with BOTH high.
      */
-    printf("           carrier level %lu floor %lu present %u; framer syncs %lu\n",
+    printf("           carrier level %lu floor %lu%s present %u; framer syncs %lu\n",
            (unsigned long)carrier_level(&s_sm.carrier),
            (unsigned long)carrier_floor(&s_sm.carrier),
+           carrier_primed(&s_sm.carrier) ? "" : " (stale: re-priming, no chips since reset)",
            (unsigned)carrier_present(&s_sm.carrier),
            (unsigned long)s_sm.framer.syncs);
     printf("           chips %lu at %lu sps; vsys %u mV %s, %lu reads %lu failed, last %lu us\n",

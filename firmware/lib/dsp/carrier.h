@@ -10,6 +10,11 @@
  * chip — high half the time — and a floor primed at the carrier's own level
  * cannot fall back inside the frame. See enter_exchange() in link_sm.c and the
  * test that pins it.
+ *
+ * reset() leaves level and floor at their last values rather than zeroing them.
+ * push() overwrites both from the next chip anyway, so nothing in the detector
+ * reads them in between — but a status line does, and a detector that is merely
+ * between chips used to print as a dead one. Ask primed() instead.
  */
 #ifndef HANDOFF_CARRIER_H
 #define HANDOFF_CARRIER_H
@@ -19,7 +24,7 @@
 
 typedef struct {
     uint32_t level;        /* fast EMA of chip energy                       */
-    uint32_t floor;        /* slow, asymmetric EMA — falls fast, rises slow */
+    uint32_t floor;        /* slow EMA that can only walk down — carrier.c  */
     uint8_t  fast_shift;
     uint8_t  slow_shift;
     uint8_t  ratio_num;    /* present when level > floor * ratio_num/8      */
@@ -36,5 +41,6 @@ void     carrier_push(carrier_t *c, uint16_t chip_energy);
 bool     carrier_present(const carrier_t *c);
 uint32_t carrier_level(const carrier_t *c);
 uint32_t carrier_floor(const carrier_t *c);
+bool     carrier_primed(const carrier_t *c);
 
 #endif /* HANDOFF_CARRIER_H */
