@@ -7,7 +7,8 @@ Paste everything from the line below into a fresh session.
 ---
 
 Continue the Handoff link v2 redesign. Repo `C:\work\Handoff`, branch
-`redesign/link-v2`, clean at `eacbdfd`.
+`redesign/link-v2`, working tree clean. Step 1 is `3b4e902`, step 2 is
+`baa2782`, and the commits after it are documentation only.
 
 Read `docs/link-v2-design.md` end to end first, then `docs/link-v2-brief.md`.
 The design is the authority; the brief is the build order. Both now carry a
