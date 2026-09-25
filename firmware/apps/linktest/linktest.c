@@ -915,6 +915,163 @@ static void rx_bank(void)
     printf("\n    back on bin %u\n", (unsigned)back);
 }
 
+/* ---- link v2 step 3: the real bank -------------------------------------
+ *
+ * `b` walks the five bins one after another, retuning between them. This
+ * reads all five in the SAME window, which is the only reading the design
+ * ever asks for: a ratio between two numbers that shared a gain, a body and
+ * an amplifier. Sequential reads cannot answer that question at all.
+ *
+ *   n        the budget: bank off, then bank on, in this image
+ *   n 0 / 1  bank off / on and leave it there
+ *   n 2      one capture -- five bins, the guard median, the ratio
+ */
+#define BANK_CAP_WINDOWS  4000u     /* 200 ms at the window rate */
+#define BANK_CAP_WAIT_US  1000000u
+#define BANK_BUDGET_US    2000000u
+#define BANK_ON_SETTLE_US  200000u
+
+static void bank_wait(uint32_t us)
+{
+    uint64_t until = hal_now_us(s_hal) + us;
+    while (hal_now_us(s_hal) < until) { rx_pump(); selfloop_pump(); }
+}
+
+static const char *bank_generator(void)
+{
+    if (!pio_carrier_fsk_active()) return "v1";
+    return pio_carrier_is_driving() ? "two-tone, DRIVING" : "two-tone, idle";
+}
+
+static void rx_bank_capture(void)
+{
+    static const char *k_name[GZB_BINS] = { "TONE A", "TONE B",
+                                            "guard", "guard", "guard" };
+    static const uint16_t k_bin[GZB_BINS] = {
+        HANDOFF_TONE_A_BIN, HANDOFF_TONE_B_BIN,
+        HANDOFF_GUARD_LO_BIN, HANDOFF_GUARD_MID_BIN, HANDOFF_GUARD_HI_BIN
+    };
+    hal_pico_bank_t cap;
+    uint32_t sig = 0, noise;
+    bool was_on = hal_pico_bank_on();
+    size_t i;
+
+    if (!was_on) { hal_pico_set_bank(true); bank_wait(BANK_ON_SETTLE_US); }
+
+    if (!hal_pico_bank_capture(BANK_CAP_WINDOWS, BANK_CAP_WAIT_US, &cap)) {
+        printf("    capture did not finish: %lu of %lu windows\n",
+               (unsigned long)cap.windows, (unsigned long)BANK_CAP_WINDOWS);
+        if (!was_on) hal_pico_set_bank(false);
+        return;
+    }
+
+    printf("\n  --- bank, %lu windows in ONE pass, generator %s ---\n",
+           (unsigned long)cap.windows, bank_generator());
+
+    for (i = 0; i < GZB_BINS; i++) {
+        const uint32_t div = (i >= GZB_G_LO) ? cap.guard_windows : cap.windows;
+        const uint32_t mean = div ? gzb_score(cap.sum[i] / div) : 0u;
+        const uint32_t max  = gzb_score(cap.max[i]);
+
+        printf("    bin %2u  %3lu kHz  %-6s  mean %4lu LSB  max %4lu LSB\n",
+               (unsigned)k_bin[i],
+               (unsigned long)(k_bin[i] * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
+               k_name[i], (unsigned long)mean, (unsigned long)max);
+
+        if (i < GZB_G_LO && mean > sig) sig = mean;
+    }
+
+    noise = cap.windows ? gzb_score(cap.noise_sum / cap.windows) : 0u;
+    printf("    guards ran in %lu of %lu windows (every %d)\n",
+           (unsigned long)cap.guard_windows, (unsigned long)cap.windows,
+           HANDOFF_GUARD_DECIM);
+    printf("    signal %lu LSB, guard median %lu LSB", (unsigned long)sig,
+           (unsigned long)noise);
+    if (noise) printf(", ratio %lu:1", (unsigned long)(sig / noise));
+    printf("\n");
+
+    if (!was_on) hal_pico_set_bank(false);
+}
+
+/*
+ * The budget, measured the one way that means anything: the same image, the
+ * same board, the same minute, with the bank switched off and then on.
+ *
+ * Step 1 found core-1 load moving 4 points between two builds of the SAME
+ * code, from one unrelated function and where the linker put the image, so a
+ * number from another image is not evidence. The difference below is.
+ *
+ * Cycles a sample is the figure to quote: busy microseconds times the clock,
+ * over the samples core 1 actually saw in the interval.
+ */
+static void bank_budget_leg(const char *what, bool on)
+{
+    uint64_t b0, t0, b1, t1;
+    uint32_t w0, w1, ov0, ov1, sps;
+    uint64_t busy_us, wall_us, samples, ctenths;
+
+    hal_pico_set_bank(on);
+    bank_wait(BANK_ON_SETTLE_US);
+
+    ov0 = hal_pico_overruns();
+    w0  = hal_pico_windows();
+    hal_pico_core1_busy(&b0, &t0);
+
+    bank_wait(BANK_BUDGET_US);
+
+    hal_pico_core1_busy(&b1, &t1);
+    w1  = hal_pico_windows();
+    ov1 = hal_pico_overruns();
+    sps = hal_pico_sps();
+
+    busy_us = b1 - b0;
+    wall_us = t1 - t0;
+    samples = (uint64_t)(w1 - w0) * (uint32_t)HANDOFF_GZ_N;
+    ctenths = samples
+        ? busy_us * ((uint32_t)HANDOFF_SYS_CLK_HZ / 1000000u) * 10u / samples
+        : 0u;
+
+    printf("    %-9s load %2lu %%   windows %6lu   %lu sps   overruns %lu   ",
+           what,
+           (unsigned long)(wall_us ? busy_us * 100u / wall_us : 0u),
+           (unsigned long)(w1 - w0), (unsigned long)sps,
+           (unsigned long)(ov1 - ov0));
+    print_tenths((uint32_t)ctenths);
+    printf(" cycles/sample\n");
+}
+
+static void rx_bank_budget(void)
+{
+    bool was_on = hal_pico_bank_on();
+
+    printf("\n  --- core 1 budget, ONE image, %lu ms a leg, generator %s ---\n",
+           (unsigned long)(BANK_BUDGET_US / 1000u), bank_generator());
+    printf("    (compare like with like: the load moves with whether frames\n"
+           "     are being decoded, so run this idle or with `x` on, not one\n"
+           "     leg of each)\n");
+
+    bank_budget_leg("bank off", false);
+    bank_budget_leg("bank on", true);
+
+    hal_pico_set_bank(was_on);
+    printf("    bank left %s\n", was_on ? "ON" : "off");
+}
+
+static void rx_bank_dispatch(uint32_t arg, bool have_arg)
+{
+    if (!have_arg) { rx_bank_budget(); return; }
+
+    switch (arg) {
+    case 0:
+    case 1:
+        hal_pico_set_bank(arg != 0u);
+        printf("    five-bin bank %s\n", arg ? "ON" : "off");
+        break;
+    case 2: rx_bank_capture(); break;
+    default: printf("    n [0|1|2]\n"); break;
+    }
+}
+
 static void rx_help(void)
 {
     printf("\n  c 40|200  carrier, kHz\n"
@@ -929,6 +1086,7 @@ static void rx_help(void)
            "  y [0|1|2|9] two tones: check, drive A / B, 2 align, 9 stop\n"
            "  k [bin]   move the receive Goertzel to a bin (7..11)\n"
            "  b [1]     walk bins 7,8,9,10,11; b 1 walks every bin\n"
+           "  n [0|1|2] five-bin bank: budget, 0 off, 1 on, 2 one capture\n"
            "  h         this\n");
 }
 
@@ -983,6 +1141,7 @@ static void rx_dispatch(const char *line)
         }
         break;
     case 'b': if (have_arg && arg) rx_bank_full(); else rx_bank(); break;
+    case 'n': rx_bank_dispatch(arg, have_arg); break;
     case 'h': case '?': rx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }

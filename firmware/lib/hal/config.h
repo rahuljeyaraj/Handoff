@@ -112,6 +112,33 @@
 #define HANDOFF_GUARD_MID_BIN     8
 #define HANDOFF_GUARD_HI_BIN      11
 
+/*
+ * How often the guard bins are scored, in windows. The tones are scored every
+ * window; the guards are not.
+ *
+ * They can be skipped because of what they are: nothing we transmit can enter
+ * bins 7, 8 and 11 — they are clear of every odd harmonic that folds back into
+ * the band, and the even harmonics are null at 50 % duty — so a guard is a
+ * noise estimate, time-averaged anyway, and not a signal path. Skipping is
+ * what pays for three extra Goertzels:
+ *
+ *      two tones, every window          2.00 multiplies a sample
+ *      three guards, every 4th window    0.75
+ *                                        ----
+ *                                        2.75   against v1's 1.00
+ *
+ * 4 rather than 5 or 10 because the guard windows must walk every phase of a
+ * chip rather than landing on the same one forever. HANDOFF_WINDOWS_PER_CHIP
+ * is 5, so a decimation sharing a factor with it would read one fixed position
+ * in every chip — including, at the wrong value, always the chip-boundary
+ * window, which is the one window that is a mixture of two chips. Coprime with
+ * the windows per chip is the requirement; 4 is the cheapest number that meets
+ * it and still costs a quarter.
+ */
+#ifndef HANDOFF_GUARD_DECIM
+#define HANDOFF_GUARD_DECIM       4
+#endif
+
 #define HANDOFF_CHIP_RATE_HZ      (HANDOFF_WINDOW_RATE_HZ / HANDOFF_WINDOWS_PER_CHIP)
 #define HANDOFF_BIT_RATE_BPS      (HANDOFF_CHIP_RATE_HZ / 2)   /* Manchester   */
 #define HANDOFF_CHIP_US           (1000000 / HANDOFF_CHIP_RATE_HZ)
@@ -275,6 +302,21 @@ HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_CLEAR(HANDOFF_GUARD_MID_BIN),
     "mid guard bin is contaminated by a tone harmonic");
 HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_CLEAR(HANDOFF_GUARD_HI_BIN),
     "high guard bin is contaminated by a tone harmonic");
+
+/*
+ * The guards must not lock to one phase of the chip. The full requirement is
+ * that the decimation is coprime with the windows per chip — test_gz_bank.c
+ * computes the gcd and checks it, because the preprocessor cannot. What is
+ * checkable here is the necessary part: neither divides the other, which is
+ * what a lazy 5 or 10 would trip over.
+ */
+HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_DECIM >= 1,
+    "guard decimation must be at least every window");
+HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_DECIM == 1 ||
+    (HANDOFF_GUARD_DECIM % HANDOFF_WINDOWS_PER_CHIP != 0 &&
+     HANDOFF_WINDOWS_PER_CHIP % HANDOFF_GUARD_DECIM != 0),
+    "guard decimation shares a factor with the windows per chip: the guards "
+    "would read the same position in every chip forever");
 
 /*
  * ---- link v2: the chip words have to close, exactly ----------------------

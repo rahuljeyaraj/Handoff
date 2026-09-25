@@ -35,8 +35,23 @@ void     gz_reset(gz_t *g);
  * linear in signal amplitude and a 6 dB change is a factor of two. */
 bool     gz_push(gz_t *g, int16_t sample, uint32_t *score);
 
+/*
+ * The same window, without the square root. Returns true exactly once per
+ * window, with mag^2 of bin k written to *mag2.
+ *
+ * Link v2 §5: every decision in v2 is a ratio, and a ratio can be taken on
+ * mag^2 by integer cross-multiplication, so the square root leaves the hot
+ * path and stays only where a human reads the number. gz_push() is unchanged
+ * and is still what v1 runs.
+ */
+bool     gz_push_mag2(gz_t *g, int16_t sample, uint64_t *mag2);
+
 /* Magnitude of the window in progress, without disturbing it. Diagnostics. */
 uint32_t gz_peek(const gz_t *g);
+
+/* mag^2 -> the same normalised amplitude gz_push() reports. Telemetry: it
+ * takes the square root, so it does not belong in a per-window loop. */
+uint32_t gz_score_of(uint64_t mag2, uint16_t n);
 
 /* Exposed for tests and for anyone wanting mag^2 without the square root. */
 uint64_t gz_mag2(const gz_t *g);

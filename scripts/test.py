@@ -50,6 +50,7 @@ FORBIDDEN = ('#include "pico/', "#include <pico/", '#include "hardware/',
 
 LIB_SOURCES = [
     LIB / "dsp" / "goertzel.c",
+    LIB / "dsp" / "gz_bank.c",
     LIB / "dsp" / "sync.c",
     LIB / "dsp" / "carrier.c",
     LIB / "link" / "crc.c",
@@ -70,7 +71,7 @@ LIB_SOURCES = [
 SIM_SOURCES = [HOST / "chan.c", HOST / "hal_host.c", HOST / "sim_twonode.c"]
 
 TEST_SOURCES = [HOST / n for n in (
-    "main.c", "test_crc.c", "test_manchester.c", "test_goertzel.c", "test_sync.c",
+    "main.c", "test_crc.c", "test_manchester.c", "test_goertzel.c", "test_gz_bank.c", "test_sync.c",
     "test_frame.c", "test_chunk.c", "test_compact.c", "test_vcard.c",
     "test_frag.c", "test_store.c",
     "test_carousel.c", "test_beacon.c", "test_link.c",

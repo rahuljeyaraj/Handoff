@@ -30,6 +30,7 @@
 #include "carrier.h"
 #include "config.h"
 #include "goertzel.h"
+#include "gz_bank.h"
 #include "ipc.h"
 #include "pio_carrier.h"
 #include "sync.h"
@@ -82,6 +83,33 @@ static uint64_t          s_core1_t0;
 static volatile uint16_t s_rx_bin_req = HANDOFF_GZ_BIN;
 static volatile uint16_t s_rx_bin_ack;
 
+/*
+ * ---- link v2 step 3: the five-bin bank, as an instrument ----------------
+ *
+ * The bank is the v2 receiver's front end, but nothing in v1 consumes it yet,
+ * so here it runs BESIDE the v1 chain rather than in place of it, and it is
+ * off until asked. That is deliberate and it is the only honest way to cost
+ * it: step 1 learned that comparing two images measures the linker as much as
+ * the code — 4 points of core-1 load moved from adding one unrelated function
+ * and shifting the image in XIP. Switching the bank on and off inside ONE
+ * image, on one board, in one minute, measures the bank.
+ *
+ * Same request/ack handshake as the carrier and the bin: core 0 writes,
+ * core 1 obeys and echoes.
+ */
+static volatile bool s_bank_req;
+static volatile bool s_bank_ack;
+
+/*
+ * A capture, rather than a live mirror of the bank, because a 64-bit read is
+ * not atomic between the cores: core 0 asks for N windows, core 1 fills the
+ * accumulator and says done, and only then does core 0 read it. Nothing is
+ * torn because nothing is written while it is being read.
+ */
+static volatile uint32_t s_cap_req;
+static volatile bool     s_cap_done;
+static hal_pico_bank_t   s_cap;
+
 static void core1_dsp_init(gz_t *g, sync_t *sy, carrier_t *car, uint16_t bin)
 {
     /* Bin spacing equals the window rate, so the bin index is just the
@@ -92,11 +120,43 @@ static void core1_dsp_init(gz_t *g, sync_t *sy, carrier_t *car, uint16_t bin)
     carrier_init(car);
 }
 
+/*
+ * One completed bank window, on core 1. Accumulates into the capture if core
+ * 0 has asked for one, and does nothing at all otherwise — a capture is the
+ * only reason the numbers leave this core.
+ */
+static void core1_bank_window(const gz_bank_t *b)
+{
+    uint64_t noise;
+    int i;
+
+    if (!s_cap_req || s_cap_done) return;
+
+    for (i = 0; i < GZB_BINS; i++) {
+        const uint64_t m = b->mag2[i];
+        /* A decimated guard holds its last value between guard windows, so
+         * summing it every window would weight one reading four times. Only
+         * a fresh number is counted, and guard_windows is its divisor. */
+        if (i >= GZB_G_LO && !b->guards_fresh) continue;
+        s_cap.sum[i] += m;
+        if (m > s_cap.max[i]) s_cap.max[i] = m;
+    }
+    if (b->guards_fresh) s_cap.guard_windows++;
+
+    noise = gzb_noise(b);
+    s_cap.noise_sum += noise;
+    if (noise > s_cap.noise_max) s_cap.noise_max = noise;
+
+    if (++s_cap.windows >= s_cap_req) s_cap_done = true;
+}
+
 static void core1_main(void)
 {
     gz_t      g;
     sync_t    sy;
     carrier_t car;
+    gz_bank_t bank;
+    bool      bank_on = s_bank_req;
     uint32_t  hz = s_carrier_req;
     uint16_t  bin = s_rx_bin_req;
     uint64_t  busy = 0;
@@ -108,8 +168,10 @@ static void core1_main(void)
     flash_safe_execute_core_init();
 
     core1_dsp_init(&g, &sy, &car, bin);
+    gzb_init(&bank);
     s_carrier_ack = hz;
     s_rx_bin_ack  = bin;
+    s_bank_ack    = bank_on;
     s_core1_up = true;
 
     for (;;) {
@@ -135,6 +197,11 @@ static void core1_main(void)
             bin = s_rx_bin_req;
             core1_dsp_init(&g, &sy, &car, bin);
             s_rx_bin_ack = bin;
+        }
+        if (s_bank_req != bank_on) {
+            bank_on = s_bank_req;
+            gzb_reset(&bank);
+            s_bank_ack = bank_on;
         }
 
         /* A VSYS request is acted on the moment it is seen, block or not:
@@ -164,13 +231,34 @@ static void core1_main(void)
          * 4 ms.
          */
         if (adc_ring_aux_step(blk, n, seq, &reinit)) {
-            if (reinit) core1_dsp_init(&g, &sy, &car, bin);
+            /* The VSYS blocks carry a step to a DC level and back, which is
+             * broadband and would land in all five bins at once. The bank is
+             * rebuilt with the rest of the detector rather than being shown
+             * the converter moving. */
+            if (reinit) { core1_dsp_init(&g, &sy, &car, bin); gzb_reset(&bank); }
             busy += time_us_64() - t0;
             s_busy_us = busy;
             continue;
         }
 
         tlm_usb_raw_feed(blk, n, base);
+
+        /*
+         * Link v2 step 3. Beside the v1 chain, not in place of it: this is
+         * the measurement of what five bins cost, taken in the same image as
+         * the measurement of what one bin costs.
+         *
+         * A run at a time, window by window, so the five filters stay in
+         * registers across a window instead of being reloaded every sample.
+         */
+        if (bank_on) {
+            size_t off = 0;
+            while (off < n) {
+                bool done = false;
+                off += gzb_push_run(&bank, blk + off, n - off, &done);
+                if (done) core1_bank_window(&bank);
+            }
+        }
 
         for (i = 0; i < n; i++) {
             uint32_t score;
@@ -468,6 +556,48 @@ bool hal_pico_set_rx_bin(uint16_t bin)
 }
 
 uint16_t hal_pico_rx_bin(void) { return s_rx_bin_req; }
+
+/* ---- link v2 step 3: the bank, switched and captured -------------------- */
+
+bool hal_pico_set_bank(bool on)
+{
+    if (!s_inited) { s_bank_req = on; return true; }
+
+    s_bank_req = on;
+    while (s_bank_ack != on) tight_loop_contents();
+    return true;
+}
+
+bool hal_pico_bank_on(void) { return s_bank_req; }
+
+bool hal_pico_bank_capture(uint32_t windows, uint32_t timeout_us,
+                           hal_pico_bank_t *out)
+{
+    uint64_t deadline;
+
+    if (!out || windows == 0) return false;
+    if (!s_inited || !s_bank_req) return false;
+
+    memset(&s_cap, 0, sizeof s_cap);
+    s_cap_done = false;
+    s_cap_req  = windows;              /* last, so core 1 sees a zeroed one */
+
+    deadline = time_us_64() + timeout_us;
+    while (!s_cap_done && time_us_64() < deadline) tight_loop_contents();
+
+    *out = s_cap;
+    s_cap_req = 0;
+    return s_cap_done;
+}
+
+void hal_pico_core1_busy(uint64_t *busy_us, uint64_t *now_us)
+{
+    /* Both readings, together, so a caller can take two of them and divide.
+     * hal_pico_core1_load() averages over everything since boot, which is
+     * the wrong instrument for a change made a second ago. */
+    if (now_us)  *now_us  = time_us_64();
+    if (busy_us) *busy_us = s_busy_us;
+}
 
 uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last)
 {

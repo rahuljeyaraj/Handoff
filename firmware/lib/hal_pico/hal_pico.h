@@ -16,6 +16,7 @@
 #define HANDOFF_HAL_PICO_H
 
 #include "adc_ring.h"
+#include "gz_bank.h"
 #include "hal.h"
 #include "pio_carrier.h"
 
@@ -208,5 +209,58 @@ void hal_pico_clocks(hal_pico_clocks_t *m);
  */
 bool     hal_pico_set_rx_bin(uint16_t bin);
 uint16_t hal_pico_rx_bin(void);
+
+/*
+ * ---- link v2 step 3: the five-bin bank ---------------------------------
+ *
+ * Also an instrument, for now. The bank (dsp/gz_bank.h) is the v2 receiver's
+ * front end, but nothing consumes it yet, so it runs BESIDE the v1 chain on
+ * core 1 and starts switched off.
+ *
+ * That is what makes the budget answerable. Step 1 found a 4-point swing in
+ * core-1 load from adding one unrelated function and moving the image in
+ * XIP — so two images cannot be compared, and the only measurement worth
+ * anything is the bank switched on and off inside ONE image. That is exactly
+ * what these do.
+ *
+ * hal_pico_set_bank() blocks until core 1 has obeyed.
+ */
+bool hal_pico_set_bank(bool on);
+bool hal_pico_bank_on(void);
+
+/*
+ * One capture of the bank: core 1 accumulates `windows` windows and core 0
+ * reads the result afterwards, so nothing is read while it is being written.
+ *
+ * sum[] and max[] are mag^2 — no square root is taken anywhere near the hot
+ * path (link v2 §5). gz_bank.h's gzb_score() turns one into the amplitude a
+ * human reads. The guard entries are summed only over the windows they
+ * actually ran in, which is what guard_windows divides by.
+ *
+ * False if the bank is off, or if core 1 did not finish inside timeout_us —
+ * *out then holds however far it got.
+ */
+typedef struct {
+    uint64_t sum[GZB_BINS];
+    uint64_t max[GZB_BINS];
+    uint64_t noise_sum;      /* the guard median, per window */
+    uint64_t noise_max;
+    uint32_t windows;
+    uint32_t guard_windows;
+} hal_pico_bank_t;
+
+bool hal_pico_bank_capture(uint32_t windows, uint32_t timeout_us,
+                           hal_pico_bank_t *out);
+
+/*
+ * Core-1 busy time and the clock it is measured against, read together.
+ *
+ * hal_pico_core1_load() averages over everything since boot and cannot see a
+ * change made a second ago. Two of these, subtracted, give the load over an
+ * interval the caller chooses — and multiplied by the system clock and
+ * divided by the samples in that interval, they give cycles per sample, which
+ * is the number the budget is actually about.
+ */
+void hal_pico_core1_busy(uint64_t *busy_us, uint64_t *now_us);
 
 #endif /* HANDOFF_HAL_PICO_H */

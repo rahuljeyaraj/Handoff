@@ -75,6 +75,33 @@ bool gz_push(gz_t *g, int16_t sample, uint32_t *score)
     return true;
 }
 
+/*
+ * Same recurrence, and deliberately the same three lines: the only difference
+ * from gz_push() is what comes out at the window boundary. One square root is
+ * cheap; five of them, 20000 times a second, is the work link v2 §5 takes off
+ * core 1.
+ */
+bool gz_push_mag2(gz_t *g, int16_t sample, uint64_t *mag2)
+{
+    const int32_t s0 = (int32_t)sample
+                     + (int32_t)(((int64_t)g->coeff * g->s1) >> GZ_COEFF_FRAC_BITS)
+                     - g->s2;
+    g->s2 = g->s1;
+    g->s1 = s0;
+
+    if (++g->idx < g->n) return false;
+
+    if (mag2) *mag2 = gz_mag2(g);
+    gz_reset(g);
+    return true;
+}
+
+uint32_t gz_score_of(uint64_t mag2, uint16_t n)
+{
+    if (n == 0) return 0;
+    return (uint32_t)((uint64_t)gz_isqrt64(mag2) * 2u / n);
+}
+
 uint32_t gz_peek(const gz_t *g)
 {
     return (uint32_t)((uint64_t)gz_isqrt64(gz_mag2(g)) * 2u / g->n);

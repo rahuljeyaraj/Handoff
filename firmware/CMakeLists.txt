@@ -13,6 +13,7 @@
 
 add_library(handoff_lib STATIC
     lib/dsp/goertzel.c
+    lib/dsp/gz_bank.c
     lib/dsp/sync.c
     lib/dsp/carrier.c
 
