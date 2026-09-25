@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="741" viewBox="0 0 1600 741" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="741" fill="#ffffff"/>
+  <text x="36.0" y="84.0" text-anchor="start" font-size="48" fill="#2b2b2b" font-weight="700">Manchester: a 1 is tone B then tone A. A 0 is the other way about.</text>
+  <text x="382.9" y="170.4" text-anchor="middle" font-size="48" fill="#2b2b2b" font-weight="700">1</text>
+  <text x="559.4" y="170.4" text-anchor="middle" font-size="48" fill="#2b2b2b" font-weight="700">0</text>
+  <text x="736.0" y="170.4" text-anchor="middle" font-size="48" fill="#2b2b2b" font-weight="700">1</text>
+  <text x="912.5" y="170.4" text-anchor="middle" font-size="48" fill="#2b2b2b" font-weight="700">1</text>
+  <text x="1295.4" y="170.4" text-anchor="middle" font-size="48" fill="#2b2b2b" font-weight="700">Which tone was louder</text>
+  <text x="36.0" y="336.0" text-anchor="start" font-size="48" fill="#2b2b2b" font-weight="700">Firm grip</text>
+  <rect x="294.7" y="199.2" width="706.0" height="240.0" rx="10" fill="#ffffff" stroke="#cfcfcf" stroke-width="2"/>
+  <path d="M471.2 199.2 L471.2 439.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M647.7 199.2 L647.7 439.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M824.2 199.2 L824.2 439.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M382.9 205.2 L382.9 433.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M304.7 247.8 L308.1 342.6 L311.5 247.8 L314.9 342.6 L318.3 247.8 L321.7 342.6 L325.2 247.8 L328.6 342.6 L332.0 247.8 L335.4 342.6 L338.8 247.8 L342.2 342.6 L345.6 247.8 L349.0 342.6 L352.5 247.8 L355.9 342.6 L359.3 247.8 L362.7 342.6 L366.1 247.8 L369.5 342.6 L372.9 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="338.8" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M392.9 247.8 L396.7 342.6 L400.5 247.8 L404.3 342.6 L408.1 247.8 L411.9 342.6 L415.7 247.8 L419.5 342.6 L423.3 247.8 L427.1 342.6 L430.9 247.8 L434.6 342.6 L438.4 247.8 L442.2 342.6 L446.0 247.8 L449.8 342.6 L453.6 247.8 L457.4 342.6 L461.2 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="427.1" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <path d="M559.4 205.2 L559.4 433.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M481.2 247.8 L485.0 342.6 L488.8 247.8 L492.6 342.6 L496.4 247.8 L500.2 342.6 L503.9 247.8 L507.7 342.6 L511.5 247.8 L515.3 342.6 L519.1 247.8 L522.9 342.6 L526.7 247.8 L530.5 342.6 L534.3 247.8 L538.1 342.6 L541.9 247.8 L545.7 342.6 L549.4 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="515.3" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <path d="M569.4 247.8 L572.9 342.6 L576.3 247.8 L579.7 342.6 L583.1 247.8 L586.5 342.6 L589.9 247.8 L593.3 342.6 L596.7 247.8 L600.2 342.6 L603.6 247.8 L607.0 342.6 L610.4 247.8 L613.8 342.6 L617.2 247.8 L620.6 342.6 L624.1 247.8 L627.5 342.6 L630.9 247.8 L634.3 342.6 L637.7 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="603.6" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M736.0 205.2 L736.0 433.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M657.7 247.8 L661.1 342.6 L664.5 247.8 L667.9 342.6 L671.4 247.8 L674.8 342.6 L678.2 247.8 L681.6 342.6 L685.0 247.8 L688.4 342.6 L691.8 247.8 L695.2 342.6 L698.7 247.8 L702.1 342.6 L705.5 247.8 L708.9 342.6 L712.3 247.8 L715.7 342.6 L719.1 247.8 L722.5 342.6 L726.0 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="691.8" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M746.0 247.8 L749.8 342.6 L753.5 247.8 L757.3 342.6 L761.1 247.8 L764.9 342.6 L768.7 247.8 L772.5 342.6 L776.3 247.8 L780.1 342.6 L783.9 247.8 L787.7 342.6 L791.5 247.8 L795.3 342.6 L799.0 247.8 L802.8 342.6 L806.6 247.8 L810.4 342.6 L814.2 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="780.1" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <path d="M912.5 205.2 L912.5 433.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M834.2 247.8 L837.6 342.6 L841.0 247.8 L844.5 342.6 L847.9 247.8 L851.3 342.6 L854.7 247.8 L858.1 342.6 L861.5 247.8 L864.9 342.6 L868.3 247.8 L871.8 342.6 L875.2 247.8 L878.6 342.6 L882.0 247.8 L885.4 342.6 L888.8 247.8 L892.2 342.6 L895.6 247.8 L899.1 342.6 L902.5 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="868.3" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M922.5 247.8 L926.3 342.6 L930.1 247.8 L933.8 342.6 L937.6 247.8 L941.4 342.6 L945.2 247.8 L949.0 342.6 L952.8 247.8 L956.6 342.6 L960.4 247.8 L964.2 342.6 L968.0 247.8 L971.8 342.6 L975.6 247.8 L979.4 342.6 L983.1 247.8 L986.9 342.6 L990.7 247.8" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="956.6" y="412.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <rect x="1026.7" y="199.2" width="537.3" height="240.0" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1295.4" y="304.3" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">1 0 1 1</text>
+  <text x="1295.4" y="367.7" text-anchor="middle" font-size="48" fill="#2b2b2b">Right.</text>
+  <text x="36.0" y="602.0" text-anchor="start" font-size="48" fill="#2b2b2b" font-weight="700">Light grip</text>
+  <rect x="294.7" y="465.2" width="706.0" height="240.0" rx="10" fill="#ffffff" stroke="#cfcfcf" stroke-width="2"/>
+  <path d="M471.2 465.2 L471.2 705.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M647.7 465.2 L647.7 705.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M824.2 465.2 L824.2 705.2" stroke="#cfcfcf" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M382.9 471.2 L382.9 699.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M304.7 544.6 L308.1 577.8 L311.5 544.6 L314.9 577.8 L318.3 544.6 L321.7 577.8 L325.2 544.6 L328.6 577.8 L332.0 544.6 L335.4 577.8 L338.8 544.6 L342.2 577.8 L345.6 544.6 L349.0 577.8 L352.5 544.6 L355.9 577.8 L359.3 544.6 L362.7 577.8 L366.1 544.6 L369.5 577.8 L372.9 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="338.8" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M392.9 544.6 L396.7 577.8 L400.5 544.6 L404.3 577.8 L408.1 544.6 L411.9 577.8 L415.7 544.6 L419.5 577.8 L423.3 544.6 L427.1 577.8 L430.9 544.6 L434.6 577.8 L438.4 544.6 L442.2 577.8 L446.0 544.6 L449.8 577.8 L453.6 544.6 L457.4 577.8 L461.2 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="427.1" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <path d="M559.4 471.2 L559.4 699.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M481.2 544.6 L485.0 577.8 L488.8 544.6 L492.6 577.8 L496.4 544.6 L500.2 577.8 L503.9 544.6 L507.7 577.8 L511.5 544.6 L515.3 577.8 L519.1 544.6 L522.9 577.8 L526.7 544.6 L530.5 577.8 L534.3 544.6 L538.1 577.8 L541.9 544.6 L545.7 577.8 L549.4 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="515.3" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <path d="M569.4 544.6 L572.9 577.8 L576.3 544.6 L579.7 577.8 L583.1 544.6 L586.5 577.8 L589.9 544.6 L593.3 577.8 L596.7 544.6 L600.2 577.8 L603.6 544.6 L607.0 577.8 L610.4 544.6 L613.8 577.8 L617.2 544.6 L620.6 577.8 L624.1 544.6 L627.5 577.8 L630.9 544.6 L634.3 577.8 L637.7 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="603.6" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M736.0 471.2 L736.0 699.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M657.7 544.6 L661.1 577.8 L664.5 544.6 L667.9 577.8 L671.4 544.6 L674.8 577.8 L678.2 544.6 L681.6 577.8 L685.0 544.6 L688.4 577.8 L691.8 544.6 L695.2 577.8 L698.7 544.6 L702.1 577.8 L705.5 544.6 L708.9 577.8 L712.3 544.6 L715.7 577.8 L719.1 544.6 L722.5 577.8 L726.0 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="691.8" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M746.0 544.6 L749.8 577.8 L753.5 544.6 L757.3 577.8 L761.1 544.6 L764.9 577.8 L768.7 544.6 L772.5 577.8 L776.3 544.6 L780.1 577.8 L783.9 544.6 L787.7 577.8 L791.5 544.6 L795.3 577.8 L799.0 544.6 L802.8 577.8 L806.6 544.6 L810.4 577.8 L814.2 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="780.1" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <path d="M912.5 471.2 L912.5 699.2" stroke="#e2e2e2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6"/>
+  <path d="M834.2 544.6 L837.6 577.8 L841.0 544.6 L844.5 577.8 L847.9 544.6 L851.3 577.8 L854.7 544.6 L858.1 577.8 L861.5 544.6 L864.9 577.8 L868.3 544.6 L871.8 577.8 L875.2 544.6 L878.6 577.8 L882.0 544.6 L885.4 577.8 L888.8 544.6 L892.2 577.8 L895.6 544.6 L899.1 577.8 L902.5 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="868.3" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">B</text>
+  <path d="M922.5 544.6 L926.3 577.8 L930.1 544.6 L933.8 577.8 L937.6 544.6 L941.4 577.8 L945.2 544.6 L949.0 577.8 L952.8 544.6 L956.6 577.8 L960.4 544.6 L964.2 577.8 L968.0 544.6 L971.8 577.8 L975.6 544.6 L979.4 577.8 L983.1 544.6 L986.9 577.8 L990.7 544.6" stroke="#c0392b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="956.6" y="678.8" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">A</text>
+  <rect x="1026.7" y="465.2" width="537.3" height="240.0" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="1295.4" y="570.3" text-anchor="middle" font-size="48" fill="#555555" font-weight="700">1 0 1 1</text>
+  <text x="1295.4" y="633.7" text-anchor="middle" font-size="48" fill="#2b2b2b">Right.</text>
+</svg>

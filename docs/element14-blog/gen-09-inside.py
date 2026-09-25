@@ -20,8 +20,8 @@ TOP = [
     ("Skin", "Carries the tone both ways.", GREY),
 ]
 PICO = ("Raspberry Pi Pico 2 W",
-        "Makes the 200 kHz tone, samples what comes back, and runs Bluetooth. "
-        "The rest is software.", PICO_C)
+        "Makes both tones, 180 and 200 kHz, weighs five pitches in what comes back, "
+        "and runs Bluetooth. The rest is software.", PICO_C)
 BOTTOM = [
     ("Button", "Press for the battery. Hold 5 s to reset the band.", IN),
     ("Battery", "1500 mAh Li-ion, with an on/off switch.", IN),

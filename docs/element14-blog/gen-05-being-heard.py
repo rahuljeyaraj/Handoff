@@ -13,7 +13,7 @@ LABEL = ("#ffffff", "#ffffff", INK)   # an invisible box, so a row label can wra
 HEADS = ("Savithri's band", "Between them", "Rohit's band")
 HEAD_COL = (GREEN[1], INK, BLUE[1])
 
-SHOUT = ("Shouts “I am here”.", GREEN)
+SHOUT = ("Sends a beacon: a tiny frame with its own name in it.", GREEN)
 # (row label, [three cells as (text, style, dashed)], arrows as (from, to, colour, dashed))
 ROWS = [
     ("Both wait to hear first",
@@ -21,15 +21,15 @@ ROWS = [
       ("Hands meet. Silence. Nobody ever speaks.", GREY, True),
       ("Listens, waiting to hear someone.", BLUE, False)],
      []),
-    ("One shouts, apart",
+    ("One beacons, apart",
      [(*SHOUT, False),
-      ("The tone never arrives.", GREY, True),
+      ("The beacon never arrives.", GREY, True),
       ("Hears nothing. Is anyone there?", BLUE, False)],
      [(0, 1, GREY[1], True)]),
-    ("One shouts, hand in hand",
+    ("One beacons, hand in hand",
      [(*SHOUT, False),
-      ("The tone crosses both bodies.", RED, False),
-      ("Hears it. So the hands have met.", BLUE, False)],
+      ("The beacon crosses both bodies.", RED, False),
+      ("Reads it. So the hands have met.", BLUE, False)],
      [(0, 1, GREEN[1], False), (1, 2, RED[1], False)]),
 ]
 

@@ -4,8 +4,9 @@
 # the frame, the same in all three rows, at the user's request: preamble blue,
 # marker purple, header green, card amber, checksum red.
 #
-# Row 1: the five parts. Row 2: the halves where the preamble meets the marker.
-# 0xF0 in Manchester is 10 10 10 10 01 01 01 01, so its first seven halves look
+# Row 1: the five parts. Row 2: the chips where the preamble meets the marker.
+# A chip is one tone or the other; 1 is tone B, 0 is tone A. 0xF0 in Manchester
+# is 10 10 10 10 01 01 01 01, so its first seven chips look
 # exactly like the preamble, and the only 00 is in its middle (frame.h's hunt).
 # Row 3: what the receiver does, in order.
 
@@ -18,13 +19,13 @@ HEADS = ["The five parts, in the order they are sent",
          "Where the card starts: the only 00 in the run",
          "What the receiver does"]
 
-PARTS = [("Preamble", "32 halves: 1010…", BLUE, 1.0),
+PARTS = [("Preamble", "32 chips: the two tones, turn and turn about", BLUE, 1.0),
          ("Marker", "11110000", PURPLE, 0.9),
          ("Header", "Which frame, of how many, whose card", GREEN, 1.15),
          ("Card", "32 bytes, always. A short part is padded.", AMBER, 1.5),
          ("Checksum", "Covers the header and the card", RED, 1.15)]
 
-# row 2: the halves, as (digit, style, kind). kind: "" plain, "gap" for the
+# row 2: the chips, as (digit, style, kind). kind: "" plain, "gap" for the
 # dots, "key" for the 00, "chk" for the seven checked, "hdr" for the header.
 PRE = [("1", BLUE, ""), ("0", BLUE, "")] * 3 + [("…", None, "gap")]
 MARK = ([("1", PURPLE, ""), ("0", PURPLE, "")] * 3 + [("1", PURPLE, ""), ("0", PURPLE, "key")]
@@ -36,7 +37,7 @@ NOTES = {"key": "The only 00", "chk": "These 7 must read 1010101"}
 
 STATES = [("Hunt", "Look for the 00", BLUE),
           ("Marker", "Check the next 7", PURPLE),
-          ("Read", "Half against half, to the end", GREY),
+          ("Read", "Tone against tone, to the end", GREY),
           ("Checksum", "Good, or the frame is dropped", RED)]
 EDGES = ["found", "ok", ""]
 BACK = "Wrong: a false start. Hunt again."
@@ -89,7 +90,7 @@ def build(fs):
         x += w + sg
     y += row1 + VG
 
-    # row 2: the halves
+    # row 2: the chips
     f.text(M, y + fs, HEADS[1], INK, bold=True, anchor="start")
     y += head_h
     xs = [M + i * (cw + CG) for i in range(len(CELLS))]

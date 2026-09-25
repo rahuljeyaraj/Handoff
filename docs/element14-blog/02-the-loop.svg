@@ -16,11 +16,11 @@
   <rect x="36.0" y="414.3" width="442.7" height="442.6" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
   <text x="257.3" y="476.8" text-anchor="middle" font-size="44" fill="#555555" font-weight="700">The room</text>
   <text x="257.3" y="534.8" text-anchor="middle" font-size="44" fill="#2b2b2b">Both bands' outer</text>
-  <text x="257.3" y="592.9" text-anchor="middle" font-size="44" fill="#2b2b2b">faces, and both</text>
-  <text x="257.3" y="651.0" text-anchor="middle" font-size="44" fill="#2b2b2b">bodies, couple to</text>
-  <text x="257.3" y="709.1" text-anchor="middle" font-size="44" fill="#2b2b2b">the floor and</text>
-  <text x="257.3" y="767.2" text-anchor="middle" font-size="44" fill="#2b2b2b">walls. The loop</text>
-  <text x="257.3" y="825.2" text-anchor="middle" font-size="44" fill="#2b2b2b">closes here.</text>
+  <text x="257.3" y="592.9" text-anchor="middle" font-size="44" fill="#2b2b2b">electrodes, and</text>
+  <text x="257.3" y="651.0" text-anchor="middle" font-size="44" fill="#2b2b2b">both bodies,</text>
+  <text x="257.3" y="709.1" text-anchor="middle" font-size="44" fill="#2b2b2b">couple to the floor</text>
+  <text x="257.3" y="767.2" text-anchor="middle" font-size="44" fill="#2b2b2b">and walls. The</text>
+  <text x="257.3" y="825.2" text-anchor="middle" font-size="44" fill="#2b2b2b">loop closes here.</text>
   <rect x="578.7" y="414.3" width="442.7" height="442.6" rx="10" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
   <text x="800.0" y="622.0" text-anchor="middle" font-size="44" fill="#2e7d32" font-weight="700">Savithri's band</text>
   <text x="800.0" y="680.0" text-anchor="middle" font-size="44" fill="#2b2b2b">Hears the tone.</text>

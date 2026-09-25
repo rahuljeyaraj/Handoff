@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="899" viewBox="0 0 1600 899" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="899" fill="#ffffff"/>
+  <text x="36.0" y="67.0" text-anchor="start" font-size="31" fill="#2e7d32" font-weight="700">Savithri's band</text>
+  <rect x="36.0" y="88.7" width="285.2" height="199.7" rx="10" fill="#2e7d32" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="178.6" y="138.0" text-anchor="middle" font-size="31" fill="#ffffff" font-weight="700">Beacon</text>
+  <text x="178.6" y="178.9" text-anchor="middle" font-size="31" fill="#ffffff">28 ms. Its own</text>
+  <text x="178.6" y="219.8" text-anchor="middle" font-size="31" fill="#ffffff">name, under a</text>
+  <text x="178.6" y="260.8" text-anchor="middle" font-size="31" fill="#ffffff">checksum.</text>
+  <rect x="321.2" y="88.7" width="50.9" height="199.7" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <rect x="372.2" y="88.7" width="1191.8" height="199.7" rx="10" fill="#e9f4ec" stroke="#2e7d32" stroke-width="2.5"/>
+  <text x="968.1" y="178.9" text-anchor="middle" font-size="31" fill="#2e7d32" font-weight="700">Listen</text>
+  <text x="968.1" y="219.9" text-anchor="middle" font-size="31" fill="#2b2b2b">51 to 107 ms, drawn fresh every cycle</text>
+  <path d="M36.0 296.4 L36.0 312.4 L372.2 312.4 L372.2 296.4" stroke="#9a9a9a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="386.2" y="309.3" text-anchor="start" font-size="31" fill="#555555" font-weight="700">Deaf while it beacons, and 5 ms after</text>
+  <text x="36.0" y="473.9" text-anchor="start" font-size="31" fill="#2f5fae" font-weight="700">Rohit's band</text>
+  <rect x="36.0" y="495.6" width="285.2" height="199.7" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="178.6" y="565.3" text-anchor="middle" font-size="31" fill="#2f5fae" font-weight="700">Listening</text>
+  <text x="178.6" y="606.3" text-anchor="middle" font-size="31" fill="#2b2b2b">Its ears were</text>
+  <text x="178.6" y="647.2" text-anchor="middle" font-size="31" fill="#2b2b2b">already open.</text>
+  <rect x="321.2" y="495.6" width="244.5" height="199.7" rx="10" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="443.5" y="606.3" text-anchor="middle" font-size="31" fill="#2f5fae" font-weight="700">Reads it</text>
+  <rect x="565.7" y="495.6" width="285.2" height="199.7" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5" stroke-dasharray="10 8"/>
+  <text x="708.3" y="565.3" text-anchor="middle" font-size="31" fill="#2b2b2b">The beacon it</text>
+  <text x="708.3" y="606.3" text-anchor="middle" font-size="31" fill="#2b2b2b">would have sent,</text>
+  <text x="708.3" y="647.2" text-anchor="middle" font-size="31" fill="#2b2b2b">now never sent</text>
+  <rect x="850.9" y="495.6" width="713.1" height="199.7" rx="10" fill="#2f5fae" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="1207.5" y="585.8" text-anchor="middle" font-size="31" fill="#ffffff" font-weight="700">Sends</text>
+  <text x="1207.5" y="626.7" text-anchor="middle" font-size="31" fill="#ffffff">his card.</text>
+  <path d="M188.8 294.4 L188.8 473.6" stroke="#c0392b" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M178.9 473.6 L198.7 473.6 L188.8 489.6 Z" fill="#c0392b"/>
+  <text x="208.8" y="402.8" text-anchor="start" font-size="31" fill="#c0392b" font-weight="700">Checksum good, and the name is not its own. So the hands have met.</text>
+  <rect x="36.0" y="744.9" width="1528.0" height="117.8" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="800.0" y="794.2" text-anchor="middle" font-size="31" fill="#2b2b2b">Every beacon carries a name drawn at random. A band that reads its own name is hearing itself,</text>
+  <text x="800.0" y="835.1" text-anchor="middle" font-size="31" fill="#2b2b2b">and throws it away. Two bands that drew the same name both stand down and draw again.</text>
+</svg>

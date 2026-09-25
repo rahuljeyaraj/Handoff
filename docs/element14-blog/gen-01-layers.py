@@ -93,13 +93,13 @@ S = {
     6:  ("app", "Kept on the band until a hand is shaken."),
     7:  ("presentation", "Everything every card has in common is left behind."),
     8:  ("transport", "Cut into frames, most important first."),
-    9:  ("MAC", "Heard the other band's “I am here” shout. "
+    9:  ("MAC", "Read the other band's beacon, name and all. "
                 "Waits for silence, then sends the card."),
     10: ("link", "Every frame gets a start marker and a checksum."),
-    11: ("physical", "Bytes become a tone on the skin, switched on and off."),
-    12: ("physical", "The tone is heard, and read back as bytes."),
+    11: ("physical", "Bytes become two tones on the skin, one per half bit."),
+    12: ("physical", "The two tones are weighed against each other, and read back as bytes."),
     13: ("link", "Start marker found, checksum checked. Damaged frames dropped."),
-    14: ("MAC", "Made its own “I am here” shout. Listens, and the card arrives."),
+    14: ("MAC", "Sent its own beacon. Listens, and the card arrives."),
     15: ("transport", "Frames collected, the packed card rebuilt."),
     16: ("presentation", "Details unpacked from the bytes."),
     17: ("app", "Received. Held until the phone is ready for it."),

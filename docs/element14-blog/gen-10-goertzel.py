@@ -25,15 +25,15 @@ ROWS = [
       ("Converter", "Samples the slow, shifted result.", PICO_C, False)]),
     ("The simple receiver",
      [AMPS + (False,),
-      ("Diode, capacitor", "How loud, at every pitch. Or an LM567: yes or no.", GONE, True),
+      ("Diode, capacitor", "How loud, every pitch at once. Or an LM567: yes or no.", GONE, True),
       None,
       ("Converter", "Samples the loudness.", PICO_C, False),
       None]),
-    ("The band's receiver: one pitch, one number",
+    ("The band's receiver: five pitches, five numbers",
      [AMPS + (False,),
       None, None,
       ("Converter", "Fast enough to sample the tone itself.", PICO_C, False),
-      ("Goertzel filter", "In software. Every 50 µs: how much 200 kHz?", PICO_C, False)]),
+      ("Five Goertzel filters", "In software. Every 50 µs: how much of each of five pitches?", PICO_C, False)]),
 ]
 
 W, M, SG, BG = 1600, 36, 34, 50

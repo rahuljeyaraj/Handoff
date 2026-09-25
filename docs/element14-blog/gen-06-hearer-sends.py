@@ -9,14 +9,14 @@ from figlib import Fig, need, solve, tw, INK, BLUE, GREEN, GREY
 LABEL = ("#ffffff", "#ffffff", INK)   # an invisible box, so a lane label can wrap
 
 LANES = [
-    (("Savithri's band", "Shouted, so it receives first."),
-     [("Shouts", "“I am here”.", GREEN, True),
+    (("Savithri's band", "Beaconed, so it receives first."),
+     [("Beacons", "its own name, under a checksum.", GREEN, True),
       ("Recovers", "then listens.", GREY, False),
       ("Receives", "Rohit's card arrives.", GREEN, False),
       ("Sends", "her own card.", GREEN, True)]),
-    (("Rohit's band", "Heard, so it sends first."),
-     [("Hears it", "The hands have met.", BLUE, False),
-      ("Waits", "for her shout to end.", GREY, False),
+    (("Rohit's band", "Read it, so it sends first."),
+     [("Reads it", "The hands have met.", BLUE, False),
+      ("Waits", "for her beacon to end.", GREY, False),
       ("Sends", "his card.", BLUE, True),
       ("Receives", "Savithri's card arrives.", BLUE, False)]),
 ]

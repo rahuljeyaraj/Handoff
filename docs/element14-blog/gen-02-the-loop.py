@@ -11,7 +11,7 @@ S = {
     "wire": ("The wire", "His arm, the handshake, her arm.", RED),
     "p2":   ("Her coated plate", "Picks the tone up off her skin.", GREEN),
     "sb":   ("Savithri's band", "Hears the tone.", GREEN),
-    "room": ("The room", "Both bands' outer faces, and both bodies, couple to the floor and walls. The loop closes here.", GREY),
+    "room": ("The room", "Both bands' outer electrodes, and both bodies, couple to the floor and walls. The loop closes here.", GREY),
 }
 
 W, M, GX, VG = 1600, 36, 100, 110
