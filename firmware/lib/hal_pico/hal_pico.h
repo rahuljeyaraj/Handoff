@@ -48,8 +48,7 @@
  * rx_idle_us at its 6 ms default giving up on a reply that was still in
  * the ring, and the two boards talking over each other every turn.
  */
-#define HAL_PICO_RX_LATENCY_US \
-    ((uint32_t)ADC_RING_BLOCK * 1000000u / (uint32_t)HANDOFF_ADC_FS_HZ)
+#define HAL_PICO_RX_LATENCY_US    HANDOFF_RX_LATENCY_US
 
 /*
  * How long hal_tx_chips() takes to get a frame onto the pad: pio_carrier_send

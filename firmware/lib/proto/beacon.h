@@ -101,32 +101,70 @@
 #include "hal.h"
 
 /*
- * Deaf time after our own beacon, while the amplifier comes out of
- * saturation.
+ * ---- the deaf window after our own beacon, MEASURED 25 Sep 2026 ----------
  *
- * NOT HANDOFF_TURNAROUND_US, which is design §9.7's 1 ms measured at M8 on the
- * breadboard and governs the gap between frames inside an exchange. This is the
- * same physical quantity measured on the first assembled PCB, where it is much
- * longer: the beacon is flat-out drive into an amplifier with a gain of 11 that
- * hard-limits, and C6 couples the drive track straight into its input.
+ * Two things have to have finished before the ears open, and the surprise is
+ * which of them is the big one.
  *
- * Measured 24 Sep 2026 on a 10 ms flat shout. Freshly armed, a band printed
- * `trig silent 0 us` repeatedly — the carrier detector was already up the
- * instant its ears opened — and the carrier then lasted about 4.2 ms. Taking
- * off the detector's 8-chip hold, the band's own drive was still above
- * threshold about 3.2 ms after the pad went idle. 6 ms is that with room for a
- * louder board.
+ *   THE AMPLIFIER, coming out of saturation. A beacon is flat-out drive into
+ *   a gain of 11 that hard-limits, and C6 couples the drive track straight
+ *   into its input.
  *
- * IT IS THE ONE NUMBER IN THIS FILE STILL OWED A PROPER MEASUREMENT. Brief §8
- * asks for the AFE's high-pass RC read directly, rather than 6 ms because 6 ms
- * worked, and the reading is not in yet. The cost of being wrong is no longer
- * what it was: with a flat shout a settle that was too short meant the band
- * heard itself and elected itself sender, and now a self-echo carries our own
- * nonce and is thrown away by §1's middle row. What a wrong settle costs today
- * is airtime — it is in the cycle, and the cycle is the rendezvous latency.
+ *   THE RING. Core 1 sees ADC samples only once the DMA has filled a block,
+ *   so samples taken while the amplifier was still hot keep arriving for
+ *   HANDOFF_RX_LATENCY_US after it has gone cold. link_sm.c throws them away
+ *   while the trigger is deaf; the deafness has to last long enough that it
+ *   throws away all of them.
+ *
+ * WHAT THE BENCH SAID, and brief §8 asked for exactly this reading. `y 4` in
+ * linktest drives the board's own pad, releases it, and watches presence —
+ * the detector the trigger listens through — for 200 ms. Three drive lengths,
+ * eight runs each, far board silent, 93D1:
+ *
+ *      drive     last busy: min    mean     max
+ *       7 ms                2630    3230    3650 us
+ *      14 ms                3616    3949    4219 us
+ *      28 ms (a beacon)     2391    3010    3956 us
+ *
+ * TWO FINDINGS, AND BOTH CHANGE WHAT THIS CONSTANT IS.
+ *
+ * 1. IT IS NOT THE AFE's HIGH-PASS RC. Brief §8 expected to measure one, and
+ *    there is not one to measure: the signal bin reads ~670 at 0, 1 and 2 ms
+ *    and ~20 by 4 ms, which is a step, not a decay — and a step at exactly
+ *    one DMA block. The verdicts stay hot while the RING drains and go cold
+ *    the moment it has. The amplifier is back inside 4219 - 4096 = 123 us.
+ *    The old 6000 came from a 24 Sep reading taken through v1's carrier
+ *    detector, which had an 8-chip hold of its own on top of the ring.
+ *
+ * 2. IT DOES NOT GROW WITH THE BEACON. That was the real worry, because step
+ *    7 took the transmission from a 10 ms shout to a 28 ms frame: if the
+ *    recovery were a coupling cap charging, the beacon would pay for its
+ *    length twice. The three means are 3230, 3949 and 3010 us — flat, and
+ *    the longest drive is not the worst. It pays once.
+ *
+ * SO THE VALUE IS DERIVED, from one structural number and one that this
+ * project has measured since M8:
+ *
+ *      one DMA block        HANDOFF_RX_LATENCY_US    4096 us   structural
+ *      the amplifier        HANDOFF_TURNAROUND_US    1000 us   design §9.7
+ *                                                    -------
+ *                                                    5096 us
+ *
+ * HANDOFF_TURNAROUND_US is already this board's measured figure for "the
+ * amplifier coming out of saturation" — it is what the exchange waits between
+ * frames — and it is eight times the 123 us above, so it covers it with room
+ * for a louder board. Nothing new is typed, and the worst run measured is
+ * 4219 us against 5096.
+ *
+ * AND IF IT IS WRONG, IT IS NO LONGER DANGEROUS. Under v1 a settle that was
+ * too short meant a band heard its own shout and elected itself sender, sixty
+ * times out of sixty. A self-echo now carries our own nonce and is thrown
+ * away by §1's middle row and counted in self_echoes. What a short settle
+ * costs today is airtime, and what a long one costs is the same airtime at
+ * the other end of the cycle.
  */
 #ifndef HANDOFF_TRIG_SETTLE_US
-#define HANDOFF_TRIG_SETTLE_US    6000u
+#define HANDOFF_TRIG_SETTLE_US    (HANDOFF_RX_LATENCY_US + HANDOFF_TURNAROUND_US)
 #endif
 
 /*
@@ -233,11 +271,18 @@ HANDOFF_STATIC_ASSERT(
     HANDOFF_LISTEN_MIN_US > HANDOFF_TRIG_SETTLE_US + HANDOFF_TURNAROUND_US,
     "a band can beacon again before the peer that decoded it has replied");
 
-/* The settle exists because the PCB's amplifier outlasts §9.7's 1 ms. If it
- * were ever set shorter than that, the trigger would be deaf for less time than
- * the exchange is, which is the bug this constant was added to fix. */
+/* True by construction above, and asserted because a board that overrides the
+ * settle must not set it below the amplifier's own figure: the trigger would
+ * then be deaf for less time than the exchange is, which is the bug this
+ * constant was added to fix. */
 HANDOFF_STATIC_ASSERT(HANDOFF_TRIG_SETTLE_US >= HANDOFF_TURNAROUND_US,
     "trigger settles for less time than the exchange turnaround");
+
+/* And it must outlast the ring, or samples of our own beacon are still being
+ * delivered when the ears open — which is what the 25 Sep reading showed the
+ * settle is really made of. */
+HANDOFF_STATIC_ASSERT(HANDOFF_TRIG_SETTLE_US > HANDOFF_RX_LATENCY_US,
+    "the ears open while the DMA is still delivering our own beacon");
 
 /* The draw has to be able to move the phase out of the region that fails. */
 HANDOFF_STATIC_ASSERT(

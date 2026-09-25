@@ -18,8 +18,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "config.h"
+
 #define ADC_RING_BLOCK  2048   /* samples per DMA block */
 #define ADC_RING_BLOCKS 2      /* ping-pong             */
+
+/* config.h states the same number, because proto/beacon.h derives the
+ * trigger's deaf window from the latency it implies and lib/proto may not see
+ * an SDK header. One place has to own it; this is the one that has to agree. */
+HANDOFF_STATIC_ASSERT(ADC_RING_BLOCK == HANDOFF_ADC_BLOCK,
+    "config.h and adc_ring.h disagree about the DMA block size, so the "
+    "trigger's settle is derived from the wrong latency");
 
 void adc_ring_init(void);
 void adc_ring_start(void);

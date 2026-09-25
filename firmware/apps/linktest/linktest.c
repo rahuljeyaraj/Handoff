@@ -406,83 +406,146 @@ static void fsk_align(void)
  * underestimate and a noisy one. The whole observation window is watched and
  * the LAST busy verdict in it is what is reported.
  */
-#define SETTLE_RUNS       16u
-#define SETTLE_WATCH_US   40000u
+#define SETTLE_RUNS       8u
+#define SETTLE_WATCH_US   200000u
+#define SETTLE_QUIET_US   400000u   /* between runs, for the CFAR boxcar */
+#define SETTLE_TRACE      24u
+#define SETTLE_TRACE_STEP  1000u   /* the interesting part is the first ms */
 
+/* One burst. Returns the time of the last busy verdict inside the watch,
+ * or 0 if the detector never read busy at all. */
+static uint32_t settle_once(uint32_t drive_us, uint32_t *trace_us,
+                            uint32_t *trace_sig, uint32_t *trace_noi,
+                            uint32_t trace_n)
+{
+    hal_pico_presence_t pr;
+    absolute_time_t t0;
+    uint32_t last_busy_us = 0, next_trace = 0;
+    bool saw_busy = false;
+
+    pio_carrier_fsk_tone(1);
+    pio_carrier_drive(true);
+    sleep_us(drive_us);
+
+    /* High-Z, not driven low: a driven pad still loads the electrode. */
+    pio_carrier_drive(false);
+    t0 = get_absolute_time();
+
+    for (;;) {
+        const uint32_t at = (uint32_t)absolute_time_diff_us(t0, get_absolute_time());
+        if (at >= SETTLE_WATCH_US) break;
+        hal_pico_presence(&pr);
+        if (pr.busy) { last_busy_us = at; saw_busy = true; }
+        if (trace_n && next_trace < trace_n &&
+            at >= next_trace * SETTLE_TRACE_STEP) {
+            trace_us[next_trace]  = at;
+            trace_sig[next_trace] = pr.signal;
+            trace_noi[next_trace] = pr.noise;
+            next_trace++;
+        }
+    }
+    sleep_ms(SETTLE_QUIET_US / 1000u);
+    return saw_busy ? last_busy_us : 0u;
+}
+
+/*
+ * ---- y 4: THE SETTLE, MEASURED (link v2 step 7) -------------------------
+ *
+ * HANDOFF_TRIG_SETTLE_US is how long a band stays deaf after its own beacon,
+ * and until now it was 6000 because 6000 worked: brief S8 asks for the AFE's
+ * own recovery read directly instead. This reads it.
+ *
+ * Drive tone into our own pad, release it, and watch the presence detector --
+ * the same detector the trigger listens through -- until it stops calling the
+ * channel busy. No second board and no scope: the thing being measured is our
+ * own amplifier coming out of saturation into our own input, which is a
+ * one-board fault by definition.
+ *
+ * THREE DRIVE LENGTHS, because one would not be a measurement. If the
+ * recovery is an RC discharging a coupling cap that the drive charged, it
+ * grows with how long the drive lasted -- and that matters a great deal here,
+ * because step 7 took the transmission from v1's 10 ms shout to a 28 ms
+ * beacon. A settle that is flat across the three is a fixed recovery; one
+ * that grows is the beacon paying for its own length twice.
+ *
+ * WHAT IT MEASURES IS NOT ONLY THE AMPLIFIER. The reading includes the ADC
+ * block latency, because presence is decided on core 1 from samples the DMA
+ * has already delivered, and the trigger sees the channel through that same
+ * delay. That is correct rather than a contaminant: the settle has to cover
+ * both, and a figure that left the ring out would be short by exactly the
+ * amount that matters.
+ *
+ * THE LAST BUSY WINDOW, NOT THE FIRST QUIET ONE. A decaying burst crosses the
+ * CFAR threshold and comes back over it -- and the reference itself moves,
+ * because a saturated receiver puts distortion in the guard bins too and the
+ * boxcar holds that for a preamble afterwards. The whole observation window
+ * is watched and the LAST busy verdict in it is reported, with a trace of the
+ * two sides of the comparison beside it so the two effects can be told apart.
+ */
 static void fsk_settle(void)
 {
-    uint32_t run, worst = 0, sum = 0, best = 0xFFFFFFFFu, never = 0;
+    static const uint32_t k_drive_us[] = {
+        FRAME_BEACON_AIRTIME_US / 4u,       /* about v1's flat shout      */
+        FRAME_BEACON_AIRTIME_US / 2u,
+        FRAME_BEACON_AIRTIME_US,            /* one beacon                 */
+    };
+    uint32_t trace_us[SETTLE_TRACE], trace_sig[SETTLE_TRACE], trace_noi[SETTLE_TRACE];
+    size_t d;
 
     if (!hal_pico_bank_on()) {
         printf("    the bank is OFF, so there is no detector. `n 1` first.\n");
         return;
     }
 
-    printf("\n  --- settle: our own amplifier, after one beacon of drive ---\n");
-    printf("    beacon %lu us, watching %lu us after release, %lu runs\n",
-           (unsigned long)FRAME_BEACON_AIRTIME_US,
-           (unsigned long)SETTLE_WATCH_US, (unsigned long)SETTLE_RUNS);
+    printf("\n  --- settle: our own amplifier, after its own drive ---\n");
+    printf("    watching %lu us after release, %lu runs each, %lu us quiet between\n",
+           (unsigned long)SETTLE_WATCH_US, (unsigned long)SETTLE_RUNS,
+           (unsigned long)SETTLE_QUIET_US);
 
     fsk_start();
 
-    for (run = 0; run < SETTLE_RUNS; run++) {
-        hal_pico_presence_t pr;
-        absolute_time_t t0;
-        uint32_t last_busy_us = 0;
-        bool saw_busy = false;
+    for (d = 0; d < sizeof k_drive_us / sizeof k_drive_us[0]; d++) {
+        const uint32_t drive = k_drive_us[d];
+        uint32_t run, worst = 0, sum = 0, best = 0xFFFFFFFFu, never = 0;
 
-        /* One beacon's worth of unbroken drive. Tone B, because a beacon's
-         * worst case for the amplifier is a chip of either tone and the two
-         * are the same amplitude — the pad does not know which it is. */
-        pio_carrier_fsk_tone(1);
-        pio_carrier_drive(true);
-        sleep_us(FRAME_BEACON_AIRTIME_US);
-
-        /* Release to high-Z, exactly as the trigger does. Not driven low: a
-         * driven pad still loads the electrode (design §6.3). */
-        pio_carrier_drive(false);
-        t0 = get_absolute_time();
-
-        for (;;) {
-            const uint32_t at = (uint32_t)absolute_time_diff_us(t0,
-                                                get_absolute_time());
-            if (at >= SETTLE_WATCH_US) break;
-            hal_pico_presence(&pr);
-            if (pr.busy) { last_busy_us = at; saw_busy = true; }
+        for (run = 0; run < SETTLE_RUNS; run++) {
+            const bool want_trace = (run == 0u);
+            const uint32_t last = settle_once(drive,
+                                              trace_us, trace_sig, trace_noi,
+                                              want_trace ? SETTLE_TRACE : 0u);
+            if (!last) { never++; continue; }
+            sum += last;
+            if (last > worst) worst = last;
+            if (last < best)  best  = last;
         }
 
-        if (!saw_busy) { never++; continue; }
-        sum += last_busy_us;
-        if (last_busy_us > worst) worst = last_busy_us;
-        if (last_busy_us < best)  best  = last_busy_us;
+        if (never == SETTLE_RUNS) {
+            printf("    drive %6lu us: never busy -- the pad is not driven, "
+                   "or the bank is not scoring\n", (unsigned long)drive);
+            continue;
+        }
 
-        /* Let the CFAR reference re-settle before the next run, or each burst
-         * is measured against a boxcar still holding the previous one. */
-        sleep_ms(50);
+        printf("    drive %6lu us: last busy min %6lu mean %6lu max %6lu us"
+               " (%lu runs, %lu silent)\n",
+               (unsigned long)drive, (unsigned long)best,
+               (unsigned long)(sum / (SETTLE_RUNS - never)),
+               (unsigned long)worst,
+               (unsigned long)(SETTLE_RUNS - never), (unsigned long)never);
+
+        {
+            size_t i;
+            printf("        ms:signal/noise ");
+            for (i = 0; i < SETTLE_TRACE; i++)
+                printf(" %lu:%lu/%lu", (unsigned long)(trace_us[i] / 1000u),
+                       (unsigned long)trace_sig[i], (unsigned long)trace_noi[i]);
+            printf("\n");
+        }
     }
 
-    if (never == SETTLE_RUNS) {
-        printf("    the detector never read busy at all: the pad is not "
-               "driven, or the bank is not scoring. `y 0` then `m`.\n");
-        return;
-    }
-
-    printf("    last busy verdict: min %lu us, mean %lu us, max %lu us"
-           " (%lu runs, %lu silent)\n",
-           (unsigned long)best,
-           (unsigned long)(sum / (SETTLE_RUNS - never)),
-           (unsigned long)worst,
-           (unsigned long)(SETTLE_RUNS - never), (unsigned long)never);
-    printf("    of which ADC block latency %lu us\n",
+    printf("    ADC block latency %lu us is inside every figure above\n",
            (unsigned long)HAL_PICO_RX_LATENCY_US);
-    printf("    HANDOFF_TRIG_SETTLE_US is %lu us: %s\n",
-           (unsigned long)HANDOFF_TRIG_SETTLE_US,
-           worst < HANDOFF_TRIG_SETTLE_US ? "covers the worst run"
-                                          : "SHORTER THAN THE WORST RUN");
-    printf("    a band deaf for %lu us spends %lu %% of its cycle deaf\n",
-           (unsigned long)HANDOFF_TRIG_SETTLE_US,
-           (unsigned long)((FRAME_BEACON_AIRTIME_US + HANDOFF_TRIG_SETTLE_US)
-                           * 100u / HANDOFF_BEACON_CYCLE_US));
+    printf("    HANDOFF_TRIG_SETTLE_US is %lu us\n",
+           (unsigned long)HANDOFF_TRIG_SETTLE_US);
 }
 
 static void fsk_dispatch(uint32_t arg, bool have_arg)

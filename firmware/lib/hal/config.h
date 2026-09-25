@@ -81,6 +81,31 @@
 #define HANDOFF_TURNAROUND_US     1000    /* design §9.7, measured at M8       */
 #endif
 
+/*
+ * Samples in one ADC DMA block. THE RECEIVE PATH'S LATENCY IS MADE OF THIS:
+ * core 1 sees a block only once the DMA has filled it, so a sample can
+ * surface this long after it was taken, and anything that waits for the far
+ * end — or for ITSELF — to have gone quiet has to allow for it.
+ *
+ * It lives here rather than in hal_pico/adc_ring.h, where the ring is, for one
+ * reason: proto/beacon.h derives the trigger's deaf window from it (link v2
+ * step 7), and lib/proto may not see an SDK header. adc_ring.h static-asserts
+ * that the two agree, which is the same contract the system clock has with the
+ * root CMakeLists.
+ *
+ * The host build has no ring — hal_host delivers a chip the instant it is
+ * made — so a host test measures a latency of zero and the timings it exercises
+ * are the generous ones. That is a known limit of the simulator and M14 has
+ * already paid for it once: rx_idle_us at 6 ms gave up on a reply still sitting
+ * in the ring, and the two boards talked over each other every turn.
+ */
+#ifndef HANDOFF_ADC_BLOCK
+#define HANDOFF_ADC_BLOCK         2048
+#endif
+
+#define HANDOFF_RX_LATENCY_US \
+    ((uint32_t)HANDOFF_ADC_BLOCK * 1000000u / (uint32_t)HANDOFF_ADC_FS_HZ)
+
 /* ---- derived ---------------------------------------------------------- */
 
 /* Goertzel window rate = one score every N samples. */
