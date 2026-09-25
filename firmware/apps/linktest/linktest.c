@@ -441,6 +441,11 @@ static void rx_pump(void)
     }
 }
 
+/* The self loop re-queues its carrier a frame at a time, so anything that
+ * spins waiting must keep pumping it or the transmitter falls silent in the
+ * middle of the measurement and `m` reads the quiet it just caused. */
+static void selfloop_pump(void);
+
 /* Chip energy over a window, mean and max, in tenths of an LSB. The frame
  * receiver keeps running underneath, so the window costs no frames. */
 static uint32_t rx_energy(uint32_t us, uint32_t *max_out)
@@ -452,6 +457,7 @@ static uint32_t rx_energy(uint32_t us, uint32_t *max_out)
     size_t k, i;
 
     while (hal_now_us(s_hal) < until) {
+        selfloop_pump();
         while ((k = hal_rx_chips(s_hal, chips, count_of(chips))) > 0) {
             for (i = 0; i < k; i++) {
                 frame_rx_result_t r;
@@ -477,7 +483,7 @@ static uint32_t raw_rms(int32_t *mean_code)
     int32_t mean;
 
     tlm_usb_raw_trigger();
-    while (tlm_usb_raw_busy()) rx_pump();
+    while (tlm_usb_raw_busy()) { rx_pump(); selfloop_pump(); }
 
     s = tlm_usb_raw_samples(&n);
     if (!s || n == 0) { if (mean_code) *mean_code = -1; return 0; }
@@ -520,6 +526,48 @@ static void rx_measure(void)
         printf("    nothing received: is the other board transmitting on this carrier?\n");
 }
 
+/* ---- self loop ---------------------------------------------------------
+ *
+ * Drive this board's own carrier while this board is listening, so `m` reads
+ * what its OWN transmitter puts into its OWN receiver. No jumper is needed:
+ * on the PCB the transmitter reaches the pad through R1 and the receiver
+ * leaves it through R2, so the pad node is already a loop. apps/loopback is
+ * the M5 jumper-wire version and proves the DSP; this proves the board.
+ *
+ * It splits the one question a quiet receiver cannot answer about itself:
+ *
+ *   loud  - the pad node, R1, R2 and the whole AFE are intact, so a quiet
+ *           channel really is a quiet channel: nothing is coupling in.
+ *   dead  - the break is on this board. A pad node shorted to ground reads
+ *           dead here too, because the short takes the transmitter with it.
+ *
+ * Marks only, re-queued a frame at a time, so the carrier is continuous
+ * rather than Manchester: this is an amplitude measurement, not a decode.
+ */
+static bool s_selfloop;
+
+static void selfloop_pump(void)
+{
+    if (!s_selfloop) return;
+    if (hal_tx_busy(s_hal)) return;
+
+    memset(s_chips, 1, sizeof s_chips);
+    hal_tx_drive(s_hal, true);
+    if (hal_tx_chips(s_hal, s_chips, sizeof s_chips) != sizeof s_chips) {
+        hal_tx_drive(s_hal, false);
+        s_selfloop = false;
+        printf("    self loop: the transmitter refused the chips, stopped\n");
+    }
+}
+
+static void selfloop_set(bool on)
+{
+    s_selfloop = on;
+    if (!on) hal_tx_drive(s_hal, false);
+    printf("  self loop %s%s\n", on ? "ON" : "off",
+           on ? " - own carrier into our own receiver; `m` now reads it" : "");
+}
+
 static void rx_help(void)
 {
     printf("\n  c 40|200  carrier, kHz\n"
@@ -529,6 +577,7 @@ static void rx_help(void)
            "  m         chip energy mean / max, raw RMS\n"
            "  r         raw burst across the next frame, dumped\n"
            "  t [N]     stream every Nth chip energy; t 0 stops\n"
+           "  x [0|1]   self loop: our own carrier into our own receiver\n"
            "  h         this\n");
 }
 
@@ -555,14 +604,17 @@ static void rx_dispatch(const char *line)
          * and holds the whole of the next one, preamble included. */
         printf("\n  --- raw burst across the next frame ---\n");
         s_raw_armed = true;
-        while (s_raw_armed) rx_pump();
-        while (tlm_usb_raw_busy()) rx_pump();
+        while (s_raw_armed) { rx_pump(); selfloop_pump(); }
+        while (tlm_usb_raw_busy()) { rx_pump(); selfloop_pump(); }
         tlm_usb_raw_dump();
         break;
     case 't':
         s_stream_decimate = (uint16_t)(have_arg ? arg : 1u);
         tlm_usb_init(s_stream_decimate);
         printf("    stream %s\n", s_stream_decimate ? "on" : "off");
+        break;
+    case 'x':
+        selfloop_set(have_arg ? arg != 0u : !s_selfloop);
         break;
     case 'h': case '?': rx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
@@ -585,6 +637,7 @@ static void run_rx(void)
         int ch = getchar_timeout_us(0);
 
         rx_pump();
+        selfloop_pump();
 
         if (ch == PICO_ERROR_TIMEOUT) {
             /* A placed heartbeat: if this stops, the hang is on core 0. */
