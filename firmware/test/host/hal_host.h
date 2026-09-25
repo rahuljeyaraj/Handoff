@@ -29,8 +29,17 @@
 typedef struct halh_node halh_node_t;
 
 typedef struct {
-    /* Chip energies delivered for an on chip and an off chip. Defaults sit at
-     * the design §5 link budget: ~200 LSB of carrier, near-zero when gated. */
+    /*
+     * The two bins, as this node hears them. Defaults sit at the design §5
+     * link budget: ~200 LSB in whichever bin the far end is driving, near
+     * zero in the other.
+     *
+     * LINK V2 STEP 6: energy_off is no longer a gated carrier — nothing is
+     * ever gated, because both symbols are tones. It is the OFF-TONE BIN,
+     * the bin the far end is not driving, and step 4 measured that as
+     * indistinguishable from silence. The name is kept so the field still
+     * reads as "what the quiet side of the decision looks like".
+     */
     uint16_t energy_on;
     uint16_t energy_off;
 
@@ -72,9 +81,10 @@ struct halh_node {
     uint64_t      tx_start_us;
     bool          driving;
 
-    /* receive */
-    uint16_t      rx[HALH_RX_FIFO];
+    /* receive: signed tone differences, d = E_B - E_A (hal.h, frame.h) */
+    int32_t       rx[HALH_RX_FIFO];
     size_t        rx_head, rx_tail;
+    uint32_t      rx_level;       /* last |d|, for rx_carrier_level          */
 
     /*
      * Presence, link v2. The REAL dsp/presence.c, fed by a model.

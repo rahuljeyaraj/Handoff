@@ -68,7 +68,8 @@ LIB_SOURCES = [
     LIB / "ui" / "button.c",
 ]
 
-SIM_SOURCES = [HOST / "chan.c", HOST / "hal_host.c", HOST / "sim_twonode.c"]
+SIM_SOURCES = [HOST / "chan.c", HOST / "hal_host.c", HOST / "sim_twonode.c",
+               HOST / "v1_replay.c"]
 
 TEST_SOURCES = [HOST / n for n in (
     "main.c", "test_crc.c", "test_manchester.c", "test_goertzel.c", "test_gz_bank.c", "test_presence.c", "test_sync.c",
@@ -85,7 +86,8 @@ PROGRAMS = {
     "handoff_ber":   LIB_SOURCES + SIM_SOURCES + [HOST / "ber.c"],
     "handoff_sweep": LIB_SOURCES + SIM_SOURCES + [HOST / "sweep.c"],
     "handoff_vcf":   LIB_SOURCES + [HOST / "vcfc.c"],
-    "handoff_decode": LIB_SOURCES + [HOST / "decode.c"],   # tools/replay.py
+    "handoff_decode": LIB_SOURCES + [HOST / "chan.c", HOST / "v1_replay.c",
+                                     HOST / "decode.c"],   # tools/replay.py
 }
 
 # Cards the two codec implementations are compared on. Deliberately awkward:
@@ -329,17 +331,21 @@ def generate_vectors(defines) -> None:
     Regenerate before every run. Vectors are derived, so they are not committed
     (see .gitignore) and cannot go stale against a changed HANDOFF_GZ_N.
     """
-    gz_n, carrier = 25, 200000
+    gz_n, tone_a, tone_b = 25, 9, 10
     for d in defines:
         if d.startswith("HANDOFF_GZ_N="):
             gz_n = int(d.split("=", 1)[1])
-        elif d.startswith("HANDOFF_CARRIER_HZ="):
-            carrier = int(d.split("=", 1)[1])
+        elif d.startswith("HANDOFF_TONE_A_BIN="):
+            tone_a = int(d.split("=", 1)[1])
+        elif d.startswith("HANDOFF_TONE_B_BIN="):
+            tone_b = int(d.split("=", 1)[1])
 
-    step("generating golden vectors (GZ_N %d, carrier %d Hz)" % (gz_n, carrier))
+    step("generating golden vectors (GZ_N %d, tones on bins %d/%d)"
+         % (gz_n, tone_a, tone_b))
     res = subprocess.run([sys.executable, str(REPO_ROOT / "tools" / "gen_vectors.py"),
                           "--out", str(VECTORS), "--gz-n", str(gz_n),
-                          "--carrier-hz", str(carrier), "--quiet"],
+                          "--tone-a-bin", str(tone_a), "--tone-b-bin", str(tone_b),
+                          "--quiet"],
                          capture_output=True, text=True)
     if res.returncode != 0:
         sys.stderr.write(res.stdout + res.stderr)

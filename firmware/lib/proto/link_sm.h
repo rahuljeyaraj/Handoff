@@ -119,7 +119,6 @@ typedef struct {
     uint64_t     started_us;
     uint64_t     deadline_us;
     uint64_t     last_busy_us;   /* last poll the channel read busy        */
-    uint64_t     busy_until_us;  /* the OOK bridge, link_sm.c — step 6     */
     uint8_t      turn_frames;    /* frames sent in the current turn        */
     uint8_t      rx_turn_frames; /* frames heard since we last transmitted */
     uint8_t      barren_turns;   /* consecutive receive turns that heard nothing */

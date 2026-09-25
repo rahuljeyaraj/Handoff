@@ -303,7 +303,15 @@ static void report_bench(void)
     b.bad         = sat16(s_sm.frames_rx_bad  - s_st.bad_at_zero);
     b.sent        = sat16(s_sm.frames_sent    - s_st.frames_at_zero);
     b.syncs       = sat16(s_sm.framer.syncs);
-    b.present     = (s_sm.busy_until_us != 0u) ? 1u : 0u;
+    /* Link v2 step 6: the OOK bridge is deleted, so there is no
+      * busy-until timestamp to read. The detector's own verdict is the
+      * answer now -- hal_pico_presence() reads it without clearing the
+      * latch the link is living off. */
+    {
+        hal_pico_presence_t pr;
+        hal_pico_presence(&pr);
+        b.present = pr.busy ? 1u : 0u;
+    }
     b.link_state  = (uint8_t)s_sm.state;
     b.complete    = sat8(s_st.complete);
     b.aborts      = sat8(s_st.abort);
@@ -830,7 +838,7 @@ static void poll_link(uint64_t now)
 #endif
 
     if (!s_link_on || !s_have_own) {
-        uint16_t sink[64];
+        int32_t sink[64];
         while (hal_rx_chips(s_hal, sink, 64) == 64) {}
         return;
     }
@@ -843,7 +851,7 @@ static void poll_link(uint64_t now)
     }
 
     if (s_parked) {
-        uint16_t sink[64];
+        int32_t sink[64];
         while (hal_rx_chips(s_hal, sink, 64) == 64) {}
         if (now >= s_reidle_at) arm(now);
         return;

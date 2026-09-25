@@ -146,7 +146,7 @@ int main(void)
 
     for (;;) {
         uint32_t secs = (uint32_t)((time_us_64() - t_start) / 1000000u);
-        uint16_t chips[64];
+        int32_t chips[64];
 
         /* Core 0's half of §3.3: drain the ring so a full ring cannot be
          * mistaken for a core-1 problem. */

@@ -56,11 +56,9 @@ static int run_frame(const chan_cfg_t *cfg, uint8_t seq, int *bits)
     demod_init(&d);
 
     for (i = 0; i < ns; i++) {
-        uint32_t score;
-        uint16_t chip;
+        frame_chip_t chip;
 
-        if (!gz_push(&d.gz, g_samples[i], &score)) continue;
-        if (!sync_push(&d.sy, score, &chip)) continue;
+        if (!demod_push(&d, g_samples[i], &chip)) continue;
 
         if (frame_rx_push(&rx, chip) == FRAME_RX_GOOD) {
             const uint8_t *got = frame_rx_payload(&rx);

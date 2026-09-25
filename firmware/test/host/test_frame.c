@@ -1,3 +1,4 @@
+#include <math.h>
 #include <string.h>
 
 #include "chan.h"
@@ -5,24 +6,30 @@
 #include "hf_test.h"
 #include "tests.h"
 
-#define E_ON  1000u
-#define E_OFF 20u
+/*
+ * LINK V2 STEP 6. A chip is a SIGNED tone difference: tone B is positive,
+ * tone A negative, and silence is neither. There is no "on" level and no
+ * "off" level, so the two constants that used to be here are one.
+ */
+#define E_TONE  1000
 
 static void push_chips(frame_rx_t *r, const uint8_t *chips, size_t n,
                        frame_rx_result_t *last, int *good)
 {
     size_t i;
     for (i = 0; i < n; i++) {
-        const frame_rx_result_t res = frame_rx_push(r, chips[i] ? E_ON : E_OFF);
+        const frame_rx_result_t res =
+            frame_rx_push(r, chips[i] ? E_TONE : -E_TONE);
         if (res != FRAME_RX_NONE) { *last = res; if (res == FRAME_RX_GOOD) (*good)++; }
     }
 }
 
-/* Silence before a frame, so the framer starts from a realistic state. */
+/* Silence before a frame, so the framer starts from a realistic state. Both
+ * bins read the room, so their difference is nothing in particular. */
 static void push_silence(frame_rx_t *r, size_t n)
 {
     size_t i;
-    for (i = 0; i < n; i++) frame_rx_push(r, E_OFF);
+    for (i = 0; i < n; i++) frame_rx_push(r, 0);
 }
 
 void test_frame(void)
@@ -239,19 +246,28 @@ void test_frame(void)
         frame_rx_init(&r);
         rng_seed(&rng, 7);
         for (i = 0; i < 2000000; i++)
-            if (frame_rx_push(&r, (uint16_t)(rng_u32(&rng) % 1024u)) == FRAME_RX_GOOD)
+            if (frame_rx_push(&r, (int32_t)(rng_u32(&rng) % 2048u) - 1024)
+                    == FRAME_RX_GOOD)
                 good++;
         HF_CHECK_MSG(good == 0, "%d frames decoded from noise", good);
     }
 
     /*
-     * M5, from the bench, 14 Sep 2026. The board lost every frame at 3 LSB of
-     * chip energy while the host decoded the identical capture, and the
-     * difference was history: the board had seen a loud transient (the wire
-     * being moved) and the slicer's decay, (hi - lo) >> 6, is zero once the
-     * gap is under 64. hi froze at lo + 63, the threshold at ~32, and every
-     * quiet chip sliced as a space until frame_rx_init(). On a wrist that is
-     * a firm grip followed by a light one. The decay has to reach lo.
+     * M5, from the bench, 14 Sep 2026, AND WHAT IS LEFT OF IT.
+     *
+     * The board lost every frame at 3 LSB of chip energy while the host
+     * decoded the identical capture, and the difference was history: the
+     * board had seen a loud transient and the slicer's decay, (hi - lo) >> 6,
+     * is zero once the gap is under 64. hi froze at lo + 63, the threshold at
+     * ~32, and every quiet chip sliced as a space until frame_rx_init(). On a
+     * wrist that is a firm grip followed by a light one.
+     *
+     * LINK V2 STEP 6 DELETED THE SLICER, so the bug is not fixed here — it is
+     * unwritable. The test stays, because the PROPERTY it was protecting is
+     * the one the whole redesign exists to get: a frame 600 times quieter
+     * than the one before it decodes, and nothing about the loud one is
+     * remembered. What used to need a decay that reaches lo now needs nothing
+     * at all, and that claim is worth an assertion rather than a paragraph.
      */
     hf_begin("frame: a quiet frame after a loud one still decodes");
     {
@@ -261,7 +277,7 @@ void test_frame(void)
         uint8_t payload[HANDOFF_FRAG_PAYLOAD];
         size_t n, i;
         int good = 0, pass;
-        const uint16_t loud_on = 2000u, quiet_on = 3u;
+        const int32_t loud = 2000, quiet = 3;
 
         for (i = 0; i < sizeof payload; i++) payload[i] = (uint8_t)(i * 7u);
         n = frame_encode(&h, payload, sizeof payload, chips, sizeof chips);
@@ -269,18 +285,97 @@ void test_frame(void)
 
         frame_rx_init(&r);
 
-        /*
-         * Loud, then quiet twice, with 125 ms of silence between frames.
-         * That gap is what the slicer's 64-chip time constant needs to come
-         * down 56 dB; the bug was that it never came down at all.
-         */
         for (pass = 0; pass < 3; pass++) {
-            const uint16_t on = pass == 0 ? loud_on : quiet_on;
+            const int32_t e = pass == 0 ? loud : quiet;
             for (i = 0; i < n; i++)
-                if (frame_rx_push(&r, chips[i] ? on : 0u) == FRAME_RX_GOOD) good++;
-            for (i = 0; i < 500; i++) frame_rx_push(&r, 0u);
+                if (frame_rx_push(&r, chips[i] ? e : -e) == FRAME_RX_GOOD) good++;
+            for (i = 0; i < 500; i++) frame_rx_push(&r, 0);
         }
-        HF_CHECK_MSG(good == 3, "%d of 3 frames decoded; the slicer froze", good);
+        HF_CHECK_MSG(good == 3, "%d of 3 frames decoded", good);
+    }
+
+    /*
+     * THE IMBALANCE, AND WHY NOTHING CORRECTS IT. Design link-v2 §8 expected
+     * to carry the 180/200 imbalance out of the preamble into the body
+     * decisions. frame.h argues it cannot change a decision, because every
+     * Manchester bit holds one chip of each tone and the difference of the
+     * two halves is ±(S_A + S_B) whatever the two strengths are.
+     *
+     * That is an arithmetic claim, so it gets an assertion rather than a
+     * paragraph. Step 4 measured 9.1 %; this sweeps to 3:1, thirty times
+     * worse than the hardware, in both directions.
+     */
+    hf_begin("frame: a tone imbalance changes no decision");
+    {
+        static const int k_pct[] = { 50, 75, 91, 100, 110, 133, 300 };
+        frame_hdr_t h = { 1, 2, 7, 0 };
+        uint8_t payload[HANDOFF_FRAG_PAYLOAD];
+        uint8_t chips[FRAME_TOTAL_CHIPS];
+        size_t i, v;
+
+        for (i = 0; i < sizeof payload; i++) payload[i] = (uint8_t)(i * 11u + 5u);
+        frame_encode(&h, payload, sizeof payload, chips, sizeof chips);
+
+        for (v = 0; v < sizeof k_pct / sizeof k_pct[0]; v++) {
+            /* mag^2, which is what the bank produces and what crosses the
+             * core boundary — so k_pct is an AMPLITUDE ratio squared here,
+             * and last_imbalance_pct takes the root to give it back. */
+            const int32_t amp_a = 1000;
+            const int32_t amp_b = (int32_t)(1000 * k_pct[v] / 100);
+            const int32_t sa = amp_a * amp_a;
+            const int32_t sb = amp_b * amp_b;
+            frame_rx_t r;
+            int good = 0;
+
+            frame_rx_init(&r);
+            push_silence(&r, 64);
+            for (i = 0; i < FRAME_TOTAL_CHIPS; i++)
+                if (frame_rx_push(&r, chips[i] ? sb : -sa) == FRAME_RX_GOOD) good++;
+
+            HF_CHECK_MSG(good == 1, "tone B at %d %% of tone A lost the frame",
+                         k_pct[v]);
+            if (good)
+                HF_EQ_MEM(frame_rx_payload(&r), payload, sizeof payload);
+
+            /* And the instrument reads it back, since it is free to check. */
+            HF_CHECK_MSG(r.last_imbalance_pct >= (uint16_t)(k_pct[v] - 3) &&
+                         r.last_imbalance_pct <= (uint16_t)(k_pct[v] + 3),
+                         "imbalance read %u %%, expected %d %%",
+                         (unsigned)r.last_imbalance_pct, k_pct[v]);
+        }
+    }
+
+    /*
+     * THE HUNT WINDOW IS COMPUTED, and this is the arithmetic frame.h states
+     * recomputed in double — the same contract test_presence.c gives the CFAR
+     * k. Changing HANDOFF_FALSE_SYNC_S and not the window is a failure here
+     * rather than a quietly detuned link.
+     */
+    hf_begin("frame: the preamble hunt meets its stated false-sync rate");
+    {
+        const double ways = 1.0 + (double)FRAME_ALT_WINDOW
+                          + (double)FRAME_ALT_WINDOW * (FRAME_ALT_WINDOW - 1) / 2.0;
+        const double per_chip = ways / (512.0 * pow(2.0, (double)FRAME_ALT_WINDOW));
+        const double seconds = 1.0 / (per_chip * (double)HANDOFF_CHIP_RATE_HZ);
+
+        HF_EQ_INT(FRAME_ALT_MIN, FRAME_ALT_WINDOW - 2 * FRAME_ALT_FLIPS);
+        HF_CHECK_MSG(seconds >= (double)HANDOFF_FALSE_SYNC_S,
+                     "one false sync every %.0f s, wanted %u",
+                     seconds, (unsigned)HANDOFF_FALSE_SYNC_S);
+
+        /* And it is the SMALLEST window that does: one shorter must fail. */
+        {
+            const double w = FRAME_ALT_WINDOW - 1.0;
+            const double ways1 = 1.0 + w + w * (w - 1.0) / 2.0;
+            const double s1 = 1.0 / ((ways1 / (512.0 * pow(2.0, w)))
+                                     * (double)HANDOFF_CHIP_RATE_HZ);
+            HF_CHECK_MSG(s1 < (double)HANDOFF_FALSE_SYNC_S,
+                         "a %d-transition window would also do: this one is "
+                         "tighter than the requirement", (int)w);
+        }
+
+        /* The window cannot be longer than the run that feeds it. */
+        HF_CHECK(FRAME_ALT_WINDOW <= FRAME_ALT_RUN_CHIPS - 1);
     }
 
     hf_begin("frame: airtime matches the configured rate");

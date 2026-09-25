@@ -112,6 +112,11 @@ uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last);
  * the pair that prove it is not: both belong on any heartbeat. */
 uint32_t hal_pico_chips(void);
 uint32_t hal_pico_windows(void);
+
+/* ADC samples core 1 has taken from the ring. The denominator of a
+ * cycles-per-sample budget, and unlike the window count it keeps
+ * advancing with the bank switched off. */
+uint32_t hal_pico_samples(void);
 uint32_t hal_pico_sps(void);
 
 /*
@@ -138,7 +143,7 @@ uint16_t hal_pico_read_vsys_mv(void);
  * is up to a DMA block, 4 ms, which is four turnaround budgets. Same ring
  * as hal_rx_chips(); pop from one or the other.
  */
-size_t   hal_pico_rx_chips_at(uint16_t *dst, uint32_t *idx, size_t max);
+size_t   hal_pico_rx_chips_at(int32_t *dst, uint32_t *idx, size_t max);
 uint64_t hal_pico_sample_us(uint64_t idx);
 
 /* When the last send's final chip ended on the pad (the DMA start plus the
@@ -196,19 +201,40 @@ void hal_pico_clocks(hal_pico_clocks_t *m);
  * bin bank: the guards at 140, 160 and 220 kHz are RECEIVE-ONLY and are not
  * PIO dividers at all, so set_carrier() refuses them.
  *
- * This retunes core 1's Goertzel alone, to any bin the window can hold, and
- * leaves the generator exactly where it is. With the two-tone generator
- * driving one tone continuously, walking the bank is then five reads of `m`
- * — and the one that matters is that bins 7, 8 and 11 stay at the noise while
- * a tone is being transmitted. A guard that rises with our own transmitter is
- * v1's floor again (design §4).
+ * This retunes the PROBE — one Goertzel that has no other job since step 6 —
+ * to any bin the window can hold, and leaves the generator exactly where it
+ * is. With the two-tone generator driving one tone continuously, walking the
+ * bank is then five reads, and the one that matters is that bins 7, 8 and 11
+ * stay at the noise while a tone is being transmitted. A guard that rises
+ * with our own transmitter is v1's floor again (design §4).
  *
- * Blocks until core 1 has re-tuned. Chips in flight across the change are
- * meaningless; reset the frame receiver after it. Returns false, changing
- * nothing, for a bin at or above Nyquist for the window.
+ * THE PROBE IS NOT IN THE LINK. Retuning it does not disturb the receiver:
+ * the chip stream comes off the bank's two tone bins, which this cannot
+ * move. Before step 6 it was the link, and a retune cost every frame in
+ * flight.
+ *
+ * Blocks until core 1 has re-tuned. Returns false, changing nothing, for a
+ * bin at or above Nyquist for the window.
  */
 bool     hal_pico_set_rx_bin(uint16_t bin);
 uint16_t hal_pico_rx_bin(void);
+
+/*
+ * Run the probe for `windows` Goertzel windows and report the mean and the
+ * max of its score. Mean is in TENTHS of an LSB, which is how every console
+ * here prints a level.
+ *
+ * It runs only while this call is outstanding — a board nobody is looking at
+ * pays nothing for it (see the probe's comment in hal_pico.c). Bounded: on a
+ * timeout it returns false with whatever it collected.
+ */
+typedef struct {
+    uint32_t windows;
+    uint32_t mean_tenths;
+    uint32_t max;
+} hal_pico_probe_t;
+
+bool hal_pico_probe(uint32_t windows, uint32_t timeout_us, hal_pico_probe_t *out);
 
 /*
  * ---- link v2: the five-bin bank ----------------------------------------

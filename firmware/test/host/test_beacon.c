@@ -367,11 +367,23 @@ static void shout_is_not_a_preamble(void)
      * Forty shout cycles through one framer — burst, then the silence a real
      * listen window would be, so the burst edges are in the stream too. A
      * preamble shout would sync on almost every one of these.
+     *
+     * LINK V2 STEP 6: the shout is one unbroken TONE, so it arrives as a run
+     * of the same sign; the silence between is both bins reading the room, so
+     * it arrives as a small difference of RANDOM sign. That second half is
+     * the one worth modelling properly — a quiet channel that alternated
+     * would be a preamble, and the framer must not be handed a kind one.
      */
     frame_rx_init(&r);
-    for (cycle = 0; cycle < 40u; cycle++) {
-        for (i = 0; i < n; i++)          (void)frame_rx_push(&r, 400);
-        for (i = 0; i < 4u * n; i++)     (void)frame_rx_push(&r, 6);
+    {
+        uint32_t lcg = 12345u;
+        for (cycle = 0; cycle < 40u; cycle++) {
+            for (i = 0; i < n; i++) (void)frame_rx_push(&r, 400);
+            for (i = 0; i < 4u * n; i++) {
+                lcg = lcg * 1103515245u + 12345u;
+                (void)frame_rx_push(&r, ((lcg >> 16) & 1u) ? 6 : -6);
+            }
+        }
     }
 
     HF_CHECK_MSG(r.syncs == 0, "framer synced %u times on a shout", r.syncs);

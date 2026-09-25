@@ -24,7 +24,7 @@
 _Static_assert((IPC_RING_CHIPS & IPC_MASK) == 0u,
     "IPC_RING_CHIPS must be a power of two");
 
-static uint16_t          s_buf[IPC_RING_CHIPS];
+static int32_t           s_buf[IPC_RING_CHIPS];
 static uint32_t          s_idx[IPC_RING_CHIPS];
 static volatile uint32_t s_head;      /* written by core 1 only */
 static volatile uint32_t s_tail;      /* written by core 0 only */
@@ -36,7 +36,7 @@ void ipc_init(void)
     s_dropped = 0;
 }
 
-HANDOFF_HOT_FUNC bool ipc_push_chip(uint16_t energy, uint32_t sample_idx)
+HANDOFF_HOT_FUNC bool ipc_push_chip(int32_t d, uint32_t sample_idx)
 {
     uint32_t h = s_head;
     uint32_t n = (h + 1u) & IPC_MASK;
@@ -48,14 +48,14 @@ HANDOFF_HOT_FUNC bool ipc_push_chip(uint16_t energy, uint32_t sample_idx)
         return false;
     }
 
-    s_buf[h] = energy;
+    s_buf[h] = d;
     s_idx[h] = sample_idx;
     __dmb();                 /* fill the slot before publishing the index */
     s_head = n;
     return true;
 }
 
-size_t ipc_pop_chips(uint16_t *dst, uint32_t *idx, size_t max)
+size_t ipc_pop_chips(int32_t *dst, uint32_t *idx, size_t max)
 {
     uint32_t t = s_tail;
     uint32_t h = s_head;

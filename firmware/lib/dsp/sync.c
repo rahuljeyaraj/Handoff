@@ -41,18 +41,22 @@ int sync_phase_error(const sync_t *s)
     return off;
 }
 
-HANDOFF_HOT_FUNC bool sync_push(sync_t *s, uint32_t score, uint16_t *chip)
+HANDOFF_HOT_FUNC bool sync_push_d(sync_t *s, int32_t d, int32_t *chip)
 {
-    uint32_t delta;
+    uint64_t delta;
     int i, off, lo, hi;
-    uint64_t sum;
+    int64_t sum;
 
-    /* Transition energy attributed to the phase slot it was observed in. */
-    delta = s->have_prev ? (score > s->prev ? score - s->prev : s->prev - score) : 0;
-    s->prev = score;
+    /* Transition energy attributed to the phase slot it was observed in.
+     * Under FSK the level does not move at a chip boundary and the SIGN
+     * does, so this is where the edge now lives. */
+    delta = s->have_prev
+              ? (uint64_t)(d > s->prev ? (int64_t)d - s->prev : (int64_t)s->prev - d)
+              : 0u;
+    s->prev = d;
     s->have_prev = true;
 
-    if (s->pos < SYNC_MAX_WPC) s->hist[s->pos] = score;
+    if (s->pos < SYNC_MAX_WPC) s->hist[s->pos] = d;
     if (s->pos < SYNC_MAX_WPC) {
         s->edge[s->pos] -= s->edge[s->pos] >> EDGE_DECAY_SHIFT;
         s->edge[s->pos] += delta;
@@ -71,9 +75,9 @@ HANDOFF_HOT_FUNC bool sync_push(sync_t *s, uint32_t score, uint16_t *chip)
 
     sum = 0;
     for (i = lo; i < hi && i < SYNC_MAX_WPC; i++) sum += s->hist[i];
-    sum /= (uint64_t)(hi - lo);
+    sum /= (int64_t)(hi - lo);
 
-    if (chip) *chip = (sum > 0xFFFFu) ? 0xFFFFu : (uint16_t)sum;
+    if (chip) *chip = (int32_t)sum;
 
     /*
      * Early/late correction. Nudge by at most one window per chip: the tracker
@@ -86,7 +90,7 @@ HANDOFF_HOT_FUNC bool sync_push(sync_t *s, uint32_t score, uint16_t *chip)
     if (s->last_correction != 0) {
         /* Rotate the edge histogram with the phase, so the correction is not
          * immediately re-applied against a stale index. */
-        uint32_t rot[SYNC_MAX_WPC];
+        uint64_t rot[SYNC_MAX_WPC];
         for (i = 0; i < s->wpc; i++)
             rot[i] = s->edge[(i + s->last_correction + s->wpc) % s->wpc];
         for (i = 0; i < s->wpc; i++) s->edge[i] = rot[i];
@@ -94,5 +98,23 @@ HANDOFF_HOT_FUNC bool sync_push(sync_t *s, uint32_t score, uint16_t *chip)
 
     s->pos = 0;
     s->chips_out++;
+    return true;
+}
+
+/*
+ * The single-bin form. E_A is held at zero, so d is the score itself and the
+ * edge detector sees exactly what it saw before FSK: |score - prev|. Nothing
+ * about the v1 chain's timing changes by going through sync_push_d().
+ */
+HANDOFF_HOT_FUNC bool sync_push(sync_t *s, uint32_t score, uint16_t *chip)
+{
+    int32_t v = 0;
+    const int32_t in = (score > 0x7FFFFFFFu) ? 0x7FFFFFFF : (int32_t)score;
+
+    if (!sync_push_d(s, in, &v)) return false;
+    if (chip) {
+        if (v < 0) v = 0;
+        *chip = (v > 0xFFFF) ? 0xFFFFu : (uint16_t)v;
+    }
     return true;
 }

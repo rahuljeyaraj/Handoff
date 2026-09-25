@@ -214,6 +214,32 @@
 #define HANDOFF_CFAR_K_NUM          1676
 #define HANDOFF_CFAR_K_DEN          100
 
+/*
+ * ---- link v2 step 6: the stated false-SYNC rate -------------------------
+ *
+ * The second of this branch's two stated requirements, and the same shape as
+ * the false-busy rate above: a number chosen here, from which frame.h then
+ * COMPUTES its preamble-hunt window rather than typing one.
+ *
+ * ONE FALSE SYNC PER 24 HOURS OF CONTINUOUS LISTENING. A false sync costs a
+ * frame: the framer leaves HUNT, spends FRAME_BODY_BYTES * 16 chips filling a
+ * body out of noise, fails the CRC and only then hunts again — so a real
+ * preamble arriving inside that window is missed entirely. At one a day that
+ * is unmeasurable against a contact that lasts a second; the rate is stated
+ * loose enough to be honest and tight enough that it never shows.
+ *
+ * WHY IT IS STATED HERE AND NOT IN frame.h. frame.h owns the FORMAT — the
+ * preamble length, the marker, the sync rule. This is a requirement, and
+ * every requirement this branch derives a threshold from lives beside the
+ * others so the two cannot drift apart.
+ *
+ * v1's 22-of-24 was typed, and its own comment in frame.h admitted what it
+ * bought: "one spurious sync every couple of hours". That is 12x worse than
+ * this, and nobody chose it — it was the window that happened to be written
+ * down. frame.h now computes the window from this line.
+ */
+#define HANDOFF_FALSE_SYNC_S      86400u   /* 24 hours */
+
 #define HANDOFF_CHIP_RATE_HZ      (HANDOFF_WINDOW_RATE_HZ / HANDOFF_WINDOWS_PER_CHIP)
 #define HANDOFF_BIT_RATE_BPS      (HANDOFF_CHIP_RATE_HZ / 2)   /* Manchester   */
 #define HANDOFF_CHIP_US           (1000000 / HANDOFF_CHIP_RATE_HZ)

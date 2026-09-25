@@ -99,7 +99,7 @@ void test_sync(void)
             demod_t d;
             uint8_t chips[256];
             static int16_t samples[CHAN_MAX_SAMPLES(256)];
-            uint16_t out[300];
+            frame_chip_t out[300];
             size_t ns, nc, i;
             int errors = 0;
 

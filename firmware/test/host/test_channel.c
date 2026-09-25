@@ -57,50 +57,82 @@ void test_channel(void)
         }
     }
 
-    hf_begin("chan: a rendered mark scores near the configured amplitude");
+    /*
+     * LINK V2: the two tests below used to be "a mark scores the amplitude"
+     * and "a gated-off chip scores nothing", which is the v1 question. There
+     * is no gated-off chip any more — both symbols are tones — so the pair
+     * becomes the question that replaced it: does a chip of one tone put the
+     * whole amplitude in ITS bin and nothing in the other one, with the SIGN
+     * saying which. That is the orthogonality the whole design rests on,
+     * measured here at the sample level rather than assumed from the
+     * transform.
+     */
+    hf_begin("chan: a tone B chip reads +amplitude, a tone A chip reads -it");
+    {
+        int tone;
+
+        for (tone = 0; tone <= 1; tone++) {
+            chan_cfg_t c;
+            uint8_t chips[NCHIPS];
+            demod_t d;
+            frame_chip_t out[NCHIPS + 8];
+            size_t ns, nc, i;
+            int32_t hi = -0x7FFFFFFF, lo = 0x7FFFFFFF;
+
+            chan_default(&c);
+            memset(chips, (int)tone, sizeof chips);
+            ns = chan_render(&c, chips, NCHIPS, g_samples,
+                             sizeof g_samples / sizeof g_samples[0]);
+            HF_EQ_INT(ns, chan_samples_for(&c, NCHIPS));
+
+            demod_init(&d);
+            nc = demod_run(&d, g_samples, ns, out, sizeof out / sizeof out[0]);
+            HF_CHECK(nc > 10);
+            /* The last chips are the deliberate burst tail, which is silence. */
+            for (i = 5; i + CHAN_TAIL_CHIPS + 1 < nc; i++) {
+                if (out[i] > hi) hi = out[i];
+                if (out[i] < lo) lo = out[i];
+            }
+            /* The amplitude, signed by which tone it was. The Goertzel score
+             * is normalised to the rendered sine's amplitude, and the other
+             * bin contributes nothing — which is the half being checked. */
+            HF_NEAR((double)hi, tone ? 200.0 : -200.0, 20.0);
+            HF_NEAR((double)lo, tone ? 200.0 : -200.0, 20.0);
+        }
+    }
+
+    hf_begin("chan: the off-tone bin is silent, so |d| IS the amplitude");
     {
         chan_cfg_t c;
         uint8_t chips[NCHIPS];
         demod_t d;
-        uint16_t out[NCHIPS + 8];
+        frame_chip_t out[NCHIPS + 8];
         size_t ns, nc, i;
-        uint32_t hi = 0, lo = 0xFFFFu;
+        gz_t other;
+        uint32_t worst = 0, score;
 
+        /*
+         * Drive tone B for every chip and score bin 9, which nothing is
+         * driving. An on-bin tone is exactly zero in every other bin of the
+         * same transform (goertzel.h), and this is that claim measured
+         * through the renderer rather than taken from the header.
+         */
         chan_default(&c);
         memset(chips, 1, sizeof chips);
-        ns = chan_render(&c, chips, NCHIPS, g_samples, sizeof g_samples / sizeof g_samples[0]);
-        HF_EQ_INT(ns, chan_samples_for(&c, NCHIPS));
+        ns = chan_render(&c, chips, NCHIPS, g_samples,
+                         sizeof g_samples / sizeof g_samples[0]);
 
+        gz_init(&other, HANDOFF_GZ_N, HANDOFF_TONE_A_BIN);
+        for (i = 0; i < ns; i++)
+            if (gz_push(&other, g_samples[i], &score) && i > 5u * HANDOFF_GZ_N)
+                if (score > worst) worst = score;
+        HF_CHECK_MSG(worst < 4, "the undriven bin scored %u", (unsigned)worst);
+
+        /* And the difference the framer sees is the driven bin, undiluted. */
         demod_init(&d);
         nc = demod_run(&d, g_samples, ns, out, sizeof out / sizeof out[0]);
         HF_CHECK(nc > 10);
-        /* The last chips are the deliberate burst tail, which is silence. */
-        for (i = 5; i + CHAN_TAIL_CHIPS + 1 < nc; i++) {
-            if (out[i] > hi) hi = out[i];
-            if (out[i] < lo) lo = out[i];
-        }
-        /* Half amplitude, because chan renders a sine and the Goertzel score
-         * is normalised to that sine's amplitude. */
-        HF_NEAR((double)hi, 200.0, 20.0);
-        HF_NEAR((double)lo, 200.0, 20.0);
-    }
-
-    hf_begin("chan: a gated-off chip scores near nothing");
-    {
-        chan_cfg_t c;
-        uint8_t chips[NCHIPS];
-        demod_t d;
-        uint16_t out[NCHIPS + 8];
-        size_t ns, nc, i;
-        uint32_t worst = 0;
-
-        chan_default(&c);
-        memset(chips, 0, sizeof chips);
-        ns = chan_render(&c, chips, NCHIPS, g_samples, sizeof g_samples / sizeof g_samples[0]);
-        demod_init(&d);
-        nc = demod_run(&d, g_samples, ns, out, sizeof out / sizeof out[0]);
-        for (i = 5; i < nc; i++) if (out[i] > worst) worst = out[i];
-        HF_CHECK_MSG(worst < 4, "an off chip scored %u", (unsigned)worst);
+        HF_NEAR((double)out[nc / 2u], 200.0, 20.0);
     }
 
     hf_begin("chan: clipping is modelled, not ignored");
@@ -123,23 +155,33 @@ void test_channel(void)
         HF_CHECK(clipped_lo > 0);
     }
 
-    hf_begin("chan: mains hum lands off the carrier bin and is rejected");
+    hf_begin("chan: mains hum lands off both tone bins and is rejected");
     {
         chan_cfg_t c;
         uint8_t chips[NCHIPS];
         demod_t d;
-        uint16_t out[NCHIPS + 8];
+        frame_chip_t out[NCHIPS + 8];
         size_t ns, nc, i;
         uint32_t worst = 0;
 
+        /*
+         * LINK V2: silence is now amplitude zero, not a chip value — every
+         * chip is a tone, so there is no "carrier off" pattern to render. The
+         * question is the same one: 500 LSB of hum at 50 Hz must not reach
+         * either tone bin, so the difference between them stays at nothing.
+         */
         chan_default(&c);
+        c.amplitude = 0.0;
         c.hum_lsb = 500.0;      /* enormous — far worse than design §10.4 fears */
         memset(chips, 0, sizeof chips);
         ns = chan_render(&c, chips, NCHIPS, g_samples, sizeof g_samples / sizeof g_samples[0]);
         demod_init(&d);
         nc = demod_run(&d, g_samples, ns, out, sizeof out / sizeof out[0]);
-        for (i = 5; i < nc; i++) if (out[i] > worst) worst = out[i];
-        HF_CHECK_MSG(worst < 20, "500 LSB of hum leaked %u into the carrier bin",
+        for (i = 5; i < nc; i++) {
+            const uint32_t mag = (uint32_t)(out[i] < 0 ? -out[i] : out[i]);
+            if (mag > worst) worst = mag;
+        }
+        HF_CHECK_MSG(worst < 20, "500 LSB of hum leaked %u into the tone bins",
                      (unsigned)worst);
     }
 

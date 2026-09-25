@@ -39,10 +39,20 @@ typedef struct hal_iface {
 
     /* --- receive --- */
 
-    /* Chip energies, not samples: this is the core-1/core-0 boundary of
-     * architecture §3.3, and the layer protocol tests inject at. DSP tests
-     * inject one layer lower, at raw samples. Returns chips written. */
-    size_t   (*rx_chips)(void *ctx, uint16_t *dst, size_t max);
+    /*
+     * Chips, not samples: this is the core-1/core-0 boundary of architecture
+     * §3.3, and the layer protocol tests inject at. DSP tests inject one
+     * layer lower, at raw samples. Returns chips written.
+     *
+     * LINK V2 STEP 6: a chip is a SIGNED TONE DIFFERENCE, d = E_B - E_A, in
+     * the bank's mag^2 units — not an energy. Both bins are scored in the
+     * same window, through the same gain and the same body, so the number
+     * that crosses here is already a comparison and the framer needs no
+     * threshold to read it. int32_t rather than link/frame.h's frame_chip_t
+     * because this header sits below link/ and must not reach up into it;
+     * frame.h states the contract and the two are asserted equal there.
+     */
+    size_t   (*rx_chips)(void *ctx, int32_t *dst, size_t max);
 
     /* The level on the channel, as a Goertzel score. Under link v2 this is
      * max(E_A, E_B) — whichever tone is being sent — and it is telemetry, not
@@ -114,7 +124,7 @@ static inline size_t hal_tx_chips(const hal_iface_t *h, const uint8_t *c, size_t
 static inline bool hal_tx_busy(const hal_iface_t *h) {
     return (h && h->tx_busy) ? h->tx_busy(h->ctx) : false;
 }
-static inline size_t hal_rx_chips(const hal_iface_t *h, uint16_t *d, size_t max) {
+static inline size_t hal_rx_chips(const hal_iface_t *h, int32_t *d, size_t max) {
     return (h && h->rx_chips) ? h->rx_chips(h->ctx, d, max) : 0;
 }
 static inline uint32_t hal_rx_carrier_level(const hal_iface_t *h) {

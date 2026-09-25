@@ -206,6 +206,14 @@ static void fsk_start(void)
     }
 }
 
+/*
+ * Hand the pad back to the v1 generator.
+ *
+ * LINK V2 STEP 6 CHANGED WHAT THIS COSTS. The two-tone generator is the
+ * LINK's transmitter now, not an instrument borrowing the pad, so this stops
+ * the link from transmitting at all until `y` takes it back. Before step 6 it
+ * simply undid an instrument. The warning is the whole change.
+ */
 static void fsk_stop(void)
 {
     if (!pio_carrier_fsk_active()) return;
@@ -215,6 +223,7 @@ static void fsk_stop(void)
     pio_carrier_sense(false);
     pio_carrier_drive(false);
     printf("    v1 generator has the pad again, pad high-Z\n");
+    printf("    THE LINK CANNOT TRANSMIT until `y 0`, `y 1` or `y 3`\n");
 }
 
 static uint32_t fsk_measure(int tone, uint32_t want, bool verdict)
@@ -688,15 +697,23 @@ static void rx_frame(frame_rx_result_t res)
  * receiver, always, so the receiver is never anything but primed. */
 static void rx_pump(void)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     size_t n, i;
 
     while ((n = hal_rx_chips(s_hal, chips, count_of(chips))) > 0) {
         for (i = 0; i < n; i++) {
             frame_rx_result_t r;
 
-            if (s_stream_decimate)
-                hal_telemetry(s_hal, HAL_TLM_SCORE, &chips[i], sizeof chips[i]);
+            if (s_stream_decimate) {
+                /* The score stream is 16-bit by contract (hal.h, TLM_SCORE),
+                 * so a signed chip goes out as its magnitude: the sign is the
+                 * decision and the magnitude is the level, and a trace of a
+                 * live link wants the level. */
+                const int32_t d = chips[i];
+                const uint32_t a = (uint32_t)(d < 0 ? -(int64_t)d : d);
+                const uint16_t mag = (uint16_t)(a > 0xFFFFu ? 0xFFFFu : a);
+                hal_telemetry(s_hal, HAL_TLM_SCORE, &mag, sizeof mag);
+            }
 
             r = frame_rx_push(&s_rx, chips[i]);
             if (r != FRAME_RX_NONE) rx_frame(r);
@@ -709,31 +726,58 @@ static void rx_pump(void)
  * middle of the measurement and `m` reads the quiet it just caused. */
 static void selfloop_pump(void);
 
-/* Chip energy over a window, mean and max, in tenths of an LSB. The frame
- * receiver keeps running underneath, so the window costs no frames. */
-static uint32_t rx_energy(uint32_t us, uint32_t *max_out)
+/*
+ * Level on the probe bin, mean and max, in tenths of an LSB.
+ *
+ * LINK V2 STEP 6: this used to read CHIP energies off the link's own stream,
+ * because the link WAS one bin and retuning it was how `b` walked the bank.
+ * The link is two tone bins and a signed difference now, and the retunable
+ * Goertzel is an instrument with nothing framing behind it -- so what comes
+ * back is Goertzel WINDOW scores rather than chip energies.
+ *
+ * Two things follow at the console. The max is one window rather than the
+ * mean of three, so it reads a little higher than the same bench did before
+ * step 6. And retuning costs the receiver nothing, because the receiver is
+ * not on this bin any more.
+ *
+ * TAKEN IN SHORT CHUNKS, and that is the self-loop pump trap, not caution:
+ * `x` re-queues its carrier a frame at a time, so anything that spins for
+ * two hundred milliseconds without pumping lets the transmitter fall silent
+ * and then measures the quiet it caused. The frame receiver is pumped in the
+ * same gaps, so a bin walk costs no frames either.
+ */
+#define PROBE_CHUNK_US 10000u
+
+static uint32_t probe_level(uint32_t us, uint32_t *max_out)
 {
-    uint16_t chips[64];
     uint64_t sum = 0, n = 0;
     uint32_t max = 0;
-    uint64_t until = hal_now_us(s_hal) + us;
-    size_t k, i;
+    uint32_t left = us;
 
-    while (hal_now_us(s_hal) < until) {
+    while (left) {
+        const uint32_t want = left > PROBE_CHUNK_US ? PROBE_CHUNK_US : left;
+        const uint32_t windows = (uint32_t)(((uint64_t)want
+                                             * (uint32_t)HANDOFF_WINDOW_RATE_HZ)
+                                            / 1000000u);
+        hal_pico_probe_t p;
+
+        rx_pump();
         selfloop_pump();
-        while ((k = hal_rx_chips(s_hal, chips, count_of(chips))) > 0) {
-            for (i = 0; i < k; i++) {
-                frame_rx_result_t r;
-                sum += chips[i];
-                if (chips[i] > max) max = chips[i];
-                r = frame_rx_push(&s_rx, chips[i]);
-                if (r != FRAME_RX_NONE) rx_frame(r);
-            }
-            n += k;
+
+        memset(&p, 0, sizeof p);
+        (void)hal_pico_probe(windows ? windows : 1u, want + 20000u, &p);
+        if (p.windows) {
+            sum += (uint64_t)p.mean_tenths * p.windows;
+            n   += p.windows;
+            if (p.max > max) max = p.max;
         }
+        left -= want;
     }
+
+    rx_pump();
+    selfloop_pump();
     if (max_out) *max_out = max;
-    return n ? (uint32_t)((sum * 10u + n / 2u) / n) : 0;
+    return n ? (uint32_t)(sum / n) : 0u;
 }
 
 /* RMS of a raw burst about its mean, in tenths of an LSB. */
@@ -776,19 +820,19 @@ static void rx_measure(void)
            (unsigned)hal_pico_rx_bin(),
            (unsigned long)(hal_pico_rx_bin() * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
            (unsigned long)(MEASURE_US / 1000u));
-    mean = rx_energy(MEASURE_US, &max);
+    mean = probe_level(MEASURE_US, &max);
     sig  = raw_rms(&mean_code);
     floor = hal_pico_noise_floor(&floor_mean);
 
-    printf("    chip energy:  mean "); print_tenths(mean);
-    printf(" LSB, max %lu LSB (A, if frames are flowing)\n", (unsigned long)max);
+    printf("    bin level:    mean "); print_tenths(mean);
+    printf(" LSB, max %lu LSB (one Goertzel window)\n", (unsigned long)max);
     printf("    raw samples:  "); print_tenths(sig);
     printf(" LSB RMS about code %ld (sigma, if the transmitter is paused)\n",
            (long)mean_code);
     printf("    M4 floor:     "); print_tenths(floor);
     printf(" LSB RMS about code %ld (on-die sensor, at boot)\n", (long)floor_mean);
     if (max == 0u)
-        printf("    nothing received: is the other board transmitting on this carrier?\n");
+        printf("    nothing on this bin: is the other board transmitting?\n");
 }
 
 /* ---- self loop ---------------------------------------------------------
@@ -873,8 +917,8 @@ static void rx_bank_full(void)
 
         if (!hal_pico_set_rx_bin(bin)) continue;
         frame_rx_init(&s_rx);
-        (void)rx_energy(BANK_SETTLE_US, 0);
-        mean = rx_energy(BANK_US, &max);
+        (void)probe_level(BANK_SETTLE_US, 0);
+        mean = probe_level(BANK_US, &max);
 
         printf("    bin %2u  %3lu kHz  mean ", (unsigned)bin,
                (unsigned long)(bin * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u));
@@ -911,8 +955,8 @@ static void rx_bank(void)
 
         if (!hal_pico_set_rx_bin(bin)) { printf("    bin %u refused\n", bin); continue; }
         frame_rx_init(&s_rx);
-        (void)rx_energy(BANK_SETTLE_US, 0);        /* discard the transient */
-        mean = rx_energy(BANK_US, &max);
+        (void)probe_level(BANK_SETTLE_US, 0);        /* discard the transient */
+        mean = probe_level(BANK_US, &max);
 
         printf("    bin %2u  %3lu kHz  %-7s  mean ", (unsigned)bin,
                (unsigned long)(bin * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
@@ -1151,7 +1195,7 @@ static void rx_presence(uint32_t seconds)
 static void bank_budget_leg(const char *what, bool on)
 {
     uint64_t b0, t0, b1, t1;
-    uint32_t w0, w1, ov0, ov1, sps;
+    uint32_t w0, w1, sm0, sm1, ov0, ov1, sps;
     uint64_t busy_us, wall_us, samples, ctenths;
 
     hal_pico_set_bank(on);
@@ -1159,18 +1203,23 @@ static void bank_budget_leg(const char *what, bool on)
 
     ov0 = hal_pico_overruns();
     w0  = hal_pico_windows();
+    sm0 = hal_pico_samples();
     hal_pico_core1_busy(&b0, &t0);
 
     bank_wait(BANK_BUDGET_US);
 
     hal_pico_core1_busy(&b1, &t1);
     w1  = hal_pico_windows();
+    sm1 = hal_pico_samples();
     ov1 = hal_pico_overruns();
     sps = hal_pico_sps();
 
     busy_us = b1 - b0;
     wall_us = t1 - t0;
-    samples = (uint64_t)(w1 - w0) * (uint32_t)HANDOFF_GZ_N;
+    /* SAMPLES, not windows times GZ_N. With the bank off nothing scores a
+     * window at all since step 6, and that is one of this instrument's two
+     * legs -- the old expression would divide by zero on it. */
+    samples = (uint64_t)(sm1 - sm0);
     ctenths = samples
         ? busy_us * ((uint32_t)HANDOFF_SYS_CLK_HZ / 1000000u) * 10u / samples
         : 0u;
@@ -1209,7 +1258,8 @@ static void rx_bank_dispatch(uint32_t arg, bool have_arg)
     case 0:
     case 1:
         hal_pico_set_bank(arg != 0u);
-        printf("    five-bin bank %s\n", arg ? "ON" : "off");
+        printf("    five-bin bank %s%s\n", arg ? "ON" : "off",
+               arg ? "" : " - THE RECEIVER IS OFF: no chips, no presence");
         break;
     case 2: rx_bank_capture(); break;
     default: printf("    n [0|1|2]\n"); break;
@@ -1222,14 +1272,15 @@ static void rx_help(void)
            "  s         stats now\n"
            "  z         zero the stats\n"
            "  v         per-frame lines on / off\n"
-           "  m         chip energy mean / max, raw RMS\n"
+           "  m         probe-bin level mean / max, raw RMS\n"
            "  r         raw burst across the next frame, dumped\n"
-           "  t [N]     stream every Nth chip energy; t 0 stops\n"
+           "  t [N]     stream every Nth chip magnitude; t 0 stops\n"
            "  x [0|1]   self loop: our own carrier into our own receiver\n"
            "  f         clock tree, measured\n"
            "  y [0|1|2|3|9] two tones: check, drive A / B, 2 align,\n"
            "              3 drive alternating chips, 9 stop\n"
-           "  k [bin]   move the receive Goertzel to a bin (7..11)\n"
+           "  k [bin]   move the PROBE Goertzel to a bin (7..11); the link\n"
+           "              is on bins 9 and 10 and does not move\n"
            "  b [1]     walk bins 7,8,9,10,11; b 1 walks every bin\n"
            "  n [0|1|2] five-bin bank: budget, 0 off, 1 on, 2 one capture\n"
            "  h         this\n");

@@ -174,12 +174,12 @@ void link_sm_idle(link_sm_t *sm, uint64_t now_us)
  * last one in sm->framer.
  *
  * Presence is NOT drained here. It is decided on core 1 out of the five-bin
- * bank, not out of these chip energies, and the callers that want it ask
+ * bank, not out of these chips, and the callers that want it ask
  * hal_rx_busy() where they want it — which is not the same set of places.
  */
 static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     uint32_t good = 0;
     size_t n, i;
 
@@ -224,7 +224,7 @@ static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
  */
 static void drain_discard(link_sm_t *sm)
 {
-    uint16_t chips[64];
+    int32_t chips[64];
     while (hal_rx_chips(sm->hal, chips, sizeof chips / sizeof chips[0]) ==
            sizeof chips / sizeof chips[0])
         ;
@@ -232,70 +232,50 @@ static void drain_discard(link_sm_t *sm)
 }
 
 /*
- * ---- THE OOK BRIDGE, AND IT DELETES AT STEP 6 --------------------------
+ * ---- THE OOK BRIDGE IS GONE, AND THIS IS WHY IT WAS HERE ----------------
  *
- * dsp/presence.c has no hold, no hysteresis and no memory. That is the design
- * (link-v2-design.md §5) and it is right for the radio this branch is
- * building, where both symbols are tones and the pad is driven for every chip.
+ * Until step 6 this file held LINK_OOK_BRIDGE_US: the channel was treated as
+ * occupied for MANCHESTER_MAX_RUN_CHIPS + 1 chips after the last busy
+ * reading. It existed because v1 SWITCHED THE CARRIER OFF FOR A ZERO, so half
+ * of every frame was silence and dsp/presence.c — which has no hold and no
+ * memory, by design — answered "nobody is transmitting" in each of those
+ * gaps, truthfully. Measured in this simulator: a band listening to a v1
+ * frame flapped busy/quiet at the chip rate and no rendezvous completed at
+ * any phase.
  *
- * IT IS NOT RIGHT FOR THE RADIO STILL ON THE AIR. v1 switches the carrier OFF
- * for a zero, so half of every frame is silence, and an envelope detector with
- * no memory answers "nobody is transmitting" in each of those gaps —
- * truthfully. Measured in the host simulator: a band listening to a v1 frame
- * flapped busy/quiet at the chip rate and the trigger never held TRIG_WAIT
- * long enough for the framer to lock, so no rendezvous completed at any phase.
+ * FSK HAS NO SPACES. The pad carries tone A or tone B and never nothing, so
+ * presence reads busy for every chip of a frame and there is no gap left to
+ * bridge. Nothing exercises it, and a bridge nothing exercises is machinery
+ * this branch exists to remove. Design link-v2 §4's second "free" benefit of
+ * a constant envelope, arriving as a deletion.
  *
- * So the channel is treated as occupied for a short time after the last busy
- * reading, and the length of that time is DERIVED, not tuned:
- *
- *   MANCHESTER_MAX_RUN_CHIPS   the longest silence the line code can make,
- *                              which is 2 and is a property of the code, not
- *                              of a bench. manchester.h proves it.
- *   + 1                        because hal_rx_busy() answers about an INTERVAL
- *                              rather than an instant, so the poll that sees
- *                              the tone come back can land up to one chip
- *                              after it did. Strictly longer than the longest
- *                              gap is the requirement; this is the smallest
- *                              whole chip that meets it.
- *
- * Three chips is 750 us, against an rx_idle_us of 6000 and a turnaround of
- * 1000, so it cannot reach past the end of a turn and make a silent channel
- * look busy.
- *
- * DELETE IT AT STEP 6. FSK has no spaces — the pad carries tone A or tone B
- * and never nothing — so the bridge stops being exercised the moment the
- * framer changes, and a bridge nothing exercises is machinery this branch
- * exists to remove. It is here to keep the v1 link alive as the yardstick
- * step 6's BER is measured against, and for no other reason.
+ * WHAT REPLACED IT IS NOTHING. Not a shorter hold, not a hysteresis — the
+ * detector's own verdict, which is what §6 says presence is.
  */
-#define LINK_OOK_BRIDGE_US     ((uint32_t)(MANCHESTER_MAX_RUN_CHIPS + 1) * (uint32_t)HANDOFF_CHIP_US)
 
 /*
  * Presence, taken once.
  *
- * A named wrapper because two things are easy to get wrong. hal_rx_busy()
- * CLEARS its latch (hal.h), so two callers in one poll leave the second one
- * reading a quiet channel — each poll reads it exactly once, early, and
- * passes the answer around. And the raw answer is about one instant, which
- * the bridge above turns into an answer about a transmission.
+ * Still a named wrapper, for the half of the old reason that survives:
+ * hal_rx_busy() CLEARS its latch (hal.h), so two callers in one poll leave
+ * the second one reading a quiet channel. Each poll reads it exactly once,
+ * early, and passes the answer around.
  */
 static bool drain_rx_busy(link_sm_t *sm, uint64_t now_us)
 {
-    if (hal_rx_busy(sm->hal))
-        sm->busy_until_us = now_us + LINK_OOK_BRIDGE_US;
-    return now_us < sm->busy_until_us;
+    (void)now_us;
+    return hal_rx_busy(sm->hal);
 }
 
 /*
  * Forget that the channel was busy. For the paths that have just stopped
  * driving the pad, or are about to open their ears after being deliberately
- * deaf: what they heard last was themselves, and the bridge must not carry it
- * across. drain_discard() is the usual way in.
+ * deaf: what they heard last was themselves. drain_discard() is the usual
+ * way in.
  */
 static void forget_rx_busy(link_sm_t *sm)
 {
     (void)hal_rx_busy(sm->hal);
-    sm->busy_until_us = 0;
 }
 
 /*

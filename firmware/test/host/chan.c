@@ -106,7 +106,14 @@ size_t chan_render(const chan_cfg_t *c, const uint8_t *chips, size_t nchips,
     const size_t n = chan_samples_for(c, nchips);
     const size_t lead = lead_for(c);
     const double fs = (double)HANDOFF_ADC_FS_HZ;
-    const double fc = (double)HANDOFF_CARRIER_HZ * (1.0 + c->carrier_ppm * 1e-6);
+    /*
+     * Link v2: two tones, one per chip value, and the pad is driven for EVERY
+     * chip inside the burst. There is no space to render — that is what
+     * "constant envelope" means, and it is why the v1 amplitude-threshold
+     * machinery has nothing left to do (design §4).
+     */
+    const double fa = (double)HANDOFF_TONE_A_HZ * (1.0 + c->carrier_ppm * 1e-6);
+    const double fb = (double)HANDOFF_TONE_B_HZ * (1.0 + c->carrier_ppm * 1e-6);
     const double spc = (double)CHAN_SAMPLES_PER_CHIP * (1.0 + c->clock_ppm * 1e-6);
     rng_t rng;
     size_t i;
@@ -151,9 +158,20 @@ size_t chan_render(const chan_cfg_t *c, const uint8_t *chips, size_t nchips,
          * discontinuity. It is used before it is advanced, so sample 0 has
          * phase 0 — the same convention tools/gen_vectors.py uses, and the
          * two are compared against each other in test_vectors.
+         *
+         * It also CARRIES ACROSS A TONE CHANGE rather than restarting, which
+         * is what the generator does. A chip is a whole number of periods of
+         * either tone (config.h asserts it), so at an exact chip boundary an
+         * integrated phase is back at zero — which is where gen_vectors.py's
+         * sin(2*pi*f*t) is too, and why the two still agree to the LSB with
+         * the tone switching every chip.
          */
-        if (ci < nchips && chips[ci]) v += a * sin(phase);
-        phase += 2.0 * PI * fc / fs;
+        if (ci < nchips) {
+            v += a * sin(phase);
+            phase += 2.0 * PI * (chips[ci] ? fb : fa) / fs;
+        } else {
+            phase += 2.0 * PI * fa / fs;
+        }
         if (phase > 2.0 * PI) phase -= 2.0 * PI;
         if (c->noise_rms > 0.0) v += c->noise_rms * rng_normal(&rng);
 
@@ -170,22 +188,42 @@ size_t chan_render(const chan_cfg_t *c, const uint8_t *chips, size_t nchips,
 
 /* ---- the receiver's front half ---------------------------------------- */
 
+/*
+ * Link v2: two bins, scored in the SAME window, and what leaves is their
+ * difference. The receiver on the board does this out of the five-bin bank
+ * (dsp/gz_bank.c); here it is two plain Goertzels, because the three guard
+ * bins are presence's business and presence is not in this path.
+ *
+ * gz_push returns an amplitude-like score and the bank works in mag^2. The
+ * difference is a scale on d, and every decision downstream is a comparison
+ * of two d's, so the scale cancels — what must match is the SIGN convention
+ * and the fact that both bins come from one window, and both do.
+ */
 void demod_init(demod_t *d)
 {
-    gz_init(&d->gz, HANDOFF_GZ_N, HANDOFF_GZ_BIN);
+    gz_init(&d->a, HANDOFF_GZ_N, HANDOFF_TONE_A_BIN);
+    gz_init(&d->b, HANDOFF_GZ_N, HANDOFF_TONE_B_BIN);
     sync_init(&d->sy, HANDOFF_WINDOWS_PER_CHIP, HANDOFF_CHIP_GUARD);
 }
 
+bool demod_push(demod_t *d, int16_t sample, frame_chip_t *chip)
+{
+    uint32_t ea = 0, eb = 0;
+    const bool wa = gz_push(&d->a, sample, &ea);
+    const bool wb = gz_push(&d->b, sample, &eb);
+
+    if (!wa || !wb) return false;   /* same N, so they close together */
+    return sync_push_d(&d->sy, (int32_t)eb - (int32_t)ea, chip);
+}
+
 size_t demod_run(demod_t *d, const int16_t *samples, size_t n,
-                 uint16_t *chips, size_t max)
+                 frame_chip_t *chips, size_t max)
 {
     size_t i, out = 0;
 
     for (i = 0; i < n; i++) {
-        uint32_t score;
-        uint16_t chip;
-        if (!gz_push(&d->gz, samples[i], &score)) continue;
-        if (!sync_push(&d->sy, score, &chip)) continue;
+        frame_chip_t chip;
+        if (!demod_push(d, samples[i], &chip)) continue;
         if (out < max) chips[out++] = chip;
     }
     return out;

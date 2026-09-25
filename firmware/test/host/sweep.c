@@ -52,8 +52,7 @@ static double frame_success(double snr_db, uint8_t guard, uint32_t frames)
         frame_hdr_t h;
         uint8_t payload[HANDOFF_FRAG_PAYLOAD];
         frame_rx_t rx;
-        gz_t gz;
-        sync_t sy;
+        demod_t d;
         size_t nchips, ns, s;
 
         chan_default(&cfg);
@@ -66,15 +65,13 @@ static double frame_success(double snr_db, uint8_t guard, uint32_t frames)
         nchips = frame_encode(&h, payload, sizeof payload, g_chips, MAX_CHIPS);
         ns = chan_render(&cfg, g_chips, nchips, g_samples, MAX_SAMPLES);
 
-        gz_init(&gz, HANDOFF_GZ_N, HANDOFF_GZ_BIN);
-        sync_init(&sy, HANDOFF_WINDOWS_PER_CHIP, guard);
+        demod_init(&d);
+        sync_init(&d.sy, HANDOFF_WINDOWS_PER_CHIP, guard);
         frame_rx_init(&rx);
 
         for (s = 0; s < ns; s++) {
-            uint32_t score;
-            uint16_t chip;
-            if (!gz_push(&gz, g_samples[s], &score)) continue;
-            if (!sync_push(&sy, score, &chip)) continue;
+            frame_chip_t chip;
+            if (!demod_push(&d, g_samples[s], &chip)) continue;
             if (frame_rx_push(&rx, chip) == FRAME_RX_GOOD &&
                 memcmp(frame_rx_payload(&rx), payload, sizeof payload) == 0) {
                 good++;
