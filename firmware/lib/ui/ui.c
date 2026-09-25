@@ -15,6 +15,7 @@
 #define AMBER  { 255, 120, 0   }
 #define RED    { 255, 0,   0   }
 #define PURPLE { 160, 0,   255 }
+#define MAGENTA { 255, 0,  255 }
 
 #define PAT(name, period, ...)                                                 \
     static const ui_led_step_t name##_steps[] = { __VA_ARGS__ };               \
@@ -30,7 +31,7 @@ PAT(k_bg_link,       0,    { WHITE, 0 });                    /* solid, held */
 PAT(k_bg_pairing,    2000, { BLUE, 80 }, { OFF, 80 }, { BLUE, 80 });
 PAT(k_bg_critical,   5000, { RED, 100 }, { OFF, 100 }, { RED, 100 }, { OFF, 100 }, { RED, 100 });
 PAT(k_bg_low,        10000, { RED, 100 });
-PAT(k_bg_held,       5000, { AMBER, 100 });
+PAT(k_bg_held,       5000, { MAGENTA, 100 });
 
 /* ---- foregrounds: period 0, play once ------------------------------- */
 

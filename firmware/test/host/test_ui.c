@@ -47,6 +47,7 @@ static bool rgb_is(ui_rgb_t c, uint8_t r, uint8_t g, uint8_t b)
 #define IS_AMBER(c)  rgb_is(c, 255, 120, 0)
 #define IS_RED(c)    rgb_is(c, 255, 0, 0)
 #define IS_PURPLE(c) rgb_is(c, 160, 0, 255)
+#define IS_MAGENTA(c) rgb_is(c, 255, 0, 255)
 
 /* How many milliseconds in [from, to) the motor is on, and how many rising
  * edges it has. */
@@ -236,7 +237,7 @@ void test_ui(void)
         HF_EQ_INT(on, 200);
     }
 
-    hf_begin("ui: a card held for the phone shows an amber blip every 5 s after the green");
+    hf_begin("ui: a card held for the phone shows a magenta blip every 5 s after the green");
     {
         ui_init(&u, 0);
         ui_event(&u, UI_EV_LINK_COMPLETE, 0);
@@ -245,7 +246,7 @@ void test_ui(void)
         HF_CHECK(IS_GREEN(e[0].out.led));
         HF_EQ_INT(led_flashes(&u, 2000, 22000), 4);
         n = trace(&u, 5000, 5200, e, 64);
-        HF_CHECK(IS_AMBER(e[0].out.led));
+        HF_CHECK(IS_MAGENTA(e[0].out.led));
         HF_EQ_INT(e[1].at, 5100);
         /* the phone takes it, 30 s on: one green blip and dark */
         ui_event(&u, UI_EV_LINK_FORWARDED, 30000);
@@ -334,7 +335,7 @@ void test_ui(void)
         ui_out_t o;
         ui_init(&u, 0);
         ui_event(&u, UI_EV_LINK_HELD, 0);
-        ui_step(&u, 0, &o);       HF_CHECK(IS_AMBER(o.led));
+        ui_step(&u, 0, &o);       HF_CHECK(IS_MAGENTA(o.led));
         ui_event(&u, UI_EV_BATTERY_LOW, 0);
         ui_step(&u, 0, &o);       HF_CHECK(IS_RED(o.led));
         ui_step(&u, 5000, &o);    HF_CHECK(IS_OFF(o.led));      /* not held's blip */

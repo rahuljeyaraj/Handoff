@@ -39,7 +39,7 @@
  *   handshake, sending / receiving   white solid                  none (link)
  *   complete, card received          green solid 2 s              double tap (h)
  *   card forwarded to the phone      + one green blip             -
- *   card held (no phone yet)         amber blip / 5 s             -
+ *   card held (no phone yet)         magenta blip / 5 s           -
  *   handshake aborted                amber triple                 long (h)
  *   nothing to give at a handshake   amber double-flash           -
  *   battery low                      red blip / 10 s              buzz, once
