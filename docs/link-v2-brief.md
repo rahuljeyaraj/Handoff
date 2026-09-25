@@ -339,6 +339,88 @@ figure printed. `hal_pico.c` already keeps `s_busy_us`; use it.
 a case where one guard bin has an interferer in it and the median must ignore
 it.
 
+### What step 3 actually measured, 25 Sep 2026
+
+**PASSED.** The bank runs at 500 ksps with nothing dropped, and the budget is
+a within-image number rather than a comparison of two builds.
+
+`dsp/gz_bank.c` is the five bins. It runs **beside** the v1 chain on core 1
+and starts switched off, which is what makes it costable: `linktest n`
+switches it off, measures, switches it on, measures again, in one image on one
+board inside ten seconds.
+
+| 93D1, idle, one image | load | cycles/sample | overruns | sps |
+|---|---|---|---|---|
+| bank off | 31 % | 91.9 | 0 | 499876 |
+| bank on | 47 % | **137.9** | 0 | 499863 |
+
+**The bank costs 46.0 cycles a sample — 16 points of core 1.** 2.75 filter
+windows a sample at 16.6 cycles each, which is the §4 budget arriving where it
+was predicted to. Reproduced four times: 45.7 idle, 46.3 with the self loop
+decoding, 45.8 on 379E, 46.0 on the image that shipped.
+
+**The first cut cost 155 cycles a sample and 84 % of core 1.** Same
+arithmetic, to the bit — the difference is entirely shape. A per-sample
+`gzb_push()` reloads five filters from flash and makes five calls for every
+sample; `gzb_push_run()` takes a run up to the window boundary and keeps each
+filter in registers across it. Nothing was tuned and nothing was dropped: the
+decimation is still 4, the guards are still three.
+
+| | cycles/sample | core 1 |
+|---|---|---|
+| a call a bin a sample | 242.6 total, 155 for the bank | 84 % |
+| a run to the window boundary | 137.9 total, **46** for the bank | **47 %** |
+
+**The five bins in ONE window, which is the whole point.** `b` walks the bins
+one at a time and cannot answer a question about a ratio; `n 2` reads all five
+in the same window, same gain, same amplifier:
+
+| generator | bin 9 A | bin 10 B | g 7 | g 8 | g 11 | median | signal |
+|---|---|---|---|---|---|---|---|
+| quiet, both boards silent | 17 | 18 | 29 | 24 | 19 | 23 | 18 |
+| tone A driven, self loop | **814** | 2 | **391** | 2 | 23 | **23** | 814 |
+
+The quiet row is the noise reference behaving: five bins inside their own
+spread, and the signal *below* the median. Nothing to climb.
+
+The driven row is step 2's self-loop rail, now read in one pass — bin 7 at 391
+is the aliased second harmonic of a receiver saturated on its own
+transmitter, not a generator fault (duty at the pad is 50.0008 %). **And it is
+the median's case, live: median(2, 23, 391) = 23. The mean would have been
+138.** One wrecked guard cannot deafen the receiver. That is CFAR earning its
+place on hardware rather than in a comment.
+
+**Regression, both boards, with the bank ON on the receiver:**
+
+| | |
+|---|---|
+| v1 link, bank on | good 166, crc 0, lost 0, **FER 0.0000**, margin 490, **overruns 0**, load 44 % |
+| v1 link, bank off | good 94 in 17 s, FER 0.0000, margin 488, overruns 0 |
+| `apps/handoff` | **12 handshakes each in 30 s**, 0 partial, 0 stalls, **0 overruns**, load 38 % |
+| suite | **25483 checks**, 0 failures (was 25315) |
+
+The link decoding *with the bank running* is the real "no dropped windows"
+test, and it is clean. Two one-off events are carried from the start of the
+session and did not recur across 100 s of handshakes: one abort on 93D1 at its
+first rendezvous, and one bad frame on 379E.
+
+**What this does not say.** 47 % is the bank *plus* the v1 chain it is going
+to replace. v1's Goertzel and `carrier.c` come out at steps 5 and 6, so the
+steady-state v2 figure will be lower — but that is a projection, not a
+reading, and it stays a projection until those steps take the code out.
+`__not_in_flash_func` was **not** used: it would change what does, not what
+observes, and the bank fits without it.
+
+New instruments, all in `linktest`:
+
+| | |
+|---|---|
+| `n` | the budget: bank off, then on, in one image, with cycles a sample |
+| `n 0` / `n 1` | bank off / on and leave it there |
+| `n 2` | one capture — five bins in the same windows, the guard median, the ratio |
+| `hal_pico_core1_busy()` | busy and wall clock read together, so a caller can measure an interval instead of everything since boot |
+| `hal_pico_bank_capture()` | core 1 fills N windows, then core 0 reads — nothing torn, no 64-bit race |
+
 ---
 
 ## 5. Step 4 — the gate. Do not build past this on faith.

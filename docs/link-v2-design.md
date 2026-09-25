@@ -331,7 +331,7 @@ Each step is a bench measurement, not a feature. Stop at any step that fails.
 |---|---|---|
 | 1 | Move sys_clk to 144 MHz | ADC rate and USB unchanged; link still works as-is — **PASSED 3b4e902** |
 | 2 | Two-tone PIO generator | see below — no external hardware needed — **PASSED baa2782** |
-| 3 | 5-bin Goertzel bank on core 1 | no dropped windows at 500 ksps; budget printed |
+| 3 | 5-bin Goertzel bank on core 1 | no dropped windows at 500 ksps; budget printed — **PASSED**, 46 cycles a sample, 16 points of core 1 |
 | 4 | Passive: one board TX, one RX, on a wire | `E_A`/`E_B` separate cleanly; guards do not rise while transmitting |
 | 5 | Presence by guard median, tethered | busy tracks reality with the amplifier gain swept |
 | 6 | Frame decode with no slicer | BER at least as good as v1 on the same bench |
@@ -388,6 +388,20 @@ that distorted. Reading the duty on the pad can, and does.
 **A guard-bin reading is only meaningful at a linear level**, so step 4 is
 where the noise reference is judged. That is where it always belonged — this
 only removes the false comfort of thinking step 2 could pre-empt it.
+
+### What step 3 measured about §6, 25 Sep 2026
+
+The bank is built and costed (brief §4). Two things it settled early:
+
+**The median is not a nicety.** Driving tone A into the self loop, the three
+guards read 2, 23 and **391** — bin 7 is the aliased second harmonic of a
+receiver railed on its own transmitter. The median is 23. A mean would have
+been 138, and a mean is what would have deafened the receiver. §6's first note
+is now a measurement.
+
+**A quiet room reads as one number five times over.** Both boards silent: 17,
+18, 29, 24, 19 LSB across bins 9, 10, 7, 8, 11 — the signal *below* the guard
+median, which is what "there is nothing to climb" looks like as a reading.
 
 ---
 
