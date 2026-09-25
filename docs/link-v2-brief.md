@@ -442,6 +442,109 @@ extra steps.
 **Board ids:** 93D1 = `4904EF1FFA2393D1`, 379E = `36B9A3C84974379E`. Identify
 by label, never by COM port — they move.
 
+### What step 4 actually measured, 25 Sep 2026
+
+**PASSED**, all four measures, and **not on a wire** — the bench had no wire to
+give, so the two boards were coupled plate to plate through air. That is closer
+to the path the product uses than a wire is, and it made one thing much harder
+and one thing much easier.
+
+#### The two things the bench taught before any of it was readable
+
+**At contact the receiver saturates, and a railed capture cannot answer any of
+the four questions.** Plate to plate the mean code walks 2309 → 3624, the
+excursion leaves the converter, and guard bin 7 reads 369 against tone A's 729.
+That is design §10's "a guard reading is only meaningful at a linear level",
+arriving on two boards instead of through the self loop. The comb settles what
+makes it, and the reasoning is in design §10 correction 2: every raised bin is
+an even harmonic, the duty at the pad is 50.0000 %, so the receiver made them.
+
+**A hand near a band is worth more than the transmitter.** Moving the boards by
+hand put the raw RMS at 1100–1240 LSB with the tone bins only at ~300 — a
+broadband pedestal that swamped every reading and made the guards read as high
+as the signal. Readings must be hands-off and settled. Three runs were spent
+before this was understood, and one of them was spent measuring an unchanged
+bench because nobody was at the table.
+
+**So the level was swept by closing the gap in steps**, hands withdrawn between
+steps, alternating silence and tones so every hold gave a matched pair. That is
+the shape any future level sweep on this bench wants: there is no gain knob and
+no attenuator, so geometry is the only level control, and a hand in the loop is
+a second transmitter.
+
+#### The gate
+
+Ten matched quiet/tone rounds, **every capture linear** (mean code 2305–2317,
+never walking), signal swept 64 → 716 LSB:
+
+| signal | quiet median | tone A median | tone B median | alt median |
+|---|---|---|---|---|
+| 64 | 46 | 43 | 45 | 45 |
+| 115 | 67 | 84 | 96 | 91 |
+| 231 | 83 | 81 | 80 | 77 |
+| 297 | 77 | 77 | 78 | 87 |
+| 410 | 80 | 78 | 79 | 85 |
+| 479 | 76 | 76 | 77 | 78 |
+| 716 | 79 | 76 | **74** | 71 |
+
+**Guards while transmitting: they do not rise.** An eleven-fold sweep of the
+signal, and the guard median stays on the ambient — it even drifts down as the
+hands recede. This is the kill switch, and it is the row the whole branch was
+gated on.
+
+**`E_A` / `E_B` separation:** each tone raises its own bin and nothing else.
+At the loudest point, tone B reads 716 on bin 10 while bin 9 reads 62 against
+67 silent; tone A reads 549 on bin 9 while bin 10 reads 57 against 60 silent.
+The off-tone bin is **indistinguishable from silence** — orthogonality in
+practice, not just in the transform.
+
+**The 180/200 imbalance: tone A is 9.1 % stronger**, ±0.5 % across a 2.3×
+level range (1.10, 1.10, 1.09, 1.09 over four rounds, pedestal subtracted in
+mag²). Small and stable, which is what §8's preamble normalisation needed. The
+sign is opposite to what design §8 predicted — see design §10 correction 1.
+
+This number is only readable because of `y 3`. Two continuous captures four
+seconds apart, on a bench whose coupling was drifting, disagreed by 24 % about
+the same imbalance; the alternating pattern puts both bins in the **same**
+windows and holds 9.1 % across the whole sweep.
+
+**Guards with nothing transmitting:** 116 / 88 / 52 LSB on bins 7 / 8 / 11.
+They do *not* agree within a spread — they sit on a stable 2.3:1 slope falling
+with frequency, so `median` always selects bin 8. Design §10 correction 3.
+
+**CFAR margin** at the strongest linear point: 94 in power for tone B, 52 for
+tone A, against the `k ≈ 10` §6 derives for ~60 reference cells. Seven to ten
+dB, on a plate path. Step 8 is where a skin path gets to argue with that.
+
+#### New instruments, both reading rather than doing
+
+| | |
+|---|---|
+| `y 3` | tone A and tone B on alternate chips, unbroken, from the same 32-byte ring. The only way to ask an imbalance question — one capture, both bins, same windows, same gain, same coupling. |
+| the operating point under `n 2` | raw RMS, mean code, the sinusoid excursion against the converter's own 0..4095, and a verdict. A guard reading means nothing at a railed level and nothing else on the console said which you had. The mean code walking is the tell that assumes no crest factor at all. |
+
+`y 0` / `y 1` now take the pad explicitly and print whether they got it. `y 2`
+hands it back when it finishes, so a `y 0` after an alignment check drove a
+high-Z pad — and a far board then reads a quiet room, which is a reading nothing
+in the transcript could tell apart from a dead coupling path.
+
+#### Regression at this coupling
+
+| | |
+|---|---|
+| v1 link, bank ON | good 104, crc 0, lost 0, **FER 0.0000**, BER 0, margin 1412, overruns 0 |
+| v1 link, bank off | good 49, FER 0.0000, margin 1415 |
+| `apps/handoff` | **12 complete handshakes each in 33 s**, 0 partial, 0 stalls, 0 overruns |
+| suite | **25483 checks**, 0 failures |
+
+Margin 1412 against the wire bench's 490 — the plate path at this gap is much
+louder than the wire was. **Core-1 load reads 48–49 % in `handoff` against the
+38 % baseline and 55 % in `linktest` against 44 %.** Overruns are 0 and more
+frames are being decoded here, but it is not explained and it is not attributed
+to anything. Watch it at step 5.
+
+The one carried abort on 93D1's first rendezvous is still there and still one.
+
 ---
 
 ## 6. Step 5 — presence, and the death of `carrier.c`

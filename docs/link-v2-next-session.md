@@ -1,6 +1,6 @@
 # Link v2 — where to pick this up
 
-Steps 1, 2 and 3 have passed. Start at step 4, the gate.
+Steps 1, 2, 3 and **4, the gate** have passed. Start at step 5.
 
 Paste everything from the line below into a fresh session.
 
@@ -8,8 +8,8 @@ Paste everything from the line below into a fresh session.
 
 Continue the Handoff link v2 redesign. Repo `C:\work\Handoff`, branch
 `redesign/link-v2`, working tree clean. Step 1 is `3b4e902`, step 2 is
-`baa2782`, step 3 is `4394180`, and the commits after each are documentation
-only.
+`baa2782`, step 3 is `4394180`, step 4 is `ca2e0ea`, and the commits after each
+are documentation only.
 
 Read `docs/link-v2-design.md` end to end first, then `docs/link-v2-brief.md`.
 The design is the authority; the brief is the build order. Both carry a "what
@@ -36,95 +36,84 @@ down what requirement it should come from instead. Design §1.
 | Guards | **bins 7, 8, 11** = 140/160/220 kHz. Clear of every odd harmonic. Not open. |
 | Two-tone transmitter | **built, measured at the pad, exact.** Not open. |
 | The five-bin bank | **built, costed, running.** 46 cycles a sample. Not open. |
-| Guard decimation | **every 4th window** — coprime with the 5 windows a chip, derived in `config.h`. Not open. |
+| Guard decimation | **every 4th window**, derived in `config.h`. Not open. |
+| **The gate** | **passed. The guards do not rise while transmitting.** Not open. |
 | Scope | radio only for behaviour; **instruments are unrestricted** |
 | v1's carrier floor | not being fixed. `carrier.c` gets deleted, not tuned. |
 
 ### 160 kHz is a GUARD, not tone A. Do not "correct" this.
 
-160/200 kHz was the **first** proposal and the design rejected it
-(`link-v2-design.md:95`): the pair must be **adjacent** bins, because coupling
-rises with frequency and one bin apart is the smallest imbalance the transform
-allows (~1 dB). 160/200 would also have forced a 20 % clock cut instead of 4 %.
+The pair must be **adjacent** bins (`link-v2-design.md:95`): coupling rises with
+frequency and one bin apart is the smallest imbalance the transform allows.
+160/200 would also have cost a 20 % clock cut instead of 4 %.
 
 | | 140 | **160** | **180** | **200** | 220 |
 |---|---|---|---|---|---|
 | bin | 7 | 8 | **9** | **10** | 11 |
 | role | guard | **guard** | **tone A** | **tone B** | guard |
 
-160 kHz is listened to and never transmitted.
+## STEP 4 PASSED (`ca2e0ea`) — and it settled four things beyond its own rows
 
-## STEPS 1 AND 2 PASSED (3b4e902, baa2782)
+Two boards, passive, **coupled plate to plate through air with no wire**. Ten
+matched quiet/tone rounds, every capture linear, signal swept 64 → 716 LSB.
+Brief §5 has the tables.
 
-The board boots at 144 MHz and `clk_adc` did not move — 48000 kHz, 500 ksps
-untouched. `f` prints the whole tree measured against the crystal.
-
-The transmitter is exact at the pad: tone A 180005 Hz at duty **50.0008 %**,
-tone B 200000 Hz at **50.0000 %**, chip alignment exact by edge count on both
-boards. `y` / `y 0` / `y 1` / `y 2` / `y 9` are its instruments.
-
-**The self loop saturates the receiver** — driving tone A reads guard bin 7 at
-391 against tone A's 814, with the raw operating point railed at mean code
-3564 of 4095. The v1 generator through the same loop rails harder. Do not read
-a self-loop guard rise as the kill switch; check `pio_carrier_duty_ppm()`
-first. A guard reading is only meaningful at a **linear** level — which is
-step 4.
-
-## STEP 3 PASSED (4394180)
-
-`dsp/gz_bank.c`: five bins, mag² only, no square root on the hot path, guards
-every 4th window. It runs **beside** the v1 chain on core 1 and **starts off**,
-which is what makes it costable in one image.
-
-| 93D1, idle, ONE image | load | cycles/sample | overruns |
-|---|---|---|---|
-| bank off | 31 % | 91.9 | 0 |
-| bank on | 47 % | **137.9** | 0 |
-
-**The bank is 46.0 cycles a sample, 16 points of core 1.** Reproduced four
-times, and on 379E. The first cut was 155 cycles and 84 % on identical
-arithmetic — `gzb_push_run()` takes a run up to the window boundary and keeps
-the filters in registers; a call a bin a sample does not.
-
-Regression with the bank ON on the receiver: v1 link **FER 0.0000**, margin
-490, **overruns 0**. `apps/handoff` 12 handshakes each in 30 s, 0 stalls,
-0 overruns. Suite **25483 checks**.
-
-**47 % is the bank plus the v1 chain it replaces.** The lower steady-state
-figure is a projection until steps 5 and 6 take v1's Goertzel and `carrier.c`
-out. Do not quote it as a reading. `__not_in_flash_func` was deliberately not
-used — report it if you want it, do not slip it in.
-
-## START AT STEP 4 — THE GATE
-
-Brief §5. **Two boards, passive, on a wire, at a linear level.** Do not build
-past it on faith.
-
-| Measure | Passes when |
+| Measure | Result |
 |---|---|
-| `E_A` / `E_B` separation | the bins are orthogonal in practice, not just in theory |
-| the 180/200 imbalance | ~10 % expected; wild or unstable kills §8's preamble normalisation |
-| guards with nothing transmitting | noise, and the three agree inside their own spread |
-| guards **while** transmitting | **must not rise** — this is the kill switch |
+| guards while transmitting | **DO NOT RISE.** Quiet median 79 → tone A 76 → tone B 74 → alt 71, at the loudest of an 11× sweep |
+| `E_A` / `E_B` separation | each tone raises its own bin only; the off-tone bin is indistinguishable from silence |
+| the imbalance | **tone A 9.1 % STRONGER**, ±0.5 % over a 2.3× level range |
+| guards, silent | 116 / 88 / 52 on bins 7 / 8 / 11 — a stable 2.3:1 slope, so the median always lands on bin 8 |
 
-`n 2` is the instrument this step was waiting for: it reads all five bins in
-the **same** windows, with the guard median and the ratio. `b` walks them one
-at a time and cannot answer a ratio question at all.
+CFAR margin at the loudest linear point: **94 in power for tone B, 52 for tone
+A**, against the `k ≈ 10` §6 derives. Seven to ten dB — on a plate path, not a
+skin path.
 
-**Before calling a guard rise fatal, read `pio_carrier_duty_ppm()`.** Bins 7
-and 11 are the even-harmonic monitor; a duty error and a poisoned reference
-look identical until you check. If the duty is exact and the guards still
-rise, **stop** — that is v1's floor again and the brief says say so.
+### The four things to carry forward
 
-Two readings already in hand for comparison:
+1. **A railed capture answers nothing, and the guards will not tell you it is
+   railed.** Read the operating point printed under every `n 2`: the mean code
+   walking (2309 → 3624 at contact) is the saturation tell that assumes no crest
+   factor. Tone B's harmonic comb closes on bins 5, 10 and DC — 200 kHz is
+   exactly `fs / 2.5` — so **driven into saturation on tone B the guards read
+   flat**. Half the symbols are invisible to the even-harmonic monitor.
+2. **Bins 7 and 11 monitor the receiver's compression, not the generator.** At
+   contact they carry tone A's 2nd and 4th harmonics, made after the coupling —
+   the duty at the pad is 50.0000 %.
+3. **A hand near a band beats the transmitter.** Moving the boards by hand gave
+   1100–1240 LSB raw RMS with the tone bins at ~300. Hands off and settled, or
+   the reading is the operator.
+4. **Geometry is the only level control on this bench.** No gain knob, no
+   attenuator. Sweep by closing the gap in steps with hands withdrawn between
+   them, alternating silence and tones so every hold gives a matched pair.
 
-| generator | bin 9 A | bin 10 B | g 7 | g 8 | g 11 | median |
-|---|---|---|---|---|---|---|
-| quiet, both boards silent | 17 | 18 | 29 | 24 | 19 | 23 |
-| tone A driven, **self loop, railed** | 814 | 2 | 391 | 2 | 23 | 23 |
+## START AT STEP 5 — PRESENCE, AND THE DEATH OF `carrier.c`
 
-The second row is the railed case, not a verdict. Step 4 repeats it at a level
-where the amplifier is linear.
+Brief §6. This is the first step that **deletes** something.
+
+```
+signal = max(E_A, E_B)                    /* mag², no sqrt */
+noise  = median(E_140, E_160, E_220)      /* time-averaged */
+busy   = signal > k × noise
+```
+
+| | |
+|---|---|
+| `k` | **computed, not chosen** — from a stated false-busy rate. Put the derivation in the source next to it, with its working. §6 has the cells-to-`k` table. |
+| the reference | in practice this is **bin 8**, because the noise sits on a fixed 2.3:1 slope. Write that down; the median is outlier protection, not an average. |
+| delete | `firmware/lib/dsp/carrier.c` and `carrier.h`. Not deprecate. Rewire `link_sm.c`'s callers, brief §7's table. |
+| `test_beacon.c` | its floor tests go with the floor; its trigger tests do not |
+
+**Passes when** `busy` tracks reality with the level swept — and on this bench
+the level is swept by geometry, so plan for the hands-off stepped sweep above.
+The 379E state from `carrier-floor-still-climbing-brief.md` — peak 133–150,
+floor 61–83, deaf — must be unreproducible, because there is nothing to climb.
+
+**Watch the core-1 load while you are in there.** It reads 48–49 % in `handoff`
+against a 38 % baseline and 55 % in `linktest` against 44 %. Overruns are 0 and
+more frames are being decoded on this louder path, but it is unexplained and
+unattributed. Step 5 takes v1's Goertzel and `carrier.c` out, so it is the step
+that should make the number fall.
 
 ## INSTRUMENTS THAT NOW EXIST
 
@@ -132,13 +121,15 @@ where the amplifier is linear.
 |---|---|
 | `f` | the clock tree, measured against the crystal |
 | `y` | 2a: both tones measured, with the duty and the chip-word arithmetic |
-| `y 0` / `y 1` | drive tone A / tone B unbroken; `y 9` hands the pad back to v1 |
-| `y 2` | chip alignment by edge count, four patterns, exact arithmetic |
+| `y 0` / `y 1` | drive tone A / tone B unbroken, pad taken explicitly and reported; `y 9` hands the pad back to v1 |
+| **`y 3`** | **tone A and tone B on ALTERNATE chips, unbroken — the only way to ask an imbalance question, because one capture then holds both bins in the same windows** |
+| `y 2` | chip alignment by edge count, four patterns, exact arithmetic. **Leaves the pad released** — `y 0` after it re-takes it. |
 | `k [bin]` | move the receive Goertzel to any bin, transmitter untouched |
-| `b` / `b 1` | walk the five design bins one at a time, or every bin below Nyquist |
-| **`n`** | **the core-1 budget: bank off, then on, in ONE image, cycles a sample** |
-| **`n 0` / `n 1`** | **bank off / on and leave it** |
-| **`n 2`** | **one capture: five bins in the SAME windows, guard median, ratio** |
+| `b` / `b 1` | walk the five design bins one at a time, or every bin below Nyquist — `b 1` is what turns "a guard rose" into a harmonic comb |
+| `n` | the core-1 budget: bank off, then on, in ONE image, cycles a sample |
+| `n 0` / `n 1` | bank off / on and leave it |
+| `n 2` | one capture: five bins in the SAME windows, guard median, ratio, **and the operating point with a linear/RAILED verdict** |
+| `m` | chip energy and the raw operating point on one bin |
 | `pio_carrier_duty_ppm()` | the pad's duty, from a third state machine |
 | `hal_pico_core1_busy()` | busy and wall clock together, for an interval rather than since boot |
 | `hal_pico_bank_capture()` | core 1 fills N windows, then core 0 reads — nothing torn |
@@ -153,7 +144,9 @@ Identify by serial, never by COM port — they move. This session both were on
 COM7 and COM8 respectively.
 
 **Both boards boot linktest as the RECEIVER role** — the strap (GP14) is open
-on the PCB. For a TX board use the `linktest_tx` target.
+on the PCB. So **two plain `linktest` images are enough for a two-board bin
+bench**: `y 0` on one board transmits, `n 2` on the other reads. `linktest_tx`
+is only needed for a v1 link BER run.
 
 ```
 python scripts/build.py --config Release --tx-pin 11 --build-dir build-pcb --target linktest
@@ -161,39 +154,50 @@ picotool load -x build-pcb/linktest.uf2 -f --ser 4904EF1FFA2393D1
 ```
 
 `-x` goes **before** the filename, `--ser` **after**. picotool lives at
-`~/.pico-sdk/picotool/2.3.1/picotool/picotool.exe` and is not on PATH.
+`~/.pico-sdk/picotool/2.3.1/picotool/picotool.exe`, is not on PATH, and the
+home directory has a space in it — call it from PowerShell with `& $pt`, not
+from the Bash wrapper.
 
 **`scripts/link2.py --a 93D1 --b 379E --run N --at SEC:A:cmd`** drives both
 consoles on one clock and resolves serial tails to ports. A command with an
-argument must be **quoted**: `--at "2:A:n 1"`, or argparse eats the number.
-It opens the port once, up front, so it **misses a boot banner**.
+argument must be **quoted**: `--at "2:A:n 1"`. It opens the port once, up front,
+so it **misses a boot banner**. For a long sweep, generate the `--at` list in
+PowerShell rather than typing it.
+
+**A tone left driving survives the end of a `link2.py` run.** One run started
+with the far board still shouting from the previous one and read a level twice
+what it should have. End a run with `y 9`, or begin the next one with it.
+
+**The coupling drifts on its own.** Untouched, the received level moved 826 →
+1590 LSB over a few minutes and the quiet floor tripled. Take a matched quiet
+capture in the **same run** as the tone capture it is compared against; a quiet
+reference from an earlier run is not a control.
 
 **Quiet the other board before any bin measurement.** A board left running
-`apps/handoff` shouts on bin 10 every few seconds — it landed in a capture
-this session and read 174 LSB on bin 10 against a 37 LSB median. Putting it on
-`linktest` (receiver role) makes it silent.
+`apps/handoff` shouts on bin 10 every few seconds. `linktest` in the receiver
+role is silent.
 
 **Bench order: `linktest` first, then `handoff`.** A DSP fault and a state
 machine fault look identical from the `handoff` console.
 
 Body-coupled runs must be **floating on cells**, USB out, TX gated at SW1.
-A tethered reading is wrong, not just unsafe (design §13).
+A tethered reading is wrong, not just unsafe (design §13) — and step 4 saw why:
+tethered, the shared PC ground is a return path strong enough that at cm scale
+the level barely tracks the gap.
 
-## REGRESSION BASELINE, measured at 4394180
-
-Reproduce these before and after anything in step 4.
+## REGRESSION BASELINE, measured at `ca2e0ea` on the plate path
 
 | | |
 |---|---|
-| v1 link, bank ON at the receiver | good 166, crc 0, lost 0, **FER 0.0000**, margin 490, overruns 0 |
-| v1 link, bank off | good 94 in 17 s, FER 0.0000, margin 488 |
-| `apps/handoff` | **12 complete handshakes each in 30 s**, 0 partial, 0 stalls, 0 overruns, load 38 % |
+| v1 link, bank ON at the receiver | good 104, crc 0, lost 0, **FER 0.0000**, BER 0, margin 1412, overruns 0 |
+| v1 link, bank off | good 49, FER 0.0000, margin 1415 |
+| `apps/handoff` | **12 complete handshakes each in 33 s**, 0 partial, 0 stalls, 0 overruns |
 | suite | **25483 checks**, 0 failures |
-| core-1 load | 31 % bank off, 47 % bank on, both idle |
+| core-1 load | 48–49 % in `handoff`, 55 % in `linktest` — **up on the 38 / 44 % baseline, unexplained** |
 
-Two one-off events carried through this session and did not recur across 100 s
-of handshakes: one abort on 93D1 at its first rendezvous, and one bad frame on
-379E. Watch whether they come back; they are not attributed to anything yet.
+Margin here is 1412 against the wire bench's 490, so these are not comparable
+to the step 3 figures except in shape. One abort on 93D1 at its first
+rendezvous is still carried and still one.
 
 ## HOUSE RULES
 
@@ -203,11 +207,14 @@ of handshakes: one abort on 93D1 at its first rendezvous, and one bad frame on
 - **Do not build past a step that has not passed.**
 - Instruments anywhere are free. **Change what observes, not what does.** If an
   instrument turns up a bug in working code, report it, do not fix it here.
+- **The bench needs hands sometimes, and the user is not always at the table.**
+  Ask before planning a run around a physical change, and say plainly what has
+  to move. Three runs were wasted this session measuring an unchanged bench.
 - The Bash wrapper mangles backslashes in heredocs and breaks on apostrophes —
-  it ate the `\n` out of a printf string this session and the build caught it.
-  Use the `Write`/`Edit` tools for source.
+  it ate the escapes out of a Python replacement string this session. Use the
+  `Write`/`Edit` tools for source.
 - Never name TP numbers — the silk has no TP labels. Name the signal or the
   part end.
 - `python scripts/test.py` is green at **25483 checks**. Keep it green.
-- v1 still works on `main`. If this branch dies at step 4, that is a
+- v1 still works on `main`. If this branch dies at a later step, that is a
   **successful outcome** — write up why and stop.

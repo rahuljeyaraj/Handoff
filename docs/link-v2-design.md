@@ -332,7 +332,7 @@ Each step is a bench measurement, not a feature. Stop at any step that fails.
 | 1 | Move sys_clk to 144 MHz | ADC rate and USB unchanged; link still works as-is — **PASSED 3b4e902** |
 | 2 | Two-tone PIO generator | see below — no external hardware needed — **PASSED baa2782** |
 | 3 | 5-bin Goertzel bank on core 1 | no dropped windows at 500 ksps; budget printed — **PASSED**, 46 cycles a sample, 16 points of core 1 |
-| 4 | Passive: one board TX, one RX, on a wire | `E_A`/`E_B` separate cleanly; guards do not rise while transmitting |
+| 4 | Passive: one board TX, one RX, plate to plate | `E_A`/`E_B` separate cleanly; guards do not rise while transmitting — **PASSED**, guard median flat across an 11× signal sweep |
 | 5 | Presence by guard median, tethered | busy tracks reality with the amplifier gain swept |
 | 6 | Frame decode with no slicer | BER at least as good as v1 on the same bench |
 | 7 | Nonce beacon and election | two boards, no double-send, no self-trigger |
@@ -402,6 +402,62 @@ is now a measurement.
 **A quiet room reads as one number five times over.** Both boards silent: 17,
 18, 29, 24, 19 LSB across bins 9, 10, 7, 8, 11 — the signal *below* the guard
 median, which is what "there is nothing to climb" looks like as a reading.
+
+### What step 4 measured, 25 Sep 2026 — the gate, and three corrections
+
+**PASSED**, two boards, passive, coupled plate to plate with **no wire**. Ten
+matched quiet/tone pairs, every capture linear, the signal swept 64 → 716 LSB
+by closing the gap. Brief §5 has the full tables; three things here change what
+this document says.
+
+**The kill switch does not fire.** The guard median tracks the ambient and not
+the transmitter, at every level: at the loudest, quiet 79 → tone A 76 → tone B
+74 → alternating 71. CFAR margin 94 in power for tone B, 52 for tone A, against
+a `k` of about 10.
+
+#### Correction 1 — §8's imbalance has the sign backwards
+
+§8 predicts tone A arrives **~10 % weaker**, because coupling rises with
+frequency. Measured on the alternating pattern, which reads both bins in the
+same windows: **tone A is 9.1 % stronger**, and it holds to ±0.5 % across a
+2.3× level range. The magnitude §4 argued for is right and the direction is
+wrong — the AFE's own response across two adjacent bins evidently outweighs the
+coupling slope. It changes nothing mechanically, because §8 takes the ratio from
+the preamble rather than from a constant, which is exactly why that was the
+rule. It does mean the words "tone A couples slightly worse" are not true of
+this hardware.
+
+#### Correction 2 — bins 7 and 11 monitor the RECEIVER, and only for tone A
+
+§4 calls bins 7 and 11 a built-in duty-cycle monitor. They are a monitor, and
+a good one, but not of the generator:
+
+- At contact the receiver saturates — mean code walks 2309 → 3624 and the
+  excursion leaves the converter. Bin 7 then reads 369 against tone A's 729,
+  bin 11 reads 31. Both are **even** harmonics (2nd folds 360 → 140, 4th folds
+  720 → 220) and the duty at the pad is 50.0000 %, so the square wave cannot
+  have sent them. Walking every bin puts the whole comb where the arithmetic
+  says, 3rd at bin 2 and 5th at bin 5, plus fill-in at bins 3 and 6 that no
+  harmonic of the tone can reach. The distortion is made **after** the coupling.
+- **And tone B cannot be watched this way at all.** 200 kHz is exactly
+  `ADC_FS_HZ / 2.5`, so its harmonic comb closes on bins 5, 10 and DC and never
+  touches a guard. Measured, not predicted: driven into saturation on tone B the
+  three guards read 20–28 LSB, flat.
+
+So half the symbols are invisible to the even-harmonic monitor, and a guard
+reading cannot by itself say the receiver was linear. That is what the
+operating-point print under every `n 2` is for — the mean code walking is a
+saturation signature that assumes no crest factor at all.
+
+#### Correction 3 — the three guards do not agree; they sit on a fixed slope
+
+§6 expects the three to read as one number. Silent and settled they read
+**116 / 88 / 52** LSB on bins 7 / 8 / 11 — a 2.3:1 fall with frequency, stable
+and repeatable, which agrees with this project's earlier finding that the pad
+noise is 1/f. It is a slope, not scatter, so `median` of three **always selects
+bin 8**, the guard between the tones, with 7 and 11 serving as the outlier
+protection CFAR wants them for. §6's reasoning survives; its arithmetic should
+say bin 8 is the reference rather than implying an average of three.
 
 ---
 
