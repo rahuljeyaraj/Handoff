@@ -211,22 +211,50 @@ bool     hal_pico_set_rx_bin(uint16_t bin);
 uint16_t hal_pico_rx_bin(void);
 
 /*
- * ---- link v2 step 3: the five-bin bank ---------------------------------
+ * ---- link v2: the five-bin bank ----------------------------------------
  *
- * Also an instrument, for now. The bank (dsp/gz_bank.h) is the v2 receiver's
- * front end, but nothing consumes it yet, so it runs BESIDE the v1 chain on
- * core 1 and starts switched off.
+ * STEP 5 PROMOTED THIS. The bank (dsp/gz_bank.h) is now the receiver's
+ * presence front end — dsp/presence.c decides busy off every one of its
+ * windows and hal.h's rx_busy publishes it — so it runs by DEFAULT, and
+ * dsp/carrier.c is gone.
  *
- * That is what makes the budget answerable. Step 1 found a 4-point swing in
- * core-1 load from adding one unrelated function and moving the image in
- * XIP — so two images cannot be compared, and the only measurement worth
- * anything is the bank switched on and off inside ONE image. That is exactly
- * what these do.
+ * The switch stays because the budget instrument is still worth having. Step
+ * 1 found a 4-point swing in core-1 load from adding one unrelated function
+ * and moving the image in XIP, so two images cannot be compared and the only
+ * measurement worth anything is the bank switched on and off inside ONE
+ * image. That is exactly what these do.
+ *
+ * SWITCHING IT OFF MAKES THE BOARD DEAF TO PRESENCE. There is no second
+ * detector any more. Off is for a budget reading, not for a link run.
  *
  * hal_pico_set_bank() blocks until core 1 has obeyed.
  */
 bool hal_pico_set_bank(bool on);
 bool hal_pico_bank_on(void);
+
+/* Windows that read busy since boot — a rate, where rx_busy is an event.
+ * Instrument only; nothing in the link reads it. */
+uint32_t hal_pico_busy_windows(void);
+
+/*
+ * The presence detector, read without disturbing it — hal.h's rx_busy CLEARS
+ * its latch, and an instrument must never take an event away from the link.
+ * Nothing here clears anything.
+ *
+ * `busy` is the last window's verdict, not the latch; `windows` and
+ * `busy_windows` are since boot, so two readings and a subtraction give the
+ * busy FRACTION over an interval, which is what a level sweep wants.
+ */
+typedef struct {
+    uint32_t windows;
+    uint32_t busy_windows;
+    uint32_t signal;      /* max(E_A, E_B) this window, as a score   */
+    uint32_t noise;       /* the CFAR reference: mean of the boxcar  */
+    bool     busy;
+    bool     ready;       /* the reference is full; false means "no answer" */
+} hal_pico_presence_t;
+
+void hal_pico_presence(hal_pico_presence_t *out);
 
 /*
  * One capture of the bank: core 1 accumulates `windows` windows and core 0

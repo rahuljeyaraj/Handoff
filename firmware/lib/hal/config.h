@@ -139,6 +139,81 @@
 #define HANDOFF_GUARD_DECIM       4
 #endif
 
+/*
+ * ---- link v2 step 5: presence, and where k comes from -------------------
+ *
+ * dsp/presence.h holds the reasoning; this is the arithmetic. Three inputs,
+ * one output, nothing typed that was not computed from them.
+ *
+ * THE STATED REQUIREMENT. One false busy per minute of continuous listening.
+ * That is a goal chosen here, which §1 allows and which every threshold below
+ * is then computed from; it is not a number read off a bench.
+ *
+ * Why a minute. A false busy costs the trigger one cycle — it sends TRIG_LISTEN
+ * to TRIG_WAIT, which gives up after HANDOFF_QUIET_WAIT_MAX_US and draws a
+ * fresh listen window. That is tens of milliseconds, inside a contact budget of
+ * a second holding about twenty such cycles. At one a minute, fewer than one
+ * handshake attempt in twenty loses a single cycle, which is not measurable
+ * against the budget. A tighter rate would cost sensitivity for nothing; a
+ * looser one starts to deflect handshakes.
+ *
+ * THE DECISION RATE. One verdict per Goertzel window, so HANDOFF_WINDOW_RATE_HZ
+ * of them. Per window and not per chip because presence must not depend on
+ * symbol sync: a band in IDLE has no lock to integrate a chip against, and the
+ * whole point of v2's trigger is that it works before anything is locked.
+ *
+ * Core 0 reads the verdict far more slowly than core 1 makes it, so hal_pico
+ * publishes it sticky-until-read — "has anyone been on the channel since you
+ * last asked". That leaves the rate below exactly as stated: a sticky flag
+ * fires once per false verdict, the same as the verdicts themselves. Reading
+ * an instantaneous flag at poll rate would instead sample one window in twenty
+ * and miss most real traffic.
+ *
+ * THE REFERENCE LENGTH. The guards are decimated, so the cells are guard
+ * windows, and the boxcar spans one PREAMBLE of chips:
+ *
+ *   - Upper bound. The reference must be refreshed at least as often as the
+ *     shortest transmission it must not miss, so a room whose noise moved is
+ *     re-measured before the next frame arrives. The preamble is that
+ *     transmission — it is the shortest run of chips a receiver has to catch,
+ *     and missing it loses the whole frame (frame.c cannot join a preamble in
+ *     progress). test_presence.c asserts this equals FRAME_PREAMBLE_CHIPS,
+ *     which config.h cannot see from here.
+ *
+ *   - Lower bound. More cells means a smaller k means a more sensitive
+ *     detector, so shorter is strictly worse. At 40 cells k is 16.8; at 5 it
+ *     is 77, which would be 6.6 dB of sensitivity thrown away.
+ *
+ *   - Phase. HANDOFF_GUARD_DECIM and HANDOFF_WINDOWS_PER_CHIP are coprime, so
+ *     the guard windows walk all five positions in a chip with period five.
+ *     The cell count is a multiple of five, so every chip phase enters the
+ *     reference the same number of times — eight each. Asserted below.
+ *
+ * THE FORMULA. For cell-averaging CFAR over N reference cells of exponentially
+ * distributed power, P_fa = (1 + k/N)^-N, so
+ *
+ *      k = N * (P_fa^(-1/N) - 1)
+ *        = 40 * (1200000^(1/40) - 1)
+ *        = 40 * (1.4189906 - 1)
+ *        = 16.7596
+ *
+ * expressed below as a rational because the decision is a cross-multiplication
+ * and never a division. The preprocessor cannot take a fortieth root, so
+ * test_presence.c recomputes the line above in double and fails if the
+ * constant has drifted from it — the same contract the derived rates at the
+ * top of this file get from their static asserts.
+ */
+#define HANDOFF_CFAR_FALSE_BUSY_S   60u
+#define HANDOFF_CFAR_PFA_INV        ((uint32_t)HANDOFF_CFAR_FALSE_BUSY_S \
+                                     * (uint32_t)HANDOFF_WINDOW_RATE_HZ)
+
+#define HANDOFF_CFAR_REF_CHIPS      32   /* = FRAME_PREAMBLE_CHIPS */
+#define HANDOFF_CFAR_REF_WINDOWS    (HANDOFF_CFAR_REF_CHIPS * HANDOFF_WINDOWS_PER_CHIP)
+#define HANDOFF_CFAR_CELLS          (HANDOFF_CFAR_REF_WINDOWS / HANDOFF_GUARD_DECIM)
+
+#define HANDOFF_CFAR_K_NUM          1676
+#define HANDOFF_CFAR_K_DEN          100
+
 #define HANDOFF_CHIP_RATE_HZ      (HANDOFF_WINDOW_RATE_HZ / HANDOFF_WINDOWS_PER_CHIP)
 #define HANDOFF_BIT_RATE_BPS      (HANDOFF_CHIP_RATE_HZ / 2)   /* Manchester   */
 #define HANDOFF_CHIP_US           (1000000 / HANDOFF_CHIP_RATE_HZ)
@@ -190,8 +265,15 @@
 #define HANDOFF_FSK_WORD_B  HANDOFF_FSK_WORD(HANDOFF_FSK_Y_B, HANDOFF_FSK_ISR_B)
 
 /*
- * How long carrier detection takes to raise its flag — about four chips, from
- * carrier.c's fast EMA. Derived, because it scales with the chip period.
+ * How long carrier detection takes to raise its flag.
+ *
+ * LINK V2, STEP 5: this no longer describes the detector. dsp/presence.h
+ * decides in ONE window with no hysteresis, so the real figure is a window
+ * plus core 0's poll interval, far under what is written here. It is left at
+ * its v1 value on purpose: the only things that read it are beacon.h's shout
+ * and listen constants, and those go out whole at step 7 (brief §8) when the
+ * flat-tone shout becomes a nonce beacon. Re-deriving it now would move the
+ * rendezvous timing inside a step that is not about rendezvous.
  */
 #define HANDOFF_DETECT_US         (4 * HANDOFF_CHIP_US)
 
@@ -362,6 +444,36 @@ HANDOFF_STATIC_ASSERT(HANDOFF_FSK_Y_A <= 0xFFFF && HANDOFF_FSK_Y_B <= 0xFFFF,
  * lets the bench state the chip period without a rounding note. */
 HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % HANDOFF_CHIP_RATE_HZ == 0,
     "a chip is not a whole number of system cycles");
+
+/*
+ * ---- link v2 step 5: the CFAR reference has to close, exactly ------------
+ *
+ * The value of k above is stated for exactly HANDOFF_CFAR_CELLS cells. Any
+ * change to the preamble, the decimation or the windows per chip moves the
+ * cell count, which moves k — and the preprocessor cannot recompute a
+ * fortieth root, so what it can check is that the cell count is still a whole,
+ * phase-balanced number. test_presence.c checks k itself against the formula.
+ */
+HANDOFF_STATIC_ASSERT(HANDOFF_CFAR_REF_WINDOWS % HANDOFF_GUARD_DECIM == 0,
+    "the CFAR reference is not a whole number of guard windows");
+
+HANDOFF_STATIC_ASSERT(HANDOFF_CFAR_CELLS % HANDOFF_WINDOWS_PER_CHIP == 0,
+    "the CFAR reference weights some chip phases more than others: the guard "
+    "windows walk WINDOWS_PER_CHIP positions, so the cell count must be a "
+    "multiple of it");
+
+/* Fewer cells than this and k stops being the number written above. */
+HANDOFF_STATIC_ASSERT(HANDOFF_CFAR_CELLS >= HANDOFF_WINDOWS_PER_CHIP,
+    "the CFAR reference is shorter than one pass through the chip phases");
+
+/* presence.c cross-multiplies signal by K_DEN * CELLS. mag^2 of a 12-bit
+ * converter at HANDOFF_GZ_N stays under 2^31, so this must leave room. */
+HANDOFF_STATIC_ASSERT((unsigned long long)HANDOFF_CFAR_K_DEN * HANDOFF_CFAR_CELLS
+                          < (1ull << 30),
+    "the CFAR cross-multiplication could overflow a 64-bit product");
+
+HANDOFF_STATIC_ASSERT(HANDOFF_CFAR_K_NUM > HANDOFF_CFAR_K_DEN,
+    "k below 1 would call an empty room busy");
 
 HANDOFF_STATIC_ASSERT(HANDOFF_FRAG_PAYLOAD >= 8 && HANDOFF_FRAG_PAYLOAD <= 255,
     "fragment payload out of range");

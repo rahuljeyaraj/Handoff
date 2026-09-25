@@ -33,7 +33,6 @@ void link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
     if (cfg) sm->cfg = *cfg; else link_cfg_default(&sm->cfg);
 
     trig_init(&sm->trig, hal);
-    carrier_init(&sm->carrier);
     frame_rx_init(&sm->framer);
     frag_rx_init(&sm->rx);
     carousel_init(&sm->car, own ? own->count : 1u, sm->cfg.carousel_weight);
@@ -44,6 +43,7 @@ void link_sm_init(link_sm_t *sm, const hal_iface_t *hal,
 /* ---- forward declarations, so the entry points can read top-down -------- */
 
 static void queue_frame(link_sm_t *sm);
+static void forget_rx_busy(link_sm_t *sm);
 static void enter_rx(link_sm_t *sm, uint64_t now_us, bool reset_framer);
 static void enter_turnaround(link_sm_t *sm, uint64_t now_us, uint32_t settle_us);
 
@@ -72,43 +72,28 @@ static void open_contact(link_sm_t *sm, uint64_t now_us)
 /*
  * Take up the role the trigger handed out and start the exchange.
  *
- * THE CARRIER DETECTOR. A band arriving here has spent its whole listen window
- * feeding either silence or a peer's full-power shout into the floor EMA, so
- * the floor is not necessarily anywhere near true ambient. Carried into the
- * exchange, a floor several times ambient makes real frames fail the presence
- * test, and handover — which runs on carrier_present() and last_carrier_us —
- * starts talking over the reply it asked for.
+ * THIS USED TO BE THE LONGEST COMMENT IN THE FILE, and link v2 step 5 deleted
+ * what it was about. It argued whether the carrier detector should be reset on
+ * each path, because v1's floor arrived here having spent a whole listen
+ * window averaging either silence or a peer's full-power shout, and a floor
+ * several times ambient made real frames fail the presence test. Resetting it
+ * was worse still: carrier.c re-primed from the very next chip, and landing
+ * that on a Manchester HIGH primed the floor at the carrier's own level, where
+ * the detector never regained presence for the rest of the frame.
  *
- * On the SENDER path it is reset, and unlike the design this replaces, there
- * is nothing for the reset to blind: no listen-before-talk follows it. Strictly
- * simpler than it was.
+ * Neither hazard exists now. v2's noise reference is three bins the signal
+ * cannot enter, measured in the same windows as the signal, so a listen window
+ * full of a peer's shout leaves it exactly where it was. There is nothing to
+ * reset on either path, and both paths are the same.
  *
- * On the RECEIVER path it is NOT reset, and that was the open question in
- * §5.1, which asked for a test rather than an argument. Both were built and
- * measured, over 60 triggered handshakes and 50 host-triggered ones:
+ * The measurement that settled the old question is worth keeping, because it
+ * is what said the question did not matter end to end: over 60 triggered
+ * handshakes and 50 host-triggered ones, reset and no-reset gave bit-identical
+ * counts — 482 frames sent, 663 turnarounds, 0 polls with both ends clocking
+ * out a frame — because handover during a receive turn is driven by counting
+ * decoded frames and the framer is untouched either way.
  *
- *                  frames sent   turnarounds   polls with both ends
- *                                              clocking out a frame
- *   no reset           482           663              0
- *   reset              482           663              0
- *
- * Bit-identical, because handover during a receive turn is driven by counting
- * decoded frames and the framer is untouched either way. So end to end the
- * reset buys nothing — and one layer down it costs something real:
- *
- *   carrier.c re-primes level and floor from the very next chip it is given.
- *   Land that on a LOW Manchester chip and presence returns one chip later.
- *   Land it on a HIGH one and the floor primes at the carrier's own level,
- *   where the >>7 floor EMA falls about two LSB per chip pair — measured, the
- *   detector never regains presence for the whole remaining 624-chip frame.
- *
- * Which chip it lands on is a coin flip. carrier_present() and last_carrier_us
- * are what drive handover, so half the time the reset would blind the thing
- * deciding whose turn it is, for the rest of the frame, to buy nothing. It is
- * therefore not done. test_beacon.c pins the asymmetry so a future change to
- * carrier.c's floor cannot quietly make this the wrong answer.
- *
- * The framer is not reset on this path either, and that one is not a
+ * The framer is still not reset on the RECEIVER path, and that one is not a
  * preference — the lock IS the reason we are here.
  */
 /*
@@ -136,7 +121,6 @@ static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role,
 
     if (role == LINK_ROLE_SENDER) {
         frame_rx_init(&sm->framer);
-        carrier_reset(&sm->carrier);
         sm->turn_frames = 0;
         if (from_trigger) {
             /* Their settle, plus our own amplifier's, so the preamble starts
@@ -155,8 +139,6 @@ static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role,
 
 void link_sm_begin(link_sm_t *sm, uint64_t now_us, link_role_t role)
 {
-    /* The carrier detector is deliberately NOT reset here — enter_exchange()
-     * owns that decision and it is not the same on both paths. */
     frame_rx_init(&sm->framer);
     trig_stop(&sm->trig);
     open_contact(sm, now_us);
@@ -169,7 +151,7 @@ void link_sm_idle(link_sm_t *sm, uint64_t now_us)
 {
     hal_tx_drive(sm->hal, false);
     frame_rx_init(&sm->framer);
-    carrier_reset(&sm->carrier);
+    forget_rx_busy(sm);             /* what we heard last was us */
 
     /*
      * The received record is NOT cleared. A contact that ended early left a
@@ -188,8 +170,12 @@ void link_sm_idle(link_sm_t *sm, uint64_t now_us)
 
 /*
  * Drain whatever the DSP layer has produced since the last poll and run it
- * through carrier detection and the framer. Returns how many good frames
- * landed, and leaves the last one in sm->framer.
+ * through the framer. Returns how many good frames landed, and leaves the
+ * last one in sm->framer.
+ *
+ * Presence is NOT drained here. It is decided on core 1 out of the five-bin
+ * bank, not out of these chip energies, and the callers that want it ask
+ * hal_rx_busy() where they want it — which is not the same set of places.
  */
 static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
 {
@@ -199,7 +185,6 @@ static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
 
     while ((n = hal_rx_chips(sm->hal, chips, sizeof chips / sizeof chips[0])) > 0) {
         for (i = 0; i < n; i++) {
-            carrier_push(&sm->carrier, chips[i]);
             if (!feed_framer) continue;
 
             switch (frame_rx_push(&sm->framer, chips[i])) {
@@ -227,11 +212,15 @@ static uint32_t drain_rx(link_sm_t *sm, bool feed_framer)
 
 /*
  * Drop everything the DSP produced without looking at it. Used while our own
- * transmitter is driving the shared pad: what core 1 reports then is our own
- * amplifier in saturation, and feeding it to the carrier detector poisons the
- * noise floor for the turn that follows — which showed up as an end that had
- * just transmitted believing the channel was silent, and talking straight over
- * the reply it had asked for.
+ * transmitter is driving the shared pad, and while the amplifier is coming
+ * back out of saturation afterwards: what core 1 reports then is us.
+ *
+ * THE BUSY LATCH IS DRAINED HERE TOO, AND IT HAS TO BE. hal.h's rx_busy is
+ * sticky until read, so our own transmission raises it and it would still be
+ * up when the ears open — the band would hear itself, every turn. v1 had the
+ * same hazard in a different shape and answered it the same way, by not
+ * feeding the detector while driving. Here the detector runs regardless, on
+ * core 1, so the discard has to happen on the reading side instead.
  */
 static void drain_discard(link_sm_t *sm)
 {
@@ -239,6 +228,74 @@ static void drain_discard(link_sm_t *sm)
     while (hal_rx_chips(sm->hal, chips, sizeof chips / sizeof chips[0]) ==
            sizeof chips / sizeof chips[0])
         ;
+    forget_rx_busy(sm);
+}
+
+/*
+ * ---- THE OOK BRIDGE, AND IT DELETES AT STEP 6 --------------------------
+ *
+ * dsp/presence.c has no hold, no hysteresis and no memory. That is the design
+ * (link-v2-design.md §5) and it is right for the radio this branch is
+ * building, where both symbols are tones and the pad is driven for every chip.
+ *
+ * IT IS NOT RIGHT FOR THE RADIO STILL ON THE AIR. v1 switches the carrier OFF
+ * for a zero, so half of every frame is silence, and an envelope detector with
+ * no memory answers "nobody is transmitting" in each of those gaps —
+ * truthfully. Measured in the host simulator: a band listening to a v1 frame
+ * flapped busy/quiet at the chip rate and the trigger never held TRIG_WAIT
+ * long enough for the framer to lock, so no rendezvous completed at any phase.
+ *
+ * So the channel is treated as occupied for a short time after the last busy
+ * reading, and the length of that time is DERIVED, not tuned:
+ *
+ *   MANCHESTER_MAX_RUN_CHIPS   the longest silence the line code can make,
+ *                              which is 2 and is a property of the code, not
+ *                              of a bench. manchester.h proves it.
+ *   + 1                        because hal_rx_busy() answers about an INTERVAL
+ *                              rather than an instant, so the poll that sees
+ *                              the tone come back can land up to one chip
+ *                              after it did. Strictly longer than the longest
+ *                              gap is the requirement; this is the smallest
+ *                              whole chip that meets it.
+ *
+ * Three chips is 750 us, against an rx_idle_us of 6000 and a turnaround of
+ * 1000, so it cannot reach past the end of a turn and make a silent channel
+ * look busy.
+ *
+ * DELETE IT AT STEP 6. FSK has no spaces — the pad carries tone A or tone B
+ * and never nothing — so the bridge stops being exercised the moment the
+ * framer changes, and a bridge nothing exercises is machinery this branch
+ * exists to remove. It is here to keep the v1 link alive as the yardstick
+ * step 6's BER is measured against, and for no other reason.
+ */
+#define LINK_OOK_BRIDGE_US     ((uint32_t)(MANCHESTER_MAX_RUN_CHIPS + 1) * (uint32_t)HANDOFF_CHIP_US)
+
+/*
+ * Presence, taken once.
+ *
+ * A named wrapper because two things are easy to get wrong. hal_rx_busy()
+ * CLEARS its latch (hal.h), so two callers in one poll leave the second one
+ * reading a quiet channel — each poll reads it exactly once, early, and
+ * passes the answer around. And the raw answer is about one instant, which
+ * the bridge above turns into an answer about a transmission.
+ */
+static bool drain_rx_busy(link_sm_t *sm, uint64_t now_us)
+{
+    if (hal_rx_busy(sm->hal))
+        sm->busy_until_us = now_us + LINK_OOK_BRIDGE_US;
+    return now_us < sm->busy_until_us;
+}
+
+/*
+ * Forget that the channel was busy. For the paths that have just stopped
+ * driving the pad, or are about to open their ears after being deliberately
+ * deaf: what they heard last was themselves, and the bridge must not carry it
+ * across. drain_discard() is the usual way in.
+ */
+static void forget_rx_busy(link_sm_t *sm)
+{
+    (void)hal_rx_busy(sm->hal);
+    sm->busy_until_us = 0;
 }
 
 /*
@@ -327,7 +384,7 @@ static void enter_rx(link_sm_t *sm, uint64_t now_us, bool reset_framer)
     if (reset_framer) frame_rx_reset(&sm->framer);
     sm->turn_frames = 0;
     sm->rx_turn_frames = 0;
-    sm->last_carrier_us = now_us;
+    sm->last_busy_us = now_us;
 
     /*
      * The safety net: one turn's worth of frames, plus a frame of slack, plus
@@ -376,7 +433,7 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
 {
     hal_tx_drive(sm->hal, false);
     frame_rx_reset(&sm->framer);
-    carrier_reset(&sm->carrier);
+    forget_rx_busy(sm);             /* what we heard last was us */
     sm->barren_turns = 0;
     sm->chips_len = 0;
 
@@ -399,18 +456,21 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
  * sensor, so the band shouts into the channel and listens for the same, and
  * hearing anything at all means a body has closed the loop.
  *
- * The carrier detector and the framer are fed ONLY in the listening phases.
- * Feeding them while our own amplifier is driving is the drain_discard()
- * problem below, and here it has a sharper edge: the band would trigger on its
- * own shout, every cycle, for ever. The floor is deliberately NOT thrown away
- * between cycles — the ambient floor of a room does not change in the 11 ms we
- * are deaf, and re-priming it against a shout that is already on would hide
- * that shout. carrier.c holds the floor across a reset for the same reason.
+ * The framer is fed, and the busy latch believed, ONLY in the listening
+ * phases. Reading either while our own amplifier is driving is the
+ * drain_discard() problem, and here it has a sharper edge: the band would
+ * trigger on its own shout, every cycle, for ever.
+ *
+ * Under link v2 there is nothing to prime, nothing to reprime and nothing to
+ * hold across a cycle. The noise reference lives on core 1, in three bins our
+ * transmitter cannot enter, and it keeps running through our own shout
+ * because our own shout is not in it.
  */
 static void poll_idle(link_sm_t *sm, uint64_t now_us)
 {
     const bool listening = trig_listening(&sm->trig);
     const bool waiting   = (sm->trig.state == TRIG_WAIT);
+    bool heard = false;
     bool locked;
     trig_state_t ts;
 
@@ -428,6 +488,7 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
     }
 
     if (listening) {
+        heard = drain_rx_busy(sm, now_us);
         drain_rx(sm, true);
     } else {
         drain_discard(sm);
@@ -448,17 +509,7 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
     locked = waiting && (sm->framer.syncs != sm->idle_syncs);
     if (!waiting) sm->idle_syncs = sm->framer.syncs;
 
-    ts = trig_poll(&sm->trig, now_us,
-                   listening && carrier_present(&sm->carrier), locked);
-
-    /*
-     * §4.3: the quiet-wait cap expired, so the floor may genuinely have moved
-     * under the detector. This is the ONLY site that throws the floor away —
-     * the other three reset presence and let the room's floor carry — and it is
-     * also the only way out of a detector that has latched, because a frozen
-     * floor stops learning by design.
-     */
-    if (trig_take_carrier_reprime(&sm->trig)) carrier_reprime(&sm->carrier);
+    ts = trig_poll(&sm->trig, now_us, heard, locked);
 
     if (trig_take_burst(&sm->trig)) {
         sm->chips_len = trig_fill(sm->chips, sizeof sm->chips);
@@ -518,17 +569,24 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
         break;
 
     case LINK_RX_FRAME: {
-        const uint32_t got = drain_rx(sm, true);
+        /* Before drain_rx(), because both read the HAL and only one of them
+         * clears the latch. */
+        const bool     busy = drain_rx_busy(sm, now_us);
+        const uint32_t got  = drain_rx(sm, true);
 
         /*
-         * A frame in progress keeps the turn alive on its own account. The
-         * carrier detector cannot do this job by itself: its floor tracks up
-         * to meet a carrier that lasts a whole frame, so it reports silence
-         * partway through every one, and the turn was being handed back over
-         * the top of the frame it was waiting for. See frame_rx_busy().
+         * A frame in progress keeps the turn alive on its own account.
+         *
+         * v1 needed that because its detector could not do the job: the floor
+         * tracked up to meet a carrier lasting a whole frame, so it reported
+         * silence partway through every one and the turn was handed back over
+         * the top of the frame it was waiting for. v2's noise reference cannot
+         * be pulled up by the signal, so presence should hold for the whole
+         * frame — but frame_rx_busy() stays, because it is the stronger of the
+         * two statements and costs nothing. See frame_rx_busy().
          */
-        if (carrier_present(&sm->carrier) || frame_rx_busy(&sm->framer))
-            sm->last_carrier_us = now_us;
+        if (busy || frame_rx_busy(&sm->framer))
+            sm->last_busy_us = now_us;
 
         if (got) {
             sm->rx_turn_frames = (uint8_t)(sm->rx_turn_frames + got);
@@ -554,7 +612,7 @@ link_state_t link_sm_poll(link_sm_t *sm, uint64_t now_us)
             break;
         }
 
-        if ((uint64_t)(now_us - sm->last_carrier_us) > sm->cfg.rx_idle_us ||
+        if ((uint64_t)(now_us - sm->last_busy_us) > sm->cfg.rx_idle_us ||
             now_us >= sm->deadline_us) {
             /* Count the barren turn BEFORE testing: "they have gone quiet" is
              * one of the two ways we_are_done() is allowed to conclude. */

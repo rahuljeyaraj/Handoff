@@ -21,6 +21,7 @@
 
 #include "chan.h"
 #include "hal.h"
+#include "presence.h"
 
 #define HALH_RX_FIFO 4096
 #define HALH_TX_FIFO 4096
@@ -74,6 +75,30 @@ struct halh_node {
     /* receive */
     uint16_t      rx[HALH_RX_FIFO];
     size_t        rx_head, rx_tail;
+
+    /*
+     * Presence, link v2. The REAL dsp/presence.c, fed by a model.
+     *
+     * The simulator injects at the chip-energy layer and has no five-bin bank
+     * to give it, so each chip slot is turned into HANDOFF_WINDOWS_PER_CHIP
+     * bank windows: the signal bin carries the chip energy this node was just
+     * handed, and the guard median carries an independent draw from the
+     * channel's own off-level and noise. That is honest about what it is — a
+     * model of the bins, not a model of the body — and it is enough to hold up
+     * the two things a protocol test needs from presence:
+     *
+     *   - the real CFAR arithmetic, the real k, the real reference length,
+     *     with the real decimation deciding which windows are guard windows
+     *   - the real sticky-until-read latch, so a state machine that forgets to
+     *     drain it while driving fails here rather than on a bench
+     *
+     * What it is NOT is a channel: the guards never see the signal, because on
+     * hardware they cannot. Design §4 is what makes that true, and it is the
+     * one thing this model must not get wrong in the flattering direction.
+     */
+    presence_t    pres;
+    uint32_t      pres_windows;
+    bool          busy_latch;
 
     int           dropout_left;
 

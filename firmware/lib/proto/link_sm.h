@@ -26,10 +26,10 @@
 
 #include "beacon.h"
 #include "carousel.h"
-#include "carrier.h"
 #include "frag.h"
 #include "frame.h"
 #include "hal.h"
+#include "manchester.h"
 
 typedef enum {
     LINK_IDLE = 0,     /* no contact: running the trigger, see beacon.h     */
@@ -75,9 +75,12 @@ typedef struct {
 
     /*
      * A gap of silence after which the channel is considered free. This, and
-     * counting the far end's frames, are what actually drive handover. Must
-     * exceed the carrier detector's hold (8 chips) so it cannot fire between
-     * the chips of a frame, and stay well under a frame so handover is prompt.
+     * counting the far end's frames, are what actually drive handover.
+     *
+     * Under link v2 presence has no hold and no hysteresis, so this no longer
+     * has to outlast one: it has to outlast the gap a real frame can leave in
+     * the busy latch, which frame_rx_busy() covers anyway. It still has to
+     * stay well under a frame so handover is prompt.
      *
      * There is deliberately no separate receive-window setting: a fixed window
      * that could be shorter than a turn is a foot-gun — set it a little too
@@ -108,7 +111,6 @@ typedef struct {
 
     trig_t       trig;
     carousel_t   car;
-    carrier_t    carrier;
     frame_rx_t   framer;
     frag_rx_t    rx;
 
@@ -116,7 +118,8 @@ typedef struct {
 
     uint64_t     started_us;
     uint64_t     deadline_us;
-    uint64_t     last_carrier_us;
+    uint64_t     last_busy_us;   /* last poll the channel read busy        */
+    uint64_t     busy_until_us;  /* the OOK bridge, link_sm.c — step 6     */
     uint8_t      turn_frames;    /* frames sent in the current turn        */
     uint8_t      rx_turn_frames; /* frames heard since we last transmitted */
     uint8_t      barren_turns;   /* consecutive receive turns that heard nothing */

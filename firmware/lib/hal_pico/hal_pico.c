@@ -6,9 +6,10 @@
  * lib/dsp the host simulator runs. What this file adds is the core split of
  * architecture §3.3, made real:
  *
- *   core 1   block loop: ADC ring -> Goertzel -> symbol sync -> carrier
- *            detect -> ipc ring. Nothing slower than the chip rate lives
- *            here, and nothing here calls printf.
+ *   core 1   block loop: ADC ring -> Goertzel -> symbol sync -> ipc ring,
+ *            and beside it the link v2 five-bin bank -> presence. Nothing
+ *            slower than the chip rate lives here, and nothing here calls
+ *            printf.
  *   core 0   everything the HAL hands out: chips popped from the ipc ring,
  *            chips queued to the PIO, time, telemetry, randomness.
  *
@@ -27,12 +28,12 @@
 #include "pico/stdlib.h"
 
 #include "adc_ring.h"
-#include "carrier.h"
 #include "config.h"
 #include "goertzel.h"
 #include "gz_bank.h"
 #include "ipc.h"
 #include "pio_carrier.h"
+#include "presence.h"
 #include "sync.h"
 #include "tlm.h"
 
@@ -66,7 +67,8 @@ static int32_t  s_noise_mean = -1;
  */
 static volatile uint32_t s_carrier_req = HANDOFF_CARRIER_HZ;
 static volatile uint32_t s_carrier_ack;
-static volatile uint32_t s_level;         /* carrier_level(), for §7.3 */
+static volatile uint32_t s_level;         /* presence signal score, telemetry */
+static volatile uint32_t s_noise;         /* the reference it was judged against */
 static volatile uint32_t s_chips;
 static volatile uint32_t s_windows;
 static volatile uint64_t s_busy_us;
@@ -84,21 +86,42 @@ static volatile uint16_t s_rx_bin_req = HANDOFF_GZ_BIN;
 static volatile uint16_t s_rx_bin_ack;
 
 /*
- * ---- link v2 step 3: the five-bin bank, as an instrument ----------------
+ * ---- link v2: the five-bin bank, and presence ---------------------------
  *
- * The bank is the v2 receiver's front end, but nothing in v1 consumes it yet,
- * so here it runs BESIDE the v1 chain rather than in place of it, and it is
- * off until asked. That is deliberate and it is the only honest way to cost
- * it: step 1 learned that comparing two images measures the linker as much as
- * the code — 4 points of core-1 load moved from adding one unrelated function
- * and shifting the image in XIP. Switching the bank on and off inside ONE
- * image, on one board, in one minute, measures the bank.
+ * STEP 5 CHANGED WHAT THIS IS. At step 3 the bank was an instrument running
+ * beside the v1 chain, off until asked, so that switching it on and off
+ * inside ONE image measured what it costs. It is now the receiver's presence
+ * front end: dsp/presence.c decides busy off every bank window, and
+ * dsp/carrier.c — the floor — is deleted.
+ *
+ * So the default is ON, and `linktest n` still toggles it because the budget
+ * instrument is still worth having. WITH THE BANK OFF THE BOARD IS DEAF TO
+ * PRESENCE: there is nothing else left to ask. The console says so.
  *
  * Same request/ack handshake as the carrier and the bin: core 0 writes,
  * core 1 obeys and echoes.
  */
-static volatile bool s_bank_req;
+static volatile bool s_bank_req = true;
 static volatile bool s_bank_ack;
+
+/*
+ * Presence, published across the core boundary. Two flags, because hal.h's
+ * rx_busy contract has two halves and the reasons are there:
+ *
+ *   s_busy_latch   any window since core 0 last asked. Core 1 raises it,
+ *                  core 0 clears it.
+ *   s_busy_now     the most recent window's verdict. Core 1 owns it outright,
+ *                  and it is what answers a caller polling faster than
+ *                  windows close.
+ *
+ * Each is written by one core with a single aligned store, and the worst a
+ * race can do is lose one latch out of twenty thousand a second.
+ */
+static volatile bool     s_busy_latch;
+static volatile bool     s_busy_now;
+static volatile uint32_t s_busy_windows;
+static volatile uint32_t s_pres_windows;
+static volatile bool     s_pres_ready;
 
 /*
  * A capture, rather than a live mirror of the bank, because a 64-bit read is
@@ -110,14 +133,13 @@ static volatile uint32_t s_cap_req;
 static volatile bool     s_cap_done;
 static hal_pico_bank_t   s_cap;
 
-static void core1_dsp_init(gz_t *g, sync_t *sy, carrier_t *car, uint16_t bin)
+static void core1_dsp_init(gz_t *g, sync_t *sy, uint16_t bin)
 {
     /* Bin spacing equals the window rate, so the bin index is just the
      * frequency divided by it — config.h static-asserts this for the default
      * carrier and hal_pico_set_carrier() checks it for any other. */
     gz_init(g, HANDOFF_GZ_N, bin);
     sync_init(sy, HANDOFF_WINDOWS_PER_CHIP, HANDOFF_CHIP_GUARD);
-    carrier_init(car);
 }
 
 /*
@@ -150,16 +172,36 @@ static void core1_bank_window(const gz_bank_t *b)
     if (++s_cap.windows >= s_cap_req) s_cap_done = true;
 }
 
+/*
+ * One completed bank window, the decision side. Separate from the capture
+ * above because they are different jobs: the capture is an instrument that
+ * only runs when core 0 asks, this runs always and is what the link consumes.
+ */
+static void core1_presence_window(presence_t *pr, const gz_bank_t *b)
+{
+    const bool busy = presence_push_bank(pr, b);
+
+    s_busy_now = busy;
+    if (busy) {
+        s_busy_latch   = true;
+        s_busy_windows = pr->busy_windows;
+    }
+    s_level = presence_signal_score(pr);
+    s_noise = presence_noise_score(pr);
+    s_pres_windows = pr->windows;
+    s_pres_ready = presence_ready(pr);
+}
+
 static void core1_main(void)
 {
-    gz_t      g;
-    sync_t    sy;
-    carrier_t car;
-    gz_bank_t bank;
-    bool      bank_on = s_bank_req;
-    uint32_t  hz = s_carrier_req;
-    uint16_t  bin = s_rx_bin_req;
-    uint64_t  busy = 0;
+    gz_t       g;
+    sync_t     sy;
+    gz_bank_t  bank;
+    presence_t pres;
+    bool       bank_on = s_bank_req;
+    uint32_t   hz = s_carrier_req;
+    uint16_t   bin = s_rx_bin_req;
+    uint64_t   busy = 0;
 
     /* This loop runs out of XIP. A flash erase on core 0 — the record store
      * being provisioned, the bond store on a fresh pairing — would hang it
@@ -167,8 +209,9 @@ static void core1_main(void)
      * path only if this has been called (see run_write there). */
     flash_safe_execute_core_init();
 
-    core1_dsp_init(&g, &sy, &car, bin);
+    core1_dsp_init(&g, &sy, bin);
     gzb_init(&bank);
+    presence_init(&pres);
     s_carrier_ack = hz;
     s_rx_bin_ack  = bin;
     s_bank_ack    = bank_on;
@@ -195,12 +238,17 @@ static void core1_main(void)
         }
         if (s_rx_bin_req != bin) {
             bin = s_rx_bin_req;
-            core1_dsp_init(&g, &sy, &car, bin);
+            core1_dsp_init(&g, &sy, bin);
             s_rx_bin_ack = bin;
         }
         if (s_bank_req != bank_on) {
             bank_on = s_bank_req;
             gzb_reset(&bank);
+            /* The reference describes the room and the room has not changed,
+             * but the bank it was measured with has just been restarted, so
+             * the cells behind the boundary are from a different run. Start
+             * it again rather than mixing the two. */
+            presence_init(&pres);
             s_bank_ack = bank_on;
         }
 
@@ -231,11 +279,24 @@ static void core1_main(void)
          * 4 ms.
          */
         if (adc_ring_aux_step(blk, n, seq, &reinit)) {
-            /* The VSYS blocks carry a step to a DC level and back, which is
-             * broadband and would land in all five bins at once. The bank is
-             * rebuilt with the rest of the detector rather than being shown
-             * the converter moving. */
-            if (reinit) { core1_dsp_init(&g, &sy, &car, bin); gzb_reset(&bank); }
+            /*
+             * The VSYS blocks carry a step to a DC level and back, which is
+             * broadband and would land in all five bins at once. They never
+             * reach the bank — the continue below drops them — but a window
+             * straddling the swap would, so the bank is rebuilt with the rest
+             * of the detector.
+             *
+             * PRESENCE IS DELIBERATELY NOT REBUILT. Its reference describes
+             * the room, and the converter being borrowed for three blocks
+             * says nothing about the room. Throwing it away would cost one
+             * preamble of deafness every time the phone asks for a battery
+             * reading, to re-measure something that has not changed. The one
+             * window that spans the swap is lost either way.
+             */
+            if (reinit) {
+                core1_dsp_init(&g, &sy, bin);
+                gzb_reset(&bank);
+            }
             busy += time_us_64() - t0;
             s_busy_us = busy;
             continue;
@@ -256,7 +317,10 @@ static void core1_main(void)
             while (off < n) {
                 bool done = false;
                 off += gzb_push_run(&bank, blk + off, n - off, &done);
-                if (done) core1_bank_window(&bank);
+                if (done) {
+                    core1_presence_window(&pres, &bank);
+                    core1_bank_window(&bank);
+                }
             }
         }
 
@@ -269,8 +333,6 @@ static void core1_main(void)
 
             if (!sync_push(&sy, score, &chip)) continue;
 
-            carrier_push(&car, chip);
-            s_level = carrier_level(&car);
             s_chips++;
             ipc_push_chip(chip, (uint32_t)(base + i));
         }
@@ -406,6 +468,27 @@ static uint32_t p_rx_carrier_level(void *ctx)
     return s_level;
 }
 
+/*
+ * hal.h's listen-before-talk. The latch since the last call, OR the most
+ * recent window if no window has closed since — the contract and both reasons
+ * are in hal.h, and the deaf callers that must still drain it are in
+ * link_sm.c's drain_discard().
+ */
+static bool p_rx_busy(void *ctx)
+{
+    const bool was = s_busy_latch || s_busy_now;
+    (void)ctx;
+    s_busy_latch = false;
+    return was;
+}
+
+static void p_rx_presence(void *ctx, uint32_t *signal, uint32_t *noise)
+{
+    (void)ctx;
+    if (signal) *signal = s_level;
+    if (noise)  *noise  = s_noise;
+}
+
 static uint64_t p_now_us(void *ctx)
 {
     (void)ctx;
@@ -459,6 +542,8 @@ const hal_iface_t *hal_pico_init(void)
     s_iface.tx_busy          = p_tx_busy;
     s_iface.rx_chips         = p_rx_chips;
     s_iface.rx_carrier_level = p_rx_carrier_level;
+    s_iface.rx_busy          = p_rx_busy;
+    s_iface.rx_presence      = p_rx_presence;
     s_iface.now_us           = p_now_us;
     s_iface.telemetry        = tlm_sink;
     s_iface.random           = p_random;
@@ -569,6 +654,19 @@ bool hal_pico_set_bank(bool on)
 }
 
 bool hal_pico_bank_on(void) { return s_bank_req; }
+
+uint32_t hal_pico_busy_windows(void) { return s_busy_windows; }
+
+void hal_pico_presence(hal_pico_presence_t *out)
+{
+    if (!out) return;
+    out->windows      = s_pres_windows;
+    out->busy_windows = s_busy_windows;
+    out->signal       = s_level;
+    out->noise        = s_noise;
+    out->busy         = s_busy_now;
+    out->ready        = s_pres_ready;
+}
 
 bool hal_pico_bank_capture(uint32_t windows, uint32_t timeout_us,
                            hal_pico_bank_t *out)

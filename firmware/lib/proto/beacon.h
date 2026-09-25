@@ -271,7 +271,6 @@ typedef struct {
     uint64_t last_poll_us;   /* to charge elapsed time to the right bucket  */
 
     bool     burst_due;      /* chips not yet handed to the HAL             */
-    bool     reprime_due;    /* the caller owes the detector a reprime      */
 
     /* counters — telemetry, and the assertions in the tests */
     uint32_t shouts;
@@ -344,12 +343,14 @@ bool         trig_listening(const trig_t *t);
 bool         trig_take_burst(trig_t *t);
 
 /*
- * True once when the quiet-wait cap expired and the carrier detector's floor
- * should be thrown away and primed again. Clears on read. Kept as a request
- * rather than done here because the detector belongs to the caller — the
- * trigger is given a bool, not a carrier_t.
+ * There used to be a trig_take_carrier_reprime() here: the quiet-wait cap
+ * expiring asked the caller to throw the carrier detector's floor away and
+ * prime it again, on the grounds that a channel reading busy for that long
+ * was most likely the floor's own fault. Link v2 step 5 deleted it with the
+ * floor. There is nothing to throw away — the noise reference is three bins
+ * the signal cannot enter, measured in the same window as the signal — so a
+ * channel that reads busy for thirty milliseconds is busy.
  */
-bool         trig_take_carrier_reprime(trig_t *t);
 
 /* The listen duration currently being counted down. Telemetry, and what the
  * simultaneous-start test inspects to know a redraw really happened. */

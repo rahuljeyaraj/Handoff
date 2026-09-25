@@ -44,12 +44,28 @@ static size_t h_rx_chips(void *ctx, uint16_t *dst, size_t max)
 
 static uint32_t h_rx_carrier_level(void *ctx)
 {
-    /* The link state machine runs its own carrier_t over the chip stream; this
-     * exists for apps that want a level without one. Report the most recent
-     * chip energy in the queue. */
+    /* The most recent chip energy in the queue. On hardware this is the
+     * presence signal score; here the chip energy IS that score. */
     halh_node_t *n = (halh_node_t *)ctx;
     if (n->rx_tail == n->rx_head) return 0;
     return n->rx[(n->rx_head + HALH_RX_FIFO - 1u) % HALH_RX_FIFO];
+}
+
+/* hal.h's contract: the latch since the last call, or the most recent window
+ * if none has closed since. Reading clears the latch and leaves the level. */
+static bool h_rx_busy(void *ctx)
+{
+    halh_node_t *n = (halh_node_t *)ctx;
+    const bool was = n->busy_latch || n->pres.busy;
+    n->busy_latch = false;
+    return was;
+}
+
+static void h_rx_presence(void *ctx, uint32_t *signal, uint32_t *noise)
+{
+    halh_node_t *n = (halh_node_t *)ctx;
+    if (signal) *signal = presence_signal_score(&n->pres);
+    if (noise)  *noise  = presence_noise_score(&n->pres);
 }
 
 static uint64_t h_now_us(void *ctx)
@@ -100,6 +116,7 @@ void halh_init(halh_node_t *n, const char *name, uint64_t *clock_us, uint64_t se
     n->peer = NULL;
     halh_chan_default(&n->chan);
     rng_seed(&n->rng, seed);
+    presence_init(&n->pres);
 
     n->iface.ctx = n;
     n->iface.tx_drive = h_tx_drive;
@@ -107,6 +124,8 @@ void halh_init(halh_node_t *n, const char *name, uint64_t *clock_us, uint64_t se
     n->iface.tx_busy = h_tx_busy;
     n->iface.rx_chips = h_rx_chips;
     n->iface.rx_carrier_level = h_rx_carrier_level;
+    n->iface.rx_busy = h_rx_busy;
+    n->iface.rx_presence = h_rx_presence;
     n->iface.now_us = h_now_us;
     n->iface.telemetry = h_telemetry;
     n->iface.random = h_random;
@@ -144,9 +163,56 @@ void halh_force_random(halh_node_t *n, const uint32_t *values, size_t count)
 
 /* ---- the medium -------------------------------------------------------- */
 
+/*
+ * mag^2 of a Goertzel window that would have produced this score. gz_score_of
+ * is score = 2*sqrt(mag2)/N, so this is its inverse, and it is exact enough
+ * for a ratio — which is all presence ever takes.
+ */
+static uint64_t mag2_of_score(uint32_t score)
+{
+    const uint64_t a = (uint64_t)score * (uint64_t)HANDOFF_GZ_N / 2u;
+    return a * a;
+}
+
+/*
+ * One chip slot, as HANDOFF_WINDOWS_PER_CHIP bank windows. See hal_host.h for
+ * what this models and what it deliberately does not.
+ */
+static void presence_feed(halh_node_t *n, uint16_t energy)
+{
+    const halh_chan_t *c = &n->chan;
+    int w;
+
+    for (w = 0; w < HANDOFF_WINDOWS_PER_CHIP; w++) {
+        /* The bank decides guard windows at the window boundary, by count.
+         * Same rule here, so the decimation being coprime with the windows
+         * per chip is exercised rather than assumed. */
+        const bool fresh = (n->pres_windows % HANDOFF_GUARD_DECIM) == 0u;
+        uint64_t guard = 0;
+
+        if (fresh) {
+            /* An independent draw from the room, never from the signal. */
+            int32_t g = (int32_t)c->energy_off;
+            if (c->noise_lsb) {
+                const int32_t span = (int32_t)c->noise_lsb * 2 + 1;
+                g += (int32_t)(rng_u32(&n->rng) % (uint32_t)span)
+                   - (int32_t)c->noise_lsb;
+            }
+            if (g < 0) g = 0;
+            guard = mag2_of_score((uint32_t)g);
+        }
+        n->pres_windows++;
+        if (presence_push(&n->pres, mag2_of_score(energy), guard, fresh))
+            n->busy_latch = true;
+    }
+}
+
 static void rx_put(halh_node_t *n, uint16_t energy)
 {
     const size_t next = (n->rx_head + 1u) % HALH_RX_FIFO;
+
+    presence_feed(n, energy);
+
     if (next == n->rx_tail) return;   /* overrun: the real ring drops too */
     n->rx[n->rx_head] = energy;
     n->rx_head = next;

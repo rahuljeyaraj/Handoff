@@ -287,13 +287,23 @@ static void report_bench(void)
     memset(&b, 0, sizeof b);
     b.tag         = (uint8_t)BLE_BENCH_TAG;
     b.version     = BLE_BENCH_VERSION;
-    b.level       = sat16(carrier_level(&s_sm.carrier));
-    b.noise_floor = sat16(carrier_floor(&s_sm.carrier));
+    {
+        /*
+         * Link v2: the same two sides of the same comparison the detector
+         * made, rather than a level and a remembered floor. The wire format
+         * and the phone's Body link page are untouched — `noise_floor` now
+         * carries the CFAR reference, which is what that column always meant.
+         */
+        uint32_t sig = 0, noi = 0;
+        hal_rx_presence(s_hal, &sig, &noi);
+        b.level       = sat16(sig);
+        b.noise_floor = sat16(noi);
+    }
     b.good        = sat16(s_sm.frames_rx_good - s_st.good_at_zero);
     b.bad         = sat16(s_sm.frames_rx_bad  - s_st.bad_at_zero);
     b.sent        = sat16(s_sm.frames_sent    - s_st.frames_at_zero);
     b.syncs       = sat16(s_sm.framer.syncs);
-    b.present     = carrier_present(&s_sm.carrier) ? 1u : 0u;
+    b.present     = (s_sm.busy_until_us != 0u) ? 1u : 0u;
     b.link_state  = (uint8_t)s_sm.state;
     b.complete    = sat8(s_st.complete);
     b.aborts      = sat8(s_st.abort);
@@ -909,34 +919,33 @@ static void print_stats(void)
            (unsigned long)hal_pico_overruns(), (unsigned long)hal_pico_tx_stalls(0),
            hal_pico_core1_load());
     /*
-     * The receive turn ends on "they have gone quiet", and quiet is decided by
-     * carrier_present() alone — so a carrier detector whose floor primed INSIDE
-     * the far end's frame reports silence for the whole frame and the turn is
-     * handed back over the top of it. That failure is invisible in every other
-     * counter: it looks exactly like a peer that never transmitted. level
-     * against floor is what tells them apart — a healthy idle detector sits
-     * with level near floor and present 0, a poisoned one sits with BOTH high.
+     * Link v2: the two sides of the presence comparison, as the detector took
+     * it. signal is max(E_A, E_B) this window; noise is the CFAR reference —
+     * the mean of the guard medians over one preamble, which is the number the
+     * threshold is actually built from, not the last median.
+     *
+     * WHAT TO LOOK FOR. A healthy idle band sits with signal AT OR UNDER noise
+     * and busy 0 — the room measured against itself. There is no floor to
+     * climb any more, so the v1 failure this line was written to catch (both
+     * numbers high together, the detector deaf inside a frame) cannot happen;
+     * what this now catches is a dead coupling path, which reads signal near
+     * zero against a healthy noise.
+     *
+     * busy-windows is a rate where busy is an event: config.h states one false
+     * busy per minute of listening, so on a quiet bench this should crawl.
      */
-    printf("           carrier level %lu floor %lu%s present %u; framer syncs %lu\n",
-           (unsigned long)carrier_level(&s_sm.carrier),
-           (unsigned long)carrier_floor(&s_sm.carrier),
-           carrier_primed(&s_sm.carrier) ? "" : " (stale: re-priming, no chips since reset)",
-           (unsigned)carrier_present(&s_sm.carrier),
-           (unsigned long)s_sm.framer.syncs);
     {
-        /*
-         * What the detector did SINCE THE LAST `s`, which is the only way to
-         * see an 11 ms event from a console a person types at. floor hi/lo is
-         * the answer to "is the floor moving with the level" — a floor doing
-         * its job barely moves while the level swings by ten times as much.
-         */
-        carrier_peak_t pk;
-
-        carrier_take_peak(&s_sm.carrier, &pk);
-        printf("           since last s: peak level %lu (floor %lu then); "
-               "floor ranged %lu..%lu\n",
-               (unsigned long)pk.level, (unsigned long)pk.floor_then,
-               (unsigned long)pk.floor_lo, (unsigned long)pk.floor_hi);
+        uint32_t sig = 0, noi = 0;
+        hal_rx_presence(s_hal, &sig, &noi);
+        printf("           presence signal %lu vs noise %lu (k=%d/%d over %d "
+               "cells); busy windows %lu; framer syncs %lu\n",
+               (unsigned long)sig, (unsigned long)noi,
+               (int)HANDOFF_CFAR_K_NUM, (int)HANDOFF_CFAR_K_DEN,
+               (int)HANDOFF_CFAR_CELLS,
+               (unsigned long)hal_pico_busy_windows(),
+               (unsigned long)s_sm.framer.syncs);
+        if (!hal_pico_bank_on())
+            printf("           *** the bank is OFF: presence is dead ***\n");
     }
     printf("           chips %lu at %lu sps; vsys %u mV %s, %lu reads %lu failed, last %lu us\n",
            (unsigned long)hal_pico_chips(), (unsigned long)hal_pico_sps(),

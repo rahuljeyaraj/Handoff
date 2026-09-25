@@ -1047,6 +1047,82 @@ static void rx_bank_capture(void)
 }
 
 /*
+ * ---- link v2 step 5: presence, over an interval ------------------------
+ *
+ * `n 2` answers "what are the five bins doing". This answers the only
+ * question step 5 is gated on: DOES busy TRACK REALITY AS THE LEVEL MOVES.
+ *
+ * It takes two readings of the detector's own counters and divides, so what
+ * comes out is the fraction of windows that read busy over the interval —
+ * a rate, which is what a threshold has to be judged as. One instantaneous
+ * read cannot tell 100 % busy from 5 %.
+ *
+ * It does NOT go through hal_rx_busy(): that clears the latch, and an
+ * instrument must never take an event away from the link.
+ *
+ * HOW TO SWEEP THE LEVEL ON THIS BENCH. There is no gain knob and no
+ * attenuator, so geometry is the only control (step 4, the hard way). Close
+ * the gap in steps with hands withdrawn between them — a hand near a band
+ * beats the transmitter — and alternate the far board silent (`y 9`) with it
+ * driving (`y 0`, `y 1` or `y 3`), so every hold gives a matched pair. The
+ * coupling drifts on its own, so a quiet reading from an earlier run is not a
+ * control for this one.
+ *
+ * WHAT PASSING LOOKS LIKE. Near 0 % busy with the far board silent, at every
+ * level; near 100 % with it driving, at every level down to the weakest the
+ * link is expected to work at. The number in between is the margin.
+ */
+#define PRES_SECONDS_DEFAULT 3u
+#define PRES_SECONDS_MAX     60u
+
+static void rx_presence(uint32_t seconds)
+{
+    hal_pico_presence_t a, b;
+    uint32_t windows, busy;
+
+    if (seconds == 0u) seconds = PRES_SECONDS_DEFAULT;
+    if (seconds > PRES_SECONDS_MAX) seconds = PRES_SECONDS_MAX;
+
+    if (!hal_pico_bank_on()) {
+        printf("    the bank is OFF, so there is no detector. `n 1` first.\n");
+        return;
+    }
+
+    hal_pico_presence(&a);
+    if (!a.ready) {
+        printf("    the CFAR reference is not full yet (%d cells, one "
+               "preamble) — give it a moment\n", (int)HANDOFF_CFAR_CELLS);
+        return;
+    }
+
+    printf("\n  --- presence, %lu s, generator %s ---\n",
+           (unsigned long)seconds, bank_generator());
+
+    bank_wait((uint32_t)seconds * 1000000u);
+    hal_pico_presence(&b);
+
+    windows = b.windows - a.windows;
+    busy    = b.busy_windows - a.busy_windows;
+
+    printf("    busy in %lu of %lu windows", (unsigned long)busy,
+           (unsigned long)windows);
+    if (windows) {
+        const uint32_t pct = (uint32_t)((uint64_t)busy * 1000u / windows);
+        printf("  = %lu.%lu %%", (unsigned long)(pct / 10u),
+               (unsigned long)(pct % 10u));
+    }
+    printf("\n");
+
+    printf("    signal %lu LSB vs reference %lu LSB", (unsigned long)b.signal,
+           (unsigned long)b.noise);
+    if (b.noise) printf(", ratio %lu:1", (unsigned long)(b.signal / b.noise));
+    printf("    (threshold k = %d/%d)\n",
+           (int)HANDOFF_CFAR_K_NUM, (int)HANDOFF_CFAR_K_DEN);
+
+    bank_operating_point();
+}
+
+/*
  * The budget, measured the one way that means anything: the same image, the
  * same board, the same minute, with the bank switched off and then on.
  *
@@ -1195,6 +1271,7 @@ static void rx_dispatch(const char *line)
         }
         break;
     case 'b': if (have_arg && arg) rx_bank_full(); else rx_bank(); break;
+    case 'p': rx_presence(have_arg ? arg : 0u); break;
     case 'n': rx_bank_dispatch(arg, have_arg); break;
     case 'h': case '?': rx_help(); break;
     default:  printf("    ? (h for help)\n"); break;

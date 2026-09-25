@@ -40,6 +40,7 @@ static const suite_t k_suites[] = {
     { "manchester", test_manchester },
     { "goertzel",   test_goertzel },
     { "gz_bank",    test_gz_bank },
+    { "presence",   test_presence },
     { "sync",       test_sync },
     { "frame",      test_frame },
     { "chunk",      test_chunk },

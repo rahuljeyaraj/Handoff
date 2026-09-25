@@ -61,7 +61,6 @@ void trig_init(trig_t *t, const hal_iface_t *hal)
 void trig_start(trig_t *t, uint64_t now_us)
 {
     t->burst_due = false;
-    t->reprime_due = false;
     t->last_poll_us = now_us;
     t->listen_us = 0;
     t->silent_left_us = 0;
@@ -156,9 +155,12 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
         if (now_us >= t->deadline_us) {
             /*
              * It never stopped. Do not send into a channel that is provably
-             * busy — go back to listening with a fresh draw, and ask for the
-             * carrier detector to be reset, because the most likely innocent
-             * explanation is that the ambient floor has moved under it.
+             * busy — go back to listening with a fresh draw.
+             *
+             * v1 also asked the caller to reprime the carrier detector here,
+             * because the most likely innocent explanation was that the
+             * ambient floor had moved under it. There is no floor now, so
+             * there is no innocent explanation: the channel is busy.
              *
              * The silence still owed from before the carrier appeared is
              * discarded rather than resumed. Resuming it would let a band that
@@ -169,7 +171,6 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
              */
             close_wait(t, now_us);
             t->quiet_timeouts++;
-            t->reprime_due = true;
             enter_listen(t);
         }
         break;
@@ -194,13 +195,6 @@ bool trig_take_burst(trig_t *t)
 {
     const bool due = t->burst_due;
     t->burst_due = false;
-    return due;
-}
-
-bool trig_take_carrier_reprime(trig_t *t)
-{
-    const bool due = t->reprime_due;
-    t->reprime_due = false;
     return due;
 }
 

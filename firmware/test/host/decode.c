@@ -19,7 +19,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "carrier.h"
 #include "config.h"
 #include "frame.h"
 #include "goertzel.h"
@@ -45,7 +44,6 @@ int main(int argc, char **argv)
     size_t n, k;
     gz_t g;
     sync_t sy;
-    carrier_t car;
     frame_rx_t rx;
     uint32_t chips = 0, windows = 0;
     uint64_t chip_sum = 0;
@@ -75,7 +73,6 @@ int main(int argc, char **argv)
 
     gz_init(&g, HANDOFF_GZ_N, (uint16_t)(carrier / (uint32_t)HANDOFF_WINDOW_RATE_HZ));
     sync_init(&sy, HANDOFF_WINDOWS_PER_CHIP, HANDOFF_CHIP_GUARD);
-    carrier_init(&car);
     frame_rx_init(&rx);
 
     printf("%s: %u samples, %.1f ms, carrier %u Hz bin %u\n", path, (unsigned)n,
@@ -94,7 +91,6 @@ int main(int argc, char **argv)
         chips++;
         chip_sum += chip;
         if (chip > chip_max) chip_max = chip;
-        carrier_push(&car, chip);
         if (show_chips) printf("%u%c", chip, (chips % 32) ? ' ' : '\n');
 
         res = frame_rx_push(&rx, chip);
@@ -121,9 +117,10 @@ int main(int argc, char **argv)
     }
     if (show_chips) printf("\n");
 
-    printf("  %u windows, %u chips, mean chip energy %.2f, max %u, carrier level %u\n",
+    printf("  %u windows, %u chips, mean chip energy %.2f, max %u
+",
            (unsigned)windows, (unsigned)chips,
-           chips ? (double)chip_sum / chips : 0.0, chip_max, (unsigned)carrier_level(&car));
+           chips ? (double)chip_sum / chips : 0.0, chip_max);
     printf("  frames: %d good, %d bad CRC, %u syncs, %u false syncs\n",
            good, bad, (unsigned)rx.syncs, (unsigned)rx.false_syncs);
     if (bits)
