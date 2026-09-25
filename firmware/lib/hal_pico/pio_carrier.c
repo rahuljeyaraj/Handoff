@@ -437,6 +437,17 @@ void pio_carrier_fsk_tone(int tone)
     tx_start(s_fsk_tone, count_of(s_fsk_tone), 5);   /* 32 bytes = 8 words */
 }
 
+void pio_carrier_fsk_alt(void)
+{
+    size_t i;
+
+    if (!s_fsk) return;
+    for (i = 0; i < count_of(s_fsk_tone); i++)
+        s_fsk_tone[i] = (i & 1u) ? (uint32_t)HANDOFF_FSK_WORD_B
+                                 : (uint32_t)HANDOFF_FSK_WORD_A;
+    tx_start(s_fsk_tone, count_of(s_fsk_tone), 5);   /* 32 bytes = 8 words */
+}
+
 void pio_carrier_fsk_send(const uint8_t *chips, size_t n)
 {
     size_t i;

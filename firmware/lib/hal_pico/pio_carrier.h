@@ -197,6 +197,20 @@ bool pio_carrier_fsk_active(void);
  */
 void pio_carrier_fsk_tone(int tone);
 
+/*
+ * Drive tone A and tone B on alternate chips, unbroken, from the same looping
+ * 32-byte ring. This is the preamble pattern with no end, and it exists for
+ * one reading: with the two tones alternating, a single bank capture sees bin 9
+ * and bin 10 in the SAME windows, through the same coupling and the same
+ * amplifier gain, so the 180/200 imbalance design S8 carries into the body
+ * decisions is measured rather than inferred from two captures taken at
+ * different moments.
+ *
+ * Eight words is four A/B pairs, so the ring is chip-aligned however many
+ * times it wraps.
+ */
+void pio_carrier_fsk_alt(void);
+
 /* Clock out chips, one byte per chip: 0 is tone A, non-zero tone B. One word
  * per chip, so max_chips is the whole buffer rather than a fraction of it. */
 void   pio_carrier_fsk_send(const uint8_t *chips, size_t n);

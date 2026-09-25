@@ -375,11 +375,29 @@ static void fsk_dispatch(uint32_t arg, bool have_arg)
     if (!have_arg)    { fsk_walk(); return; }
     if (arg == 2u)    { fsk_align(); return; }
     if (arg == 9u)    { fsk_stop(); return; }
+
     fsk_start();
-    pio_carrier_fsk_tone(arg ? 1 : 0);
-    printf("    driving tone %c (%lu Hz) unbroken; `y 9` stops\n",
-           arg ? 'B' : 'A',
-           (unsigned long)(arg ? HANDOFF_TONE_B_HZ : HANDOFF_TONE_A_HZ));
+    /*
+     * Take the pad, every time, and say so. fsk_init() takes it on the first
+     * call, but `y 2` hands it back when it finishes -- so on a bench where
+     * this board is the transmitter for another one, a `y 0` after an
+     * alignment check would drive a high-Z pad and the far board would read a
+     * quiet room. That is a reading the transcript cannot tell from a dead
+     * coupling path, so the state is printed beside the tone.
+     */
+    pio_carrier_drive(true);
+
+    if (arg == 3u) {
+        pio_carrier_fsk_alt();
+        printf("    driving tone A / tone B on ALTERNATE chips, unbroken\n");
+    } else {
+        pio_carrier_fsk_tone(arg ? 1 : 0);
+        printf("    driving tone %c (%lu Hz) unbroken\n",
+               arg ? 'B' : 'A',
+               (unsigned long)(arg ? HANDOFF_TONE_B_HZ : HANDOFF_TONE_A_HZ));
+    }
+    printf("    pad %s; `y 9` stops\n",
+           pio_carrier_is_driving() ? "DRIVEN" : "high-Z -- nothing is going out");
 }
 
 /* ======================================================================
@@ -461,7 +479,8 @@ static void tx_help(void)
            "  p         pause / resume\n"
            "  1         one frame (while paused)\n"
            "  f         clock tree, measured\n"
-           "  y [0|1|2|9] two tones: check, drive A / B, 2 align, 9 stop\n"
+           "  y [0|1|2|3|9] two tones: check, drive A / B, 2 align,\n"
+           "              3 drive alternating chips, 9 stop\n"
            "  h         this\n", (unsigned long)(GAP_DEFAULT_US / 1000u));
 }
 
@@ -943,6 +962,38 @@ static const char *bank_generator(void)
     return pio_carrier_is_driving() ? "two-tone, DRIVING" : "two-tone, idle";
 }
 
+/*
+ * The operating point, printed under every capture -- because a guard-bin
+ * reading only means something at a LINEAR level (design S10, "what 2b could
+ * not do"), and nothing else on the console says whether this capture was
+ * taken at one.
+ *
+ * Two independent tells, neither of them a tuned number:
+ *
+ *   the excursion  an on-bin tone is a sinusoid at the converter, so its peak
+ *                  is sqrt(2) x RMS. Add that to the mean code and compare
+ *                  against the converter's own 0 and 4095. Crest factor and
+ *                  full scale, nothing chosen.
+ *   the mean code   saturation rectifies, so the operating point WALKS. A
+ *                  quiet board and a loud one reading different mean codes is
+ *                  a distortion signature that needs no crest factor assumed
+ *                  at all -- it is the one that settled the back-to-back
+ *                  bench, where the code went 2309 -> 3622.
+ */
+static void bank_operating_point(void)
+{
+    int32_t mean_code;
+    uint32_t rms = raw_rms(&mean_code);          /* both in tenths of an LSB */
+    int32_t  peak = (int32_t)((uint64_t)rms * 1414u / 1000u / 10u);
+    bool railed = mean_code + peak > 4095 || mean_code - peak < 0;
+
+    printf("    raw ");
+    print_tenths(rms);
+    printf(" LSB RMS about code %ld, so %ld..%ld of 0..4095   %s\n",
+           (long)mean_code, (long)(mean_code - peak), (long)(mean_code + peak),
+           railed ? "RAILED -- guard bins mean nothing here" : "linear");
+}
+
 static void rx_bank_capture(void)
 {
     static const char *k_name[GZB_BINS] = { "TONE A", "TONE B",
@@ -989,6 +1040,8 @@ static void rx_bank_capture(void)
            (unsigned long)noise);
     if (noise) printf(", ratio %lu:1", (unsigned long)(sig / noise));
     printf("\n");
+
+    bank_operating_point();
 
     if (!was_on) hal_pico_set_bank(false);
 }
@@ -1083,7 +1136,8 @@ static void rx_help(void)
            "  t [N]     stream every Nth chip energy; t 0 stops\n"
            "  x [0|1]   self loop: our own carrier into our own receiver\n"
            "  f         clock tree, measured\n"
-           "  y [0|1|2|9] two tones: check, drive A / B, 2 align, 9 stop\n"
+           "  y [0|1|2|3|9] two tones: check, drive A / B, 2 align,\n"
+           "              3 drive alternating chips, 9 stop\n"
            "  k [bin]   move the receive Goertzel to a bin (7..11)\n"
            "  b [1]     walk bins 7,8,9,10,11; b 1 walks every bin\n"
            "  n [0|1|2] five-bin bank: budget, 0 off, 1 on, 2 one capture\n"
