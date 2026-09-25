@@ -1,6 +1,26 @@
 # Link v2 — where to pick this up
 
-Steps 1 through **7** have passed. Start at step 8, the last one.
+**All eight steps have passed and the branch is merged to `main`.** Step 8's
+stated conditions were met on 26 Sep 2026 — 1015 good frames worn against the
+447 asked for, FER 0.1625 against 0.296. Brief §9 has the tables.
+
+**Two things step 8 owes, and both are bench runs, not code:**
+
+| owed | why |
+|---|---|
+| the control run — bands apart, same spacing, nobody touching | it was skipped, so nothing yet attributes the 1015 frames to the body path by measurement |
+| `apps/handoff` worn, on cells, both roles | 93D1 did not come up on its cell, so the SYSTEM has never completed a handshake on a wrist on v2. v1 did, 17 on each board |
+
+Until that second one is taken, v2 is proven as a radio and not as a product.
+It is the one gap against the thing it replaced.
+
+Also open, from the same bench: **`worst gap` went 3 → 18** and the BER column
+went 1.87e-02 → 3.09e-02. Neither is a pass condition and brief §9 explains
+both, but the dropout instrument is worse than it was and nothing has
+explained why.
+
+The rest of this file is the step-8 briefing as it stood, kept because the
+bench recipes and the hazards are still current.
 
 Paste everything from the line below into a fresh session.
 

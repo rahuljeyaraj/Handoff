@@ -1181,6 +1181,73 @@ the return path under test. Nothing is proven until this step.
 **Passes when:** the 447-frame worn result from 24 Sep is matched or beaten,
 and the ~30 % FER is no worse.
 
+### What step 8 actually measured, 26 Sep 2026
+
+**PASSED on both stated conditions.** Both boards floating on their cells, USB
+out of both, TX gated at SW1, plates on the left and right inner wrist of one
+person, ground electrodes fitted. 93D1 carried `linktest_tx`, 379E carried
+`linktest`, both built from this branch at `21309ad`.
+
+| | 24 Sep, v1 | **26 Sep, v2** |
+|---|---|---|
+| good | 447 | **1015** |
+| crc bad | 147 | 123 |
+| lost | 41 | 74 |
+| offered (good+crc+lost) | 635 | 1212 |
+| **FER** | 0.296 | **0.1625** |
+| BER | 1.87e-02 | 3.09e-02 |
+| worst gap | 3 | 18 |
+| margin | — | 78 |
+| dma overruns | — | 0 |
+| false syncs | — | 81 over 513 s |
+| core-1 load | — | 20 % |
+
+Read back by plugging USB into 379E without touching its SW1, the 24 Sep
+trick. The counters were read twice thirteen seconds apart and did not move —
+good stayed 1015 — so nothing was arriving during the readback and every frame
+counted belongs to the worn window.
+
+**FER halved.** That is the condition that mattered: the 447 figure is beatable
+by simply running longer, and the frame-error rate is not.
+
+#### Two numbers went the wrong way, and they are not hidden
+
+**`worst gap` 3 → 18.** Eighteen consecutive frames missing is about 3.2 s with
+nothing arriving. The run offered 1212 frames against 635, so a longer run has
+more chance of a long gap — but 1.9× the length does not account for 6× the
+gap. `worst gap` is the instrument added on 24 Sep
+specifically to answer "did the dropouts stop", and on this reading they are
+not as stopped as they were on 24 Sep. It did not stop the link: FER improved
+anyway, which says the loss is concentrated rather than spread.
+
+**BER 1.87e-02 → 3.09e-02.** `bits` accumulates only over frames that ARRIVED,
+good and bad, never over lost ones — `rx_frame()` in `linktest.c`. So this
+column says v2's bad-CRC frames are more badly mangled than v1's, not that the
+link carries more errors: there are proportionally far fewer of them
+(123/1138 = 10.8 % against 147/594 = 24.7 %). A frame that fails CRC is
+discarded either way. FER is the number with a consumer.
+
+#### What step 8 did NOT prove, and it is two things
+
+**The control run was not taken.** 24 Sep's proof that the coupling is real is
+a table run at the same spacing reading 0 frames, and §9 above asks for it.
+It was skipped at the bench operator's call. Nothing in today's numbers
+attributes the 1015 frames to the body path by measurement — the frozen-counter
+check proves only that they did not arrive during the readback. **If step 8 is
+ever re-run, take the control first.**
+
+**`apps/handoff` has never completed a handshake on a wrist on this branch.**
+The app-level worn run was set up — both bands flashed, counters zeroed, console
+quietened — and did not happen: 93D1 did not come up on its cell. So the radio
+is proven worn and the *system* is not. v1 is proven at that level, 17 complete
+on each board on 24 Sep, step 12e of docs/hardware-bringup.md. **This is the one gap between
+this branch and the thing it replaces**, and it is a bench run, not code.
+
+On the bench, tethered, `apps/handoff` from this branch completes continuously
+and both roles exchange a card — 11 complete in the minutes before the worn
+attempt, 0 self-echoes, 0 both-sender, core-1 load 21 %. That is step 7's
+result standing, not step 8's.
+
 ---
 
 ## 10. What this branch does not change

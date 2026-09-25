@@ -336,7 +336,7 @@ Each step is a bench measurement, not a feature. Stop at any step that fails.
 | 5 | Presence by guard median, tethered | busy tracks reality with the level swept — **PASSED 1fd27d0**, crossover on the derived k |
 | 6 | Frame decode with no slicer | BER at least as good as v1 on the same bench — **PASSED**, better at two gaps of three, and core 1 falls to 21 % |
 | 7 | Nonce beacon and election | two boards, no double-send, no self-trigger — **PASSED**, and the election was derived away rather than built |
-| 8 | Skin path, on cells, floating | §14.1's 447-frame result matched or beaten |
+| 8 | Skin path, on cells, floating | §14.1's 447-frame result matched or beaten — **PASSED**, 1015 good and FER 0.1625 against 447 and 0.296 |
 
 Step 4 is the one that decides whether this is worth it. Do not build past it
 on faith.
