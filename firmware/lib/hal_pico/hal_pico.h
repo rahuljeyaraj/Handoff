@@ -187,4 +187,26 @@ typedef struct {
 
 void hal_pico_clocks(hal_pico_clocks_t *m);
 
+/*
+ * ---- link v2 step 2: read any bin -------------------------------------
+ *
+ * An instrument, not behaviour. hal_pico_set_carrier() moves the transmitter
+ * and the receiver together, which is right for the link and useless for the
+ * bin bank: the guards at 140, 160 and 220 kHz are RECEIVE-ONLY and are not
+ * PIO dividers at all, so set_carrier() refuses them.
+ *
+ * This retunes core 1's Goertzel alone, to any bin the window can hold, and
+ * leaves the generator exactly where it is. With the two-tone generator
+ * driving one tone continuously, walking the bank is then five reads of `m`
+ * — and the one that matters is that bins 7, 8 and 11 stay at the noise while
+ * a tone is being transmitted. A guard that rises with our own transmitter is
+ * v1's floor again (design §4).
+ *
+ * Blocks until core 1 has re-tuned. Chips in flight across the change are
+ * meaningless; reset the frame receiver after it. Returns false, changing
+ * nothing, for a bin at or above Nyquist for the window.
+ */
+bool     hal_pico_set_rx_bin(uint16_t bin);
+uint16_t hal_pico_rx_bin(void);
+
 #endif /* HANDOFF_HAL_PICO_H */

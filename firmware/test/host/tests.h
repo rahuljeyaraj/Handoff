@@ -20,6 +20,7 @@ void test_vectors(void);
 void test_channel(void);
 void test_budget(void);
 void test_clock(void);
+void test_fsk(void);
 
 /*
  * Where tools/gen_vectors.py wrote its output. scripts/test.py drops an

@@ -72,12 +72,22 @@ static volatile uint64_t s_busy_us;
 static volatile bool     s_core1_up;
 static uint64_t          s_core1_t0;
 
-static void core1_dsp_init(gz_t *g, sync_t *sy, carrier_t *car, uint32_t hz)
+/*
+ * Which bin core 1 scores. Normally the carrier's, and hal_pico_set_carrier()
+ * moves both together; the link v2 instrument hal_pico_set_rx_bin() moves this
+ * one alone, so a receive-only guard bin can be read while the transmitter
+ * stays where it is. Same handshake as the carrier: core 0 writes, core 1
+ * re-tunes and echoes.
+ */
+static volatile uint16_t s_rx_bin_req = HANDOFF_GZ_BIN;
+static volatile uint16_t s_rx_bin_ack;
+
+static void core1_dsp_init(gz_t *g, sync_t *sy, carrier_t *car, uint16_t bin)
 {
     /* Bin spacing equals the window rate, so the bin index is just the
-     * carrier divided by it — config.h static-asserts this for the default
+     * frequency divided by it — config.h static-asserts this for the default
      * carrier and hal_pico_set_carrier() checks it for any other. */
-    gz_init(g, HANDOFF_GZ_N, (uint16_t)(hz / (uint32_t)HANDOFF_WINDOW_RATE_HZ));
+    gz_init(g, HANDOFF_GZ_N, bin);
     sync_init(sy, HANDOFF_WINDOWS_PER_CHIP, HANDOFF_CHIP_GUARD);
     carrier_init(car);
 }
@@ -88,6 +98,7 @@ static void core1_main(void)
     sync_t    sy;
     carrier_t car;
     uint32_t  hz = s_carrier_req;
+    uint16_t  bin = s_rx_bin_req;
     uint64_t  busy = 0;
 
     /* This loop runs out of XIP. A flash erase on core 0 — the record store
@@ -96,8 +107,9 @@ static void core1_main(void)
      * path only if this has been called (see run_write there). */
     flash_safe_execute_core_init();
 
-    core1_dsp_init(&g, &sy, &car, hz);
+    core1_dsp_init(&g, &sy, &car, bin);
     s_carrier_ack = hz;
+    s_rx_bin_ack  = bin;
     s_core1_up = true;
 
     for (;;) {
@@ -107,10 +119,22 @@ static void core1_main(void)
         uint32_t seq = 0;
         bool reinit;
 
+        /*
+         * Two requests, and the split is only safe because the bin is derived
+         * from the carrier: a carrier change ALWAYS moves the bin, so the
+         * branch below still rebuilds the DSP for it. Re-issuing the same
+         * carrier rebuilds nothing, which is what it did before as well --
+         * the carrier command re-inits the frame receiver on core 0,
+         * not here.
+         */
         if (s_carrier_req != hz) {
             hz = s_carrier_req;
-            core1_dsp_init(&g, &sy, &car, hz);
             s_carrier_ack = hz;
+        }
+        if (s_rx_bin_req != bin) {
+            bin = s_rx_bin_req;
+            core1_dsp_init(&g, &sy, &car, bin);
+            s_rx_bin_ack = bin;
         }
 
         /* A VSYS request is acted on the moment it is seen, block or not:
@@ -140,7 +164,7 @@ static void core1_main(void)
          * 4 ms.
          */
         if (adc_ring_aux_step(blk, n, seq, &reinit)) {
-            if (reinit) core1_dsp_init(&g, &sy, &car, hz);
+            if (reinit) core1_dsp_init(&g, &sy, &car, bin);
             busy += time_us_64() - t0;
             s_busy_us = busy;
             continue;
@@ -411,6 +435,7 @@ bool hal_pico_set_carrier(uint32_t hz)
 
     if (!s_inited) {
         s_carrier_req = hz;
+        s_rx_bin_req  = (uint16_t)bin;
         return true;
     }
 
@@ -421,11 +446,28 @@ bool hal_pico_set_carrier(uint32_t hz)
     pio_carrier_drive(false);
 
     s_carrier_req = hz;
-    while (s_carrier_ack != hz) tight_loop_contents();
+    s_rx_bin_req  = (uint16_t)bin;
+    while (s_carrier_ack != hz || s_rx_bin_ack != (uint16_t)bin)
+        tight_loop_contents();
     return true;
 }
 
 uint32_t hal_pico_carrier_hz(void) { return s_carrier_req; }
+
+bool hal_pico_set_rx_bin(uint16_t bin)
+{
+    /* Bin 0 is DC, and the transform folds above Nyquist. Nothing else to
+     * check: a receive-only bin owes the PIO nothing. */
+    if (bin == 0 || 2u * (uint32_t)bin >= (uint32_t)HANDOFF_GZ_N) return false;
+
+    if (!s_inited) { s_rx_bin_req = bin; return true; }
+
+    s_rx_bin_req = bin;
+    while (s_rx_bin_ack != bin) tight_loop_contents();
+    return true;
+}
+
+uint16_t hal_pico_rx_bin(void) { return s_rx_bin_req; }
 
 uint32_t hal_pico_tx_stalls(pio_carrier_state_t *last)
 {

@@ -174,10 +174,218 @@ static char parse(const char *line, uint32_t *arg, bool *have_arg)
 }
 
 /* ======================================================================
+ * Link v2 step 2 -- the two-tone generator, self-measured
+ * ======================================================================
+ *
+ * No scope and no second board: pio_carrier_measure_hz() runs a second state
+ * machine counting rising edges on the pad, independent of whatever is driving
+ * it. Check 2a is that both tones come out within 0.1 % of nominal.
+ *
+ * The input buffer has to be on for the counter to see the pad, and the
+ * shipped link keeps it off (RP2350-E9, see pio_carrier_sense) -- so it is
+ * turned on around the gate and off again, which is what bringup does.
+ */
+#define FSK_GATE_US 200000u
+
+/* Both live in the transmitter section below; the alignment check clocks a
+ * real encoded frame out of the two-tone generator. */
+static uint8_t s_chips[FRAME_TOTAL_CHIPS];
+static size_t  encode(uint16_t seq);
+
+static uint32_t ppm_err(uint32_t got, uint32_t want)
+{
+    uint32_t d = got > want ? got - want : want - got;
+    return want ? (uint32_t)(((uint64_t)d * 1000000u + want / 2u) / want) : 0u;
+}
+
+static void fsk_start(void)
+{
+    if (!pio_carrier_fsk_active()) {
+        pio_carrier_fsk_init();
+        printf("    two-tone generator has the pad; `y 9` hands it back\n");
+    }
+}
+
+static void fsk_stop(void)
+{
+    if (!pio_carrier_fsk_active()) return;
+    pio_carrier_sense(false);
+    pio_carrier_drive(false);
+    pio_carrier_init(hal_pico_carrier_hz());   /* v1 generator, v1 divider */
+    pio_carrier_sense(false);
+    pio_carrier_drive(false);
+    printf("    v1 generator has the pad again, pad high-Z\n");
+}
+
+static uint32_t fsk_measure(int tone, uint32_t want, bool verdict)
+{
+    uint32_t got, err, duty;
+
+    fsk_start();
+    pio_carrier_fsk_tone(tone);
+    pio_carrier_sense(true);
+    got  = pio_carrier_measure_hz(FSK_GATE_US);
+    duty = pio_carrier_duty_ppm(FSK_GATE_US);
+    pio_carrier_sense(false);
+
+    err = ppm_err(got, want);
+    printf("    tone %c  bin %2u  nominal %lu Hz  measured %lu Hz  %lu ppm",
+           tone ? 'B' : 'A',
+           (unsigned)(tone ? HANDOFF_TONE_B_BIN : HANDOFF_TONE_A_BIN),
+           (unsigned long)want, (unsigned long)got, (unsigned long)err);
+    if (verdict) printf("   %s", err <= 1000u ? "PASS" : "FAIL");   /* 0.1 % */
+    /*
+     * The duty, ON THE PAD. This is the number the guard bins are supposed to
+     * be a proxy for, and reading it here is how a generator that slipped is
+     * told apart from an amplifier that distorted.
+     */
+    printf("\n            duty %lu.%04lu %% of the gate",
+           (unsigned long)(duty / 10000u), (unsigned long)(duty % 10000u));
+    if (verdict) printf("   %s",
+           (duty > 495000u && duty < 505000u) ? "50 % within 0.5 pt" : "NOT 50 %");
+    printf("\n");
+    return err;
+}
+
+/*
+ * Check 2a end to end, with the arithmetic it is checking printed beside the
+ * reading -- so the transcript records what the words were as well as what
+ * came out of the pad.
+ */
+static void fsk_walk(void)
+{
+    uint32_t ea, eb;
+
+    printf("\n  --- two-tone generator, %lu ms gate ---\n",
+           (unsigned long)(FSK_GATE_US / 1000u));
+    printf("    chip word A %08lX = %u periods of %u cycles (loop %u, y %u)\n",
+           (unsigned long)HANDOFF_FSK_WORD_A, (unsigned)HANDOFF_FSK_PERIODS_A,
+           (unsigned)HANDOFF_FSK_PERIOD_A, (unsigned)HANDOFF_FSK_ISR_A,
+           (unsigned)HANDOFF_FSK_Y_A);
+    printf("    chip word B %08lX = %u periods of %u cycles (loop %u, y %u)\n",
+           (unsigned long)HANDOFF_FSK_WORD_B, (unsigned)HANDOFF_FSK_PERIODS_B,
+           (unsigned)HANDOFF_FSK_PERIOD_B, (unsigned)HANDOFF_FSK_ISR_B,
+           (unsigned)HANDOFF_FSK_Y_B);
+    printf("    both chips %u cycles = %lu us\n",
+           (unsigned)HANDOFF_FSK_CHIP_CYCLES, (unsigned long)HANDOFF_CHIP_US);
+
+    ea = fsk_measure(0, (uint32_t)HANDOFF_TONE_A_HZ, true);
+    eb = fsk_measure(1, (uint32_t)HANDOFF_TONE_B_HZ, true);
+
+    printf("    2a %s\n", (ea <= 1000u && eb <= 1000u)
+           ? "PASSED: both tones within 0.1 % of nominal"
+           : "FAILED: a tone is off by more than 0.1 %");
+}
+
+/*
+ * Check 2c, done at the pad rather than through the receiver.
+ *
+ * The hazard pio_carrier.pio warns about is a cycle-count imbalance between
+ * the two symbol paths: it shifts every chip after the first, so errors
+ * accumulate down the frame rather than scattering. The brief proposes finding
+ * that by decoding a known 624-chip pattern through the self loop -- but the
+ * self loop saturates the receiver (mean code 3564 of 4095 on this board, and
+ * 3638 for the v1 generator, so it is the bench and not the generator), and a
+ * decode through a railed ADC proves nothing either way.
+ *
+ * Counting edges proves MORE, and needs no receiver at all. Each chip is a
+ * whole number of tone periods, and one period is one rising edge:
+ *
+ *      tone A chip  ->  HANDOFF_FSK_PERIODS_A rising edges
+ *      tone B chip  ->  HANDOFF_FSK_PERIODS_B rising edges
+ *
+ * so the edge count across any chip pattern is exact arithmetic, and it is
+ * exact only if every chip got precisely its own cycles. One chip short or
+ * long anywhere in the frame shows up in the total. An imbalance that shifted
+ * chips without losing periods would still hold the count -- which is why the
+ * duty and frequency measurements above are run as well: together they pin
+ * the period, its two halves, and the chip boundary.
+ */
+static void fsk_align_one(const char *what, const uint8_t *chips, size_t n)
+{
+    uint32_t want = 0, got;
+    uint64_t until;
+    size_t i;
+
+    for (i = 0; i < n; i++)
+        want += chips[i] ? (uint32_t)HANDOFF_FSK_PERIODS_B
+                         : (uint32_t)HANDOFF_FSK_PERIODS_A;
+
+    fsk_start();
+    /* The check leaves the pad released when it finishes, so a second run
+     * would count a high-Z pad: take it back every time. */
+    pio_carrier_drive(true);
+    /*
+     * Stop whatever the generator was doing BEFORE opening the gate. A 2a
+     * measurement leaves a tone looping, and fsk_send() spends tens of
+     * microseconds building 624 words before its DMA starts -- so a gate
+     * opened first counts that tail and reads eleven edges long. Found by
+     * this check disagreeing with itself on its first pattern only.
+     */
+    pio_carrier_reset();
+    pio_carrier_sense(true);
+    pio_carrier_count_begin();
+    pio_carrier_fsk_send(chips, n);
+
+    /*
+     * busy() clears when the DMA is done and the FIFO empty, but the joined
+     * FIFO holds eight words -- eight chips, 2 ms -- and the OSR one more. So
+     * wait out the airtime from the DMA start instead, plus a chip of margin.
+     */
+    until = pio_carrier_started_us() + (uint64_t)(n + 1u) * HANDOFF_CHIP_US;
+    while (hal_now_us(s_hal) < until) tight_loop_contents();
+
+    got = pio_carrier_count_end();
+    pio_carrier_sense(false);
+
+    printf("    %-22s %4u chips  want %6lu edges  got %6lu   %s\n",
+           what, (unsigned)n, (unsigned long)want, (unsigned long)got,
+           got == want ? "EXACT" : "MISMATCH");
+}
+
+static void fsk_align(void)
+{
+    static uint8_t pat[FRAME_TOTAL_CHIPS];
+    size_t n = FRAME_TOTAL_CHIPS, i, frame_n;
+
+    printf("\n  --- chip alignment by edge count, at the pad ---\n");
+    printf("    tone A chip = %u periods, tone B chip = %u periods\n",
+           (unsigned)HANDOFF_FSK_PERIODS_A, (unsigned)HANDOFF_FSK_PERIODS_B);
+
+    memset(pat, 0, n);
+    fsk_align_one("all tone A", pat, n);
+
+    memset(pat, 1, n);
+    fsk_align_one("all tone B", pat, n);
+
+    for (i = 0; i < n; i++) pat[i] = (uint8_t)(i & 1u);
+    fsk_align_one("alternating A/B", pat, n);
+
+    /* A real encoded frame: preamble, marker, Manchester body and CRC, which
+     * is the pattern the link will actually clock out. */
+    frame_n = encode(0);
+    fsk_align_one("an encoded frame", s_chips, frame_n);
+
+    /* And the pad back to where the link leaves it. */
+    pio_carrier_drive(false);
+}
+
+static void fsk_dispatch(uint32_t arg, bool have_arg)
+{
+    if (!have_arg)    { fsk_walk(); return; }
+    if (arg == 2u)    { fsk_align(); return; }
+    if (arg == 9u)    { fsk_stop(); return; }
+    fsk_start();
+    pio_carrier_fsk_tone(arg ? 1 : 0);
+    printf("    driving tone %c (%lu Hz) unbroken; `y 9` stops\n",
+           arg ? 'B' : 'A',
+           (unsigned long)(arg ? HANDOFF_TONE_B_HZ : HANDOFF_TONE_A_HZ));
+}
+
+/* ======================================================================
  * Transmitter
  * ====================================================================== */
 
-static uint8_t  s_chips[FRAME_TOTAL_CHIPS];
 static uint16_t s_tx_seq;
 static uint32_t s_tx_sent, s_tx_refused;
 static uint32_t s_gap_us = GAP_DEFAULT_US;
@@ -253,6 +461,7 @@ static void tx_help(void)
            "  p         pause / resume\n"
            "  1         one frame (while paused)\n"
            "  f         clock tree, measured\n"
+           "  y [0|1|2|9] two tones: check, drive A / B, 2 align, 9 stop\n"
            "  h         this\n", (unsigned long)(GAP_DEFAULT_US / 1000u));
 }
 
@@ -274,6 +483,7 @@ static void tx_dispatch(const char *line, bool *one_shot)
         break;
     case '1': *one_shot = true; break;
     case 'f': clocks_print(); break;
+    case 'y': fsk_dispatch(arg, have_arg); break;
     case 'h': case '?': tx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }
@@ -543,8 +753,10 @@ static void rx_measure(void)
     uint32_t mean, max, sig, floor;
     int32_t  mean_code, floor_mean;
 
-    printf("\n  --- measure at %lu Hz, %lu ms ---\n",
-           (unsigned long)hal_pico_carrier_hz(), (unsigned long)(MEASURE_US / 1000u));
+    printf("\n  --- measure on bin %u (%lu kHz), %lu ms ---\n",
+           (unsigned)hal_pico_rx_bin(),
+           (unsigned long)(hal_pico_rx_bin() * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
+           (unsigned long)(MEASURE_US / 1000u));
     mean = rx_energy(MEASURE_US, &max);
     sig  = raw_rms(&mean_code);
     floor = hal_pico_noise_floor(&floor_mean);
@@ -602,6 +814,107 @@ static void selfloop_set(bool on)
            on ? " - own carrier into our own receiver; `m` now reads it" : "");
 }
 
+/*
+ * Link v2 step 2b -- the bin bank, one bin at a time.
+ *
+ * The real bank is step 3; this walks the five bins SEQUENTIALLY with the one
+ * Goertzel core 1 already has, retuning between reads. That cannot show the
+ * two tones alternating -- for that the bins must be scored in the same window
+ * -- but it does show the thing step 4 calls its kill switch, and shows it a
+ * step early and on one board: whether a GUARD bin rises while we transmit.
+ *
+ * Drive one tone with `y 0` or `y 1`, then `b`. Bins 9 and 10 are the tones,
+ * 7, 8 and 11 the guards. A guard reading anywhere near the driven tone means
+ * the transmitter is leaking outside its bins and the noise reference is
+ * poisoned, which is v1's floor in a new hat.
+ */
+#define BANK_SETTLE_US 60000u    /* the retune transient, several chips */
+#define BANK_US       200000u
+
+/*
+ * `b 1` sweeps every bin below Nyquist rather than the five the design uses.
+ * That is what turns "a guard bin rose" into "here is the harmonic comb", and
+ * a comb is readable: a duty-cycle error puts energy in the EVEN harmonics
+ * only, while a non-linearity anywhere in the amplifier fills in bins no
+ * harmonic of the tone can reach at all.
+ */
+static void rx_bank_full(void)
+{
+    uint16_t back = hal_pico_rx_bin();
+    uint16_t bin;
+
+    printf("\n  --- every bin, %lu ms each, generator %s ---\n",
+           (unsigned long)(BANK_US / 1000u),
+           pio_carrier_fsk_active()
+               ? (pio_carrier_is_driving() ? "two-tone, DRIVING" : "two-tone, idle")
+               : "v1");
+
+    for (bin = 1u; 2u * bin < (uint16_t)HANDOFF_GZ_N; bin++) {
+        uint32_t mean, max;
+
+        if (!hal_pico_set_rx_bin(bin)) continue;
+        frame_rx_init(&s_rx);
+        (void)rx_energy(BANK_SETTLE_US, 0);
+        mean = rx_energy(BANK_US, &max);
+
+        printf("    bin %2u  %3lu kHz  mean ", (unsigned)bin,
+               (unsigned long)(bin * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u));
+        print_tenths(mean);
+        printf(" LSB  max %lu LSB\n", (unsigned long)max);
+    }
+
+    hal_pico_set_rx_bin(back);
+    frame_rx_init(&s_rx);
+    rx_zero();
+    printf("    back on bin %u\n", (unsigned)back);
+}
+
+static void rx_bank(void)
+{
+    static const uint16_t k_bins[] = {
+        HANDOFF_GUARD_LO_BIN, HANDOFF_GUARD_MID_BIN,
+        HANDOFF_TONE_A_BIN, HANDOFF_TONE_B_BIN, HANDOFF_GUARD_HI_BIN
+    };
+    uint16_t back = hal_pico_rx_bin();
+    uint32_t tone_max = 0, guard_max = 0;
+    size_t i;
+
+    printf("\n  --- bin bank, %lu ms a bin, generator %s ---\n",
+           (unsigned long)(BANK_US / 1000u),
+           pio_carrier_fsk_active()
+               ? (pio_carrier_is_driving() ? "two-tone, DRIVING" : "two-tone, idle")
+               : "v1");
+
+    for (i = 0; i < count_of(k_bins); i++) {
+        uint16_t bin = k_bins[i];
+        bool tone = bin == HANDOFF_TONE_A_BIN || bin == HANDOFF_TONE_B_BIN;
+        uint32_t mean, max;
+
+        if (!hal_pico_set_rx_bin(bin)) { printf("    bin %u refused\n", bin); continue; }
+        frame_rx_init(&s_rx);
+        (void)rx_energy(BANK_SETTLE_US, 0);        /* discard the transient */
+        mean = rx_energy(BANK_US, &max);
+
+        printf("    bin %2u  %3lu kHz  %-7s  mean ", (unsigned)bin,
+               (unsigned long)(bin * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u),
+               tone ? "TONE" : "guard");
+        print_tenths(mean);
+        printf(" LSB  max %lu LSB\n", (unsigned long)max);
+
+        if (tone) { if (max > tone_max)  tone_max  = max; }
+        else      { if (max > guard_max) guard_max = max; }
+    }
+
+    hal_pico_set_rx_bin(back);
+    frame_rx_init(&s_rx);
+    rx_zero();
+
+    printf("    loudest tone bin %lu LSB, loudest guard %lu LSB",
+           (unsigned long)tone_max, (unsigned long)guard_max);
+    if (guard_max) printf("  (ratio %lu:1)", (unsigned long)(tone_max / guard_max));
+    printf("\n    back on bin %u\n", (unsigned)back);
+}
+
 static void rx_help(void)
 {
     printf("\n  c 40|200  carrier, kHz\n"
@@ -613,6 +926,9 @@ static void rx_help(void)
            "  t [N]     stream every Nth chip energy; t 0 stops\n"
            "  x [0|1]   self loop: our own carrier into our own receiver\n"
            "  f         clock tree, measured\n"
+           "  y [0|1|2|9] two tones: check, drive A / B, 2 align, 9 stop\n"
+           "  k [bin]   move the receive Goertzel to a bin (7..11)\n"
+           "  b [1]     walk bins 7,8,9,10,11; b 1 walks every bin\n"
            "  h         this\n");
 }
 
@@ -652,6 +968,21 @@ static void rx_dispatch(const char *line)
         selfloop_set(have_arg ? arg != 0u : !s_selfloop);
         break;
     case 'f': clocks_print(); break;
+    case 'y': fsk_dispatch(arg, have_arg); break;
+    case 'k':
+        if (!have_arg) printf("    receive bin %u\n", (unsigned)hal_pico_rx_bin());
+        else if (!hal_pico_set_rx_bin((uint16_t)arg))
+            printf("    bin %lu is DC or above Nyquist for N=%d\n",
+                   (unsigned long)arg, HANDOFF_GZ_N);
+        else {
+            frame_rx_init(&s_rx);
+            rx_zero();
+            printf("    receive bin %lu (%lu kHz), frame receiver reset\n",
+                   (unsigned long)arg,
+                   (unsigned long)(arg * (uint32_t)HANDOFF_WINDOW_RATE_HZ / 1000u));
+        }
+        break;
+    case 'b': if (have_arg && arg) rx_bank_full(); else rx_bank(); break;
     case 'h': case '?': rx_help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }

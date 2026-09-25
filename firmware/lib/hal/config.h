@@ -117,6 +117,52 @@
 #define HANDOFF_CHIP_US           (1000000 / HANDOFF_CHIP_RATE_HZ)
 
 /*
+ * ---- link v2: the two-tone generator's chip words (brief S3) -------------
+ *
+ * One 32-bit word per chip, built here and nowhere else. Every field is the
+ * clock divided by a structural number; none of it is typed.
+ *
+ *   period cycles  = sys_clk / tone            800 and 720 at 144 MHz
+ *   half loop      = (period - overhead) / 2   396 and 356
+ *   periods a chip = chip cycles / period      45 and 50
+ *
+ * The overhead is what fsk_out spends on each period outside its two delay
+ * loops: set, mov, the loop-back jmp, and the one delay cycle that keeps the
+ * two halves equal. See pio_carrier.pio, which balances it to the cycle.
+ *
+ * y is periods - 2, not periods - 1, because the program emits two periods
+ * outside its loop: the one that carries the two OUT instructions inside its
+ * own halves, and the fall-through into the loop head. That is what makes a
+ * chip exactly HANDOFF_FSK_CHIP_CYCLES rather than two cycles more.
+ */
+#define HANDOFF_FSK_PERIOD_OVERHEAD  8
+
+#define HANDOFF_FSK_PERIOD_A   (HANDOFF_SYS_CLK_HZ / HANDOFF_TONE_A_HZ)
+#define HANDOFF_FSK_PERIOD_B   (HANDOFF_SYS_CLK_HZ / HANDOFF_TONE_B_HZ)
+
+#define HANDOFF_FSK_ISR_A \
+    ((HANDOFF_FSK_PERIOD_A - HANDOFF_FSK_PERIOD_OVERHEAD) / 2)
+#define HANDOFF_FSK_ISR_B \
+    ((HANDOFF_FSK_PERIOD_B - HANDOFF_FSK_PERIOD_OVERHEAD) / 2)
+
+#define HANDOFF_FSK_CHIP_CYCLES (HANDOFF_SYS_CLK_HZ / HANDOFF_CHIP_RATE_HZ)
+
+#define HANDOFF_FSK_PERIODS_A  (HANDOFF_FSK_CHIP_CYCLES / HANDOFF_FSK_PERIOD_A)
+#define HANDOFF_FSK_PERIODS_B  (HANDOFF_FSK_CHIP_CYCLES / HANDOFF_FSK_PERIOD_B)
+
+#define HANDOFF_FSK_Y_A        (HANDOFF_FSK_PERIODS_A - 2)
+#define HANDOFF_FSK_Y_B        (HANDOFF_FSK_PERIODS_B - 2)
+
+/* The OSR shifts LEFT and autopull is 32, so `out y, 16` takes the top half
+ * of the word and `out isr, 16` the bottom. */
+#define HANDOFF_FSK_WORD(y, isr)                                \
+    ((((unsigned long)(y) & 0xFFFFuL) << 16) |                  \
+      ((unsigned long)(isr) & 0xFFFFuL))
+
+#define HANDOFF_FSK_WORD_A  HANDOFF_FSK_WORD(HANDOFF_FSK_Y_A, HANDOFF_FSK_ISR_A)
+#define HANDOFF_FSK_WORD_B  HANDOFF_FSK_WORD(HANDOFF_FSK_Y_B, HANDOFF_FSK_ISR_B)
+
+/*
  * How long carrier detection takes to raise its flag — about four chips, from
  * carrier.c's fast EMA. Derived, because it scales with the chip period.
  */
@@ -229,6 +275,51 @@ HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_CLEAR(HANDOFF_GUARD_MID_BIN),
     "mid guard bin is contaminated by a tone harmonic");
 HANDOFF_STATIC_ASSERT(HANDOFF_GUARD_CLEAR(HANDOFF_GUARD_HI_BIN),
     "high guard bin is contaminated by a tone harmonic");
+
+/*
+ * ---- link v2: the chip words have to close, exactly ----------------------
+ *
+ * A chip that is not a whole number of tone periods, or a period whose two
+ * halves are not equal, is a timing error with the same sign every chip --
+ * so it walks the chip clock down the frame rather than scattering. That is
+ * the one failure pio_carrier.pio's original comment warned about, and the
+ * only defence is that the arithmetic closes here.
+ */
+HANDOFF_STATIC_ASSERT(HANDOFF_FSK_PERIOD_A * HANDOFF_FSK_PERIODS_A
+                          == HANDOFF_FSK_CHIP_CYCLES,
+    "tone A: a chip is not a whole number of periods");
+HANDOFF_STATIC_ASSERT(HANDOFF_FSK_PERIOD_B * HANDOFF_FSK_PERIODS_B
+                          == HANDOFF_FSK_CHIP_CYCLES,
+    "tone B: a chip is not a whole number of periods");
+
+/* Both tones must take the SAME number of cycles per chip, or the two
+ * symbols are different lengths on the wire and Manchester loses its edge. */
+HANDOFF_STATIC_ASSERT(HANDOFF_FSK_PERIOD_A * HANDOFF_FSK_PERIODS_A
+                          == HANDOFF_FSK_PERIOD_B * HANDOFF_FSK_PERIODS_B,
+    "the two tones do not take the same number of cycles per chip");
+
+/* The generator rebuilds each period from two equal halves of isr + 4. */
+HANDOFF_STATIC_ASSERT(2 * HANDOFF_FSK_ISR_A + HANDOFF_FSK_PERIOD_OVERHEAD
+                          == HANDOFF_FSK_PERIOD_A,
+    "tone A half-period loop does not reconstruct its period");
+HANDOFF_STATIC_ASSERT(2 * HANDOFF_FSK_ISR_B + HANDOFF_FSK_PERIOD_OVERHEAD
+                          == HANDOFF_FSK_PERIOD_B,
+    "tone B half-period loop does not reconstruct its period");
+
+/* Two periods are emitted outside the loop, so y cannot go below zero. */
+HANDOFF_STATIC_ASSERT(HANDOFF_FSK_PERIODS_A >= 2 && HANDOFF_FSK_PERIODS_B >= 2,
+    "a chip must hold at least two tone periods");
+
+/* Both fields are 16 bits of one word. */
+HANDOFF_STATIC_ASSERT(HANDOFF_FSK_ISR_A <= 0xFFFF && HANDOFF_FSK_ISR_B <= 0xFFFF,
+    "half-period loop count does not fit 16 bits");
+HANDOFF_STATIC_ASSERT(HANDOFF_FSK_Y_A <= 0xFFFF && HANDOFF_FSK_Y_B <= 0xFFFF,
+    "period count does not fit 16 bits");
+
+/* A chip is a whole number of microseconds of system clock, which is what
+ * lets the bench state the chip period without a rounding note. */
+HANDOFF_STATIC_ASSERT(HANDOFF_SYS_CLK_HZ % HANDOFF_CHIP_RATE_HZ == 0,
+    "a chip is not a whole number of system cycles");
 
 HANDOFF_STATIC_ASSERT(HANDOFF_FRAG_PAYLOAD >= 8 && HANDOFF_FRAG_PAYLOAD <= 255,
     "fragment payload out of range");
