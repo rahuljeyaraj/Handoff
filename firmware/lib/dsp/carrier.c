@@ -51,7 +51,8 @@ static void prime_begin(carrier_t *c)
 void carrier_init(carrier_t *c)
 {
     c->fast_shift   = 2;    /* ~4 chips, which is what sets HANDOFF_DETECT_US */
-    c->slow_shift   = 8;    /* ~256 chips of ambient, ~64 ms                  */
+    c->slow_shift   = 8;    /* ~256 chips of ambient, ~64 ms, going DOWN      */
+    c->rise_shift   = 10;   /* 4x slower going up — see carrier_push()        */
     c->ratio_num    = 24;   /* present at 3x the ambient floor (24/8)         */
     c->min_delta    = 24;   /* ...and at least this far above it, in LSB      */
     c->hold_chips   = 8;
@@ -59,8 +60,12 @@ void carrier_init(carrier_t *c)
     c->prime_shift  = 2;
     c->freeze_chips = 12000;
 
-    c->level = 0;
-    c->held  = 0;
+    c->level      = 0;
+    c->held       = 0;
+    c->peak       = 0;
+    c->peak_floor = 0;
+    c->floor_hi   = 0;
+    c->floor_lo   = 0xFFFFFFFFu;
     floor_set(c, 1);
     carrier_reprime(c);
 }
@@ -99,6 +104,11 @@ void carrier_push(carrier_t *c, uint16_t chip_energy)
     if (!c->primed) { c->level = e; c->primed = true; }
     else c->level += ((int32_t)e - (int32_t)c->level) >> c->fast_shift;
 
+    /* Instrument only, and deliberately outside every branch below: a peak
+     * that reset() cleared would be blank for exactly the turns worth
+     * watching. See carrier_take_peak(). */
+    if (c->level > c->peak) { c->peak = c->level; c->peak_floor = c->floor; }
+
     if (c->prime_left) {
         /*
          * Prime the floor from the MINIMUM over a window, not from one chip and
@@ -127,10 +137,22 @@ void carrier_push(carrier_t *c, uint16_t chip_energy)
          * by prime_shift before it is believed. Undershooting is the safe
          * direction: a floor that is too low is over-sensitive, one that is too
          * high is deaf, and only one of those recovers by itself.
+         *
+         * AND THE RUNNING MINIMUM IS NOT PUBLISHED STRAIGHT AWAY, because a
+         * minimum over three chips is not a minimum. prime_min starts at its
+         * type's maximum, so the FIRST chip of the window sets it outright and
+         * the floor becomes four times whatever that chip happened to be. Land
+         * that on a peer's flat tone and the floor reads 800 against a level of
+         * 200 — caught on 93D1 on 25 Sep 2026, one second after a reboot, which
+         * is the same shape as the 32-chip window that cost three phase-sweep
+         * offsets. Holding the old floor for the first quarter of the window
+         * puts 16 ms in front of the first publication, which is longer than
+         * HANDOFF_SHOUT_US, so a shout can no longer be the whole sample.
          */
         if (e < c->prime_min) c->prime_min = (uint16_t)e;
-        floor_set(c, (uint32_t)c->prime_min << c->prime_shift);
         c->prime_left--;
+        if (c->prime_chips - c->prime_left >= (c->prime_chips >> 2))
+            floor_set(c, (uint32_t)c->prime_min << c->prime_shift);
     } else if (!c->present || c->held >= c->freeze_chips) {
         /*
          * A true average, and it learns only while the channel is quiet. The
@@ -151,13 +173,69 @@ void carrier_push(carrier_t *c, uint16_t chip_energy)
          * sticky across a transmit turn, when no chips are drained at all, so
          * `held` is chips of unbroken presence rather than elapsed time; a
          * whole handshake measures under 2000.
+         *
+         * AND THE FREEZE ALONE IS NOT ENOUGH, because it is armed by presence
+         * and presence is decided against the floor. A signal too weak to pass
+         * the gate never raises presence, never freezes anything, and is
+         * averaged straight into the floor — which raises the gate, which makes
+         * the next one weaker still. That is a ratchet the other way up from the
+         * one this file already describes, and it was watched happening: 93D1
+         * idled at floor 85-177 against 379E's 10-23 on the same bench, and its
+         * plotted floor stepped up with the level instead of sitting under it,
+         * while it heard 20 of 60 of its peer's shouts and its peer heard 2 of
+         * 107 of the same shouts back.
+         *
+         * So a chip that is itself carrier-shaped is not ambient and is not
+         * learned from. The test is the presence test of the bottom of this
+         * function, applied to the RAW chip rather than to `level` and with no
+         * hysteresis: same two constants, no third one to tune. Ambient sits a
+         * few LSB either side of the floor and comes nowhere near passing it, so
+         * the average still lands on the room's mean and not on its minimum —
+         * which is the property the rest of this file exists to protect.
+         *
+         * The backstop is deliberately exempt. It runs only when presence has
+         * held so long that the floor itself is the suspect, and every chip it
+         * sees is carrier-shaped by definition; trimming there would be the
+         * latch defending itself, and the floor could never climb out.
+         *
+         * AND THE TRIM ALONE IS NOT ENOUGH EITHER, because its own threshold is
+         * built out of the floor. The higher the floor, the wider the band of
+         * chips that are too quiet to be trimmed and too loud to be the room —
+         * so a floor that has started to climb trims less and climbs faster.
+         * Measured on 25 Sep 2026 with the trim in: 379E, floor 5, trimmed
+         * everything above 29 and ranged 5..5 over a second; 93D1, floor 55,
+         * trimmed nothing below 165 and ranged 51..130 in the same second. At
+         * 130 its gate stood at 390 against a peak level of 220, so it was deaf
+         * — and a deaf detector reads a frame as quiet and averages it in.
+         *
+         * So the floor rises on a longer time constant than it falls. That
+         * breaks the loop rather than narrowing it: a floor pushed too high
+         * goes deaf, reads the channel as quiet, and the fast fall is what
+         * brings it back. Undershooting is the safe direction, as the prime
+         * above says for the same reason. The asymmetry is small — 4x — because
+         * a large one settles the floor down near the MINIMUM of the room
+         * again, which is the fault this whole file was rewritten to fix.
          */
-        const int32_t d = (int32_t)(e << FLOOR_FRAC) - (int32_t)c->floor_acc;
+        const bool stuck = c->present;      /* reachable only via the backstop */
+        const bool carrier_like =
+            (uint64_t)e * 8u > (uint64_t)c->floor * c->ratio_num &&
+            e > (uint32_t)c->floor + c->min_delta;
 
-        c->floor_acc = (uint32_t)((int32_t)c->floor_acc + (d >> c->slow_shift));
-        if (c->floor_acc < FLOOR_ONE) c->floor_acc = FLOOR_ONE;
-        c->floor = c->floor_acc >> FLOOR_FRAC;
+        if (stuck || !carrier_like) {
+            const int32_t d =
+                (int32_t)(e << FLOOR_FRAC) - (int32_t)c->floor_acc;
+            const uint8_t sh = (d > 0) ? c->rise_shift : c->slow_shift;
+
+            c->floor_acc = (uint32_t)((int32_t)c->floor_acc + (d >> sh));
+            if (c->floor_acc < FLOOR_ONE) c->floor_acc = FLOOR_ONE;
+            c->floor = c->floor_acc >> FLOOR_FRAC;
+        }
     }
+
+    /* The floor's excursion over the reading window — see carrier_take_peak().
+     * Sampled after every path that can move it, including the prime. */
+    if (c->floor > c->floor_hi) c->floor_hi = c->floor;
+    if (c->floor < c->floor_lo) c->floor_lo = c->floor;
 
     /*
      * Both tests, and the second one is what the ratio alone cannot do: near a
@@ -181,3 +259,17 @@ bool     carrier_present(const carrier_t *c) { return c->present; }
 uint32_t carrier_level(const carrier_t *c)   { return c->level; }
 uint32_t carrier_floor(const carrier_t *c)   { return c->floor; }
 bool     carrier_primed(const carrier_t *c)  { return c->primed; }
+
+void carrier_take_peak(carrier_t *c, carrier_peak_t *out)
+{
+    if (out) {
+        out->level      = c->peak;
+        out->floor_then = c->peak_floor;
+        out->floor_hi   = c->floor_hi;
+        out->floor_lo   = (c->floor_lo == 0xFFFFFFFFu) ? c->floor : c->floor_lo;
+    }
+    c->peak       = 0;
+    c->peak_floor = 0;
+    c->floor_hi   = 0;
+    c->floor_lo   = 0xFFFFFFFFu;
+}

@@ -923,6 +923,21 @@ static void print_stats(void)
            carrier_primed(&s_sm.carrier) ? "" : " (stale: re-priming, no chips since reset)",
            (unsigned)carrier_present(&s_sm.carrier),
            (unsigned long)s_sm.framer.syncs);
+    {
+        /*
+         * What the detector did SINCE THE LAST `s`, which is the only way to
+         * see an 11 ms event from a console a person types at. floor hi/lo is
+         * the answer to "is the floor moving with the level" — a floor doing
+         * its job barely moves while the level swings by ten times as much.
+         */
+        carrier_peak_t pk;
+
+        carrier_take_peak(&s_sm.carrier, &pk);
+        printf("           since last s: peak level %lu (floor %lu then); "
+               "floor ranged %lu..%lu\n",
+               (unsigned long)pk.level, (unsigned long)pk.floor_then,
+               (unsigned long)pk.floor_lo, (unsigned long)pk.floor_hi);
+    }
     printf("           chips %lu at %lu sps; vsys %u mV %s, %lu reads %lu failed, last %lu us\n",
            (unsigned long)hal_pico_chips(), (unsigned long)hal_pico_sps(),
            (unsigned)s_vsys_mv, s_on_usb ? "usb" : "batt",

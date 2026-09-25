@@ -35,8 +35,14 @@ typedef struct {
     uint32_t floor;        /* the ambient estimate, whole LSB               */
     uint32_t floor_acc;    /* the same with fractional bits — carrier.c     */
 
+    uint32_t peak;         /* highest level since carrier_take_peak()       */
+    uint32_t peak_floor;   /* and the floor as it stood at that moment      */
+    uint32_t floor_hi;     /* highest floor over the same window            */
+    uint32_t floor_lo;     /* and the lowest                                */
+
     uint8_t  fast_shift;
-    uint8_t  slow_shift;   /* floor time constant, in chips, as a power of 2 */
+    uint8_t  slow_shift;   /* floor time constant DOWNWARD, as a power of 2  */
+    uint8_t  rise_shift;   /* ...and upward, which is deliberately slower    */
     uint8_t  ratio_num;    /* present when level > floor * ratio_num/8      */
     uint8_t  prime_shift;  /* floor primes at (window minimum << this)      */
 
@@ -62,6 +68,33 @@ void     carrier_push(carrier_t *c, uint16_t chip_energy);
 bool     carrier_present(const carrier_t *c);
 uint32_t carrier_level(const carrier_t *c);
 uint32_t carrier_floor(const carrier_t *c);
+
+/*
+ * What the detector did between two readings, rather than what it happened to
+ * be doing at one instant.
+ *
+ * WHY A WINDOW AND NOT carrier_level(). A shout is HANDOFF_SHOUT_US long and
+ * the flag is up for about 11 ms; a telemetry block leaves the band twice a
+ * second. An instantaneous read therefore lands in the quiet between shouts
+ * almost every time, and a plot of it is a flat line UNDER the gate while the
+ * link is working perfectly — which is exactly how it was misread on 25 Sep
+ * 2026, where the gate was in fact tripping about seven times a second.
+ *
+ * floor_hi and floor_lo are here because "the floor is moving with the level"
+ * is a claim about the floor's EXCURSION, and two floors sampled 500 ms apart
+ * cannot show one. peak_floor is the floor at the moment of the level peak,
+ * which is the only pairing of the two that is a comparison at all.
+ *
+ * The call clears the window, so there is exactly one consumer.
+ */
+typedef struct {
+    uint32_t level;       /* highest level seen in the window            */
+    uint32_t floor_then;  /* the floor at that instant                   */
+    uint32_t floor_hi;    /* highest floor in the window                 */
+    uint32_t floor_lo;    /* lowest floor in the window                  */
+} carrier_peak_t;
+
+void carrier_take_peak(carrier_t *c, carrier_peak_t *out);
 bool     carrier_primed(const carrier_t *c);
 
 #endif /* HANDOFF_CARRIER_H */

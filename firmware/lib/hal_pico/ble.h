@@ -73,6 +73,8 @@ typedef enum {
     BLE_CTRL_FORGET       = 0x06,  /* erase the provisioned record    (M2)  */
     BLE_CTRL_HAPTIC       = 0x07,  /* u8: 0 = off, 1 = on, persisted (review item 11) */
     BLE_CTRL_IDENTIFY     = 0x08,  /* no args: flash and buzz this band (lib/ui) */
+    BLE_CTRL_ZERO_STATS   = 0x0A,  /* no args: the console `z`        (bench) */
+    BLE_CTRL_LINK         = 0x0B,  /* u8: 0 = link off, 1 = on        (bench) */
     BLE_CTRL_RESET        = 0x09   /* no args: reset for a new wearer — bond, card,
                                       held card, preferences; the band then drops
                                       the link. The app's "Forget this band"
@@ -167,6 +169,55 @@ typedef struct {
 } ble_bench_t;
 
 _Static_assert(sizeof(ble_bench_t) == 20, "bench must fit one notify at the 23-byte floor");
+
+/* ---- trigger block, on the same characteristic ------------------------ */
+
+/*
+ * WHY THERE IS A SECOND BLOCK. ble_bench_t answers "what is the signal doing".
+ * It cannot answer "did the band hear anything", and on 25 Sep 2026 that was
+ * the question the whole bench turned on: a phone plot of level and floor read
+ * as a flat line under the gate while 93D1 was in fact tripping its detector
+ * about seven times a second and completing exchanges. The counters below were
+ * the only thing that told the two apart, and they were reachable only over
+ * USB — which design §13 forbids while anyone is wearing a band, and which the
+ * same day proved gives WRONG readings because the tether is the return path.
+ *
+ * So the trigger's own counters leave by radio too, and with them the peak
+ * level, which is what makes a plot of a 11 ms event sampled twice a second
+ * mean anything at all. See carrier_take_peak().
+ *
+ * EVERY COUNTER HERE IS CUMULATIVE SINCE BOOT, deliberately: the reader
+ * differences two blocks and gets a rate over a window it chose, which is what
+ * the USB bench did by hand. BLE_CTRL_ZERO_STATS does not touch them.
+ *
+ * READ waits AGAINST short_carriers. waits counts every time the gate tripped;
+ * short_carriers counts the ones too brief to have been a peer's shout. The
+ * difference is REAL SHOUTS HEARD, and it is the one number that says whether
+ * two bands can hear each other. 379E heard 2 of 93D1's 107; 93D1 heard 20 of
+ * 379E's 60. That asymmetry was the fault, and nothing else on this band
+ * reports it.
+ *
+ * Versioned by offset like the others: append fields, never move them.
+ */
+#define BLE_TRIG_TAG     0xB2u
+#define BLE_TRIG_VERSION 1
+
+typedef struct {
+    uint8_t  tag;            /* BLE_TRIG_TAG                                 */
+    uint8_t  version;        /* BLE_TRIG_VERSION                             */
+    uint16_t shouts;         /* trigger cycles that reached SHOUT            */
+    uint16_t waits;          /* gate trips while listening                   */
+    uint16_t short_carriers; /* ...of those, too brief to be a shout         */
+    uint16_t sends;          /* elected sender                               */
+    uint16_t receives;       /* elected receiver                             */
+    uint16_t last_wait_ms;   /* how long the last thing heard lasted         */
+    uint16_t peak_level;     /* highest carrier level since the last block   */
+    uint16_t peak_floor;     /* the floor as it stood at that peak           */
+    uint8_t  quiet_timeouts; /* §4.3 caps hit, saturating at 255             */
+    uint8_t  trig_state;     /* proto/beacon.h trig_state_t                  */
+} ble_trig_t;
+
+_Static_assert(sizeof(ble_trig_t) == 20, "trig must fit one notify at the 23-byte floor");
 
 /* ---- handlers --------------------------------------------------------- */
 

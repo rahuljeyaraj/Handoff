@@ -514,6 +514,43 @@ static void the_floor_is_the_room_not_the_carrier(void)
              "the floor moved %u to %u across a %d-chip preamble",
              (unsigned)settled, (unsigned)carrier_floor(&c),
              (int)FRAME_PREAMBLE_CHIPS);
+
+    /*
+     * SIX. Spikes must not train it. The freeze is armed by presence, and
+     * presence is decided against the floor, so anything too brief or too weak
+     * to raise the flag was averaged straight in — which lifts the floor, which
+     * lifts the gate, which makes the next one weaker still. The ratchet the
+     * other way up.
+     *
+     * It was seen on the bench before it was seen here: 93D1 idled at floor
+     * 85-177 against 379E's 10-23 on the same afternoon, and the phone's plot
+     * showed its floor STEPPING UP WITH THE LEVEL rather than sitting under it.
+     *
+     * One chip in eight, high enough to be nothing but signal and short enough
+     * that the four-chip `level` EMA never reaches the gate — so the freeze
+     * never arms and only the chip test can reject it. The old code settled
+     * this floor near a tenth of the way to the spike; the check is that it
+     * does not move at all beyond the ambient it was already on.
+     */
+    carrier_init(&c);
+    mean = settle_on_ambient(&c, &rng, 8000);
+    settled = carrier_floor(&c);
+    ph = 0;                                   /* spikes that raised presence */
+    for (i = 0; i < 8000; i++) {
+        if ((i & 7) == 0) {
+            carrier_push(&c, 70);
+            if (carrier_present(&c)) ph++;
+        } else {
+            rng = rng * 1664525u + 1013904223u;
+            carrier_push(&c, (uint16_t)(6u + (rng >> 28)));
+        }
+    }
+    HF_CHECK_MSG(ph == 0,
+             "%d spikes raised presence, so this measured the freeze and not "
+             "the chip test", ph);
+    HF_CHECK_MSG(carrier_floor(&c) <= settled + 2u,
+             "spikes trained the floor from %u to %u (ambient mean %u)",
+             (unsigned)settled, (unsigned)carrier_floor(&c), (unsigned)mean);
 }
 
 /*
