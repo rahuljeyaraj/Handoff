@@ -7,7 +7,7 @@ Paste everything from the line below into a fresh session.
 ---
 
 Continue the Handoff link v2 redesign. Repo `C:\work\Handoff`, branch
-`redesign/link-v2`, clean at `baa2782`.
+`redesign/link-v2`, clean at `eacbdfd`.
 
 Read `docs/link-v2-design.md` end to end first, then `docs/link-v2-brief.md`.
 The design is the authority; the brief is the build order. Both now carry a
@@ -30,10 +30,27 @@ down what requirement it should come from instead. Design §1.
 |---|---|
 | sys_clk | **144 MHz. Done and on the boards.** |
 | Tone pair | **180/200 kHz, bins 9 and 10.** Adjacent. Not open. |
-| Guards | **bins 7, 8, 11.** Clear of every odd harmonic. Not open. |
+| Guards | **bins 7, 8, 11** = 140/160/220 kHz. Clear of every odd harmonic. Not open. |
 | Two-tone transmitter | **built, measured at the pad, exact.** Not open. |
 | Scope | radio only for behaviour; **instruments are unrestricted** |
 | v1's carrier floor | not being fixed. `carrier.c` gets deleted, not tuned. |
+
+### 160 kHz is a GUARD, not tone A. Do not "correct" this.
+
+160/200 kHz was the **first** proposal and the design rejected it
+(`link-v2-design.md:95`): the pair must be **adjacent** bins, because coupling
+rises with frequency and one bin apart is the smallest imbalance the transform
+allows (~1 dB). 160/200 would also have forced a 20 % clock cut instead of 4 %,
+which core 1 cannot afford at step 3. So:
+
+| | 140 | **160** | **180** | **200** | 220 |
+|---|---|---|---|---|---|
+| bin | 7 | 8 | **9** | **10** | 11 |
+| role | guard | **guard** | **tone A** | **tone B** | guard |
+
+160 kHz is listened to and never transmitted. The user asked about this on
+25 Sep 2026 — it is a natural place to misremember, so it is written down here
+rather than re-derived.
 
 ## STEP 1 PASSED (3b4e902)
 
