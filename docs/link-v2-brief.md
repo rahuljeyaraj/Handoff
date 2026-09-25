@@ -126,6 +126,12 @@ not exist, and the cheap generator becomes available.
 
 ### The program
 
+**Built and measured, 25 Sep 2026 (`baa2782`). This section is corrected
+below: the nine-instruction form is two cycles long per chip, and the
+shipped program is fifteen instructions.** The rest of the section still
+holds and is worth reading first, because it is the reasoning the correction
+rests on.
+
 Nine instructions. One 32-bit word per chip.
 
 ```
@@ -176,6 +182,42 @@ Both chips are **36 000 cycles = 250 µs exactly**. Chip alignment is a property
 of the arithmetic, not of hand-balanced branches — which is the same argument
 the old bit-stream design made, achieved a cheaper way.
 
+### Correction: the two OUTs are not free, and they cost two cycles a chip
+
+The table above is right about the period and wrong about the chip. The two
+`out` instructions sit **outside** the period loop, so a chip costs
+`2 + periods × period` cycles — 36 002, not 36 000.
+
+Two cycles is 56 ppm of chip rate, it has the same sign every chip, and it
+therefore **walks the chip clock down the frame** rather than scattering. That
+is the accumulating error `pio_carrier.pio` has warned about since M3 and
+precisely what check 2c exists to catch, so it was not left in.
+
+**The shipped program writes the first period out longhand** and spends the two
+`out` cycles inside that period's own halves — its high half is
+`set`, `out isr`, `mov`, loop, and its low half is `set`, `mov`, loop with no
+`jmp y--`. That period then costs the same `2·isr + 8` as every other one, and
+a chip is exactly 36 000 cycles. The cost is six duplicated instructions: 15 of
+the 32 words of PIO instruction memory, against 20 for all three programs.
+
+| | brief's 9 | shipped 15 |
+|---|---|---|
+| cycles a chip | 36 002 | **36 000** |
+| duty over a chip | 49.9972 % | **exactly 50 %** |
+| `isr` | 396 / 356 | 396 / 356, unchanged |
+| `y` | periods − 1 = 44 / 49 | **periods − 2 = 43 / 48** |
+| word | `0x002C_018C` / `0x0031_0164` | **`0x002B_018C` / `0x0030_0164`** |
+
+`y` drops by one because **two** periods now leave the loop: the one carrying
+the `out`s, and the fall-through into the loop head.
+
+Where the slack lives, so a pad reading is not a surprise: every HIGH half is
+exactly the tone half-period, and the low halves at the chip boundary are one
+cycle short and one cycle long. They cancel inside the chip, so the even
+harmonics are still null. `firmware/test/host/test_fsk.c` walks the program
+instruction by instruction and checks all of it, including that dropping the
+`[1]` would break the duty cycle.
+
 Buffer: 624 chips × 4 bytes = **2496 bytes**, down from 15.6 kB.
 
 `out pindirs` leaves the stream entirely. There is no per-chip release any
@@ -203,6 +245,61 @@ frame rather than scattering.
 
 **Owes:** a host test that builds the chip words and checks both come to 36 000
 cycles, and that each period is an even number.
+
+### What step 2 actually measured, 25 Sep 2026 (`baa2782`)
+
+**2a PASSED**, both boards, with a duty reading beside it:
+
+| | nominal | measured | error | duty at the pad |
+|---|---|---|---|---|
+| tone A | 180000 Hz | 180005 Hz | 28 ppm | **50.0008 %** |
+| tone B | 200000 Hz | 200000 Hz | 0 ppm | **50.0000 %** |
+
+**2b and 2c cannot be read through the self loop, and that is a fact about the
+bench, not about the radio.** Driving tone A and walking the bins reads guard
+bin 7 at **390 LSB** against tone A's 809 — the reading §5 calls the kill
+switch. It is not the generator:
+
+- the duty at the pad is 50.0008 %, measured with `pio_carrier_duty_ppm()`
+- the raw operating point is **mean code 3564 of 4095 at 643 LSB RMS**, so the
+  receiver is railed on its own transmitter
+- **the v1 generator through the same loop rails harder** — mean code 3638, and
+  its own second-harmonic bin peaks at 431 against its bin's 493
+
+So the board has always behaved this way listening to itself, and it is what
+the ~65 dB of a body path exists to avoid. A guard-bin reading is only
+meaningful at a linear level, which means two boards and a real path.
+
+**2c was therefore done at the pad by edge count instead, and it proves more
+than a decode through a railed ADC could.** Each chip is a whole number of tone
+periods and one period is one rising edge, so the count across a chip pattern
+is exact arithmetic. 12 counts over three runs on 93D1 and 4 on 379E, every
+one EXACT:
+
+| pattern | chips | edges |
+|---|---|---|
+| all tone A | 624 | 28080 |
+| all tone B | 624 | 31200 |
+| alternating A/B | 624 | 29640 |
+| a real encoded frame | 624 | 29640 |
+
+**"Do the two bins separate cleanly" moves to step 4**, where the level is
+linear. Step 3 is unblocked: the transmitter is proven, at the pad, to the
+cycle.
+
+New instruments, all reading rather than doing:
+
+| | |
+|---|---|
+| `pio_carrier_duty_ppm()` | a third state machine counting cycles the pad is high. `measure_hz` says the period is right; this says its two halves are equal — and only the second can tell a generator that slipped from an amplifier that distorted. It is what settled this step. |
+| `hal_pico_set_rx_bin()` | retune core 1's Goertzel alone, transmitter left where it is. `set_carrier` refuses the guards — 140, 160 and 220 kHz are not PIO dividers. |
+| `linktest y` / `y 2` | the 2a check with the duty, and the alignment count |
+| `linktest k` / `b` / `b 1` | move the receive bin; walk the five design bins, or every bin below Nyquist for the whole comb |
+
+Regression after the change, both boards: the v1 link gave 155 good, 0 crc,
+0 lost, FER 0.0000, margin 498 (step 1 recorded 488); `apps/handoff` completed
+**8 handshakes each in 22 s**, 0 partial, 0 abort, cards both ways, 0 bad
+frames, 0 stalls, 0 overruns. Suite 25315 checks, 0 failures.
 
 ---
 

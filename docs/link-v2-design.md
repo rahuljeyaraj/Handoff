@@ -329,8 +329,8 @@ Each step is a bench measurement, not a feature. Stop at any step that fails.
 
 | # | Step | Passes when |
 |---|---|---|
-| 1 | Move sys_clk to 144 MHz | ADC rate and USB unchanged; link still works as-is |
-| 2 | Two-tone PIO generator | see below — no external hardware needed |
+| 1 | Move sys_clk to 144 MHz | ADC rate and USB unchanged; link still works as-is — **PASSED 3b4e902** |
+| 2 | Two-tone PIO generator | see below — no external hardware needed — **PASSED baa2782** |
 | 3 | 5-bin Goertzel bank on core 1 | no dropped windows at 500 ksps; budget printed |
 | 4 | Passive: one board TX, one RX, on a wire | `E_A`/`E_B` separate cleanly; guards do not rise while transmitting |
 | 5 | Presence by guard median, tethered | busy tracks reality with the amplifier gain swept |
@@ -361,6 +361,33 @@ receiver separates them. A scope would show only the first.
 2c is the specific hazard `pio_carrier.pio` warns about — a cycle-count
 imbalance between the two symbol paths shifts every chip after the first, so
 the errors pile up down the frame rather than scattering.
+
+### What 2b could not do, and what replaced it (25 Sep 2026)
+
+**The self loop saturates the receiver, so it cannot measure a guard bin.**
+Driving tone A reads guard bin 7 at 390 LSB against tone A's 809, which is
+§11's kill switch — but the duty at the pad is 50.0008 %, the raw operating
+point is mean code 3564 of 4095, and the **v1** generator through the same loop
+rails harder still. The board has always done this listening to itself; it is
+what the ~65 dB of a body path exists to avoid.
+
+So the transmitter is verified **at the pad** instead, which needs no receiver
+at all and is stronger where it overlaps:
+
+| | measured | how |
+|---|---|---|
+| period | 180005 / 200000 Hz, 28 / 0 ppm | edge count over a gate |
+| its two halves | duty **50.0008 / 50.0000 %** | a third state machine counting high cycles |
+| chip alignment | **exact**, 16 counts across two boards | each chip is a whole number of periods, so the edge count across a chip pattern is exact arithmetic |
+
+The duty measurement is what makes this sound. §4 makes guard bins 7 and 11 a
+duty-cycle monitor, and that is right — but it is a monitor *through the
+amplifier*, so it cannot separate a generator that slipped from an amplifier
+that distorted. Reading the duty on the pad can, and does.
+
+**A guard-bin reading is only meaningful at a linear level**, so step 4 is
+where the noise reference is judged. That is where it always belonged — this
+only removes the false comfort of thinking step 2 could pre-empt it.
 
 ---
 
