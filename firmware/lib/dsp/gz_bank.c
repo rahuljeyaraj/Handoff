@@ -42,7 +42,7 @@ void gzb_reset(gz_bank_t *b)
  * bank against the same Goertzels run one sample at a time and requires them
  * equal, not close.
  */
-static void bin_run(gz_t *g, const int16_t *s, size_t n)
+static HANDOFF_HOT_FUNC void bin_run(gz_t *g, const int16_t *s, size_t n)
 {
     const int32_t coeff = g->coeff;
     int32_t s1 = g->s1, s2 = g->s2;
@@ -61,7 +61,7 @@ static void bin_run(gz_t *g, const int16_t *s, size_t n)
     g->idx = (uint16_t)(g->idx + n);
 }
 
-static void bank_window_end(gz_bank_t *b)
+static HANDOFF_HOT_FUNC void bank_window_end(gz_bank_t *b)
 {
     int i;
 
@@ -93,7 +93,8 @@ static void bank_window_end(gz_bank_t *b)
  * leaves that filter reset from the last boundary, so the next window it runs
  * in starts clean.
  */
-size_t gzb_push_run(gz_bank_t *b, const int16_t *s, size_t n, bool *complete)
+HANDOFF_HOT_FUNC size_t gzb_push_run(gz_bank_t *b, const int16_t *s, size_t n,
+                                     bool *complete)
 {
     const size_t left = (size_t)(HANDOFF_GZ_N - b->bin[GZB_A].idx);
     const size_t take = n < left ? n : left;
@@ -121,12 +122,12 @@ bool gzb_push(gz_bank_t *b, int16_t sample)
     return done;
 }
 
-uint64_t gzb_signal(const gz_bank_t *b)
+HANDOFF_HOT_FUNC uint64_t gzb_signal(const gz_bank_t *b)
 {
     return b->mag2[GZB_A] > b->mag2[GZB_B] ? b->mag2[GZB_A] : b->mag2[GZB_B];
 }
 
-uint64_t gzb_noise(const gz_bank_t *b)
+HANDOFF_HOT_FUNC uint64_t gzb_noise(const gz_bank_t *b)
 {
     const uint64_t x = b->mag2[GZB_G_LO];
     const uint64_t y = b->mag2[GZB_G_MID];

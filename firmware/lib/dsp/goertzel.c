@@ -15,7 +15,7 @@ void gz_init(gz_t *g, uint16_t n, uint16_t k)
     gz_reset(g);
 }
 
-void gz_reset(gz_t *g)
+HANDOFF_HOT_FUNC void gz_reset(gz_t *g)
 {
     g->s1 = 0;
     g->s2 = 0;
@@ -30,7 +30,7 @@ void gz_reset(gz_t *g)
  * 1.6e4 * 2.5e9, which overflows 32 bits by four orders of magnitude. int64
  * is not optional here.
  */
-uint64_t gz_mag2(const gz_t *g)
+HANDOFF_HOT_FUNC uint64_t gz_mag2(const gz_t *g)
 {
     const int64_t s1 = g->s1, s2 = g->s2;
     int64_t m = s1 * s1 + s2 * s2 - ((g->coeff * s1 * s2) >> GZ_COEFF_FRAC_BITS);
@@ -56,7 +56,7 @@ uint32_t gz_isqrt64(uint64_t v)
     return (uint32_t)prev;
 }
 
-bool gz_push(gz_t *g, int16_t sample, uint32_t *score)
+HANDOFF_HOT_FUNC bool gz_push(gz_t *g, int16_t sample, uint32_t *score)
 {
     const int32_t s0 = (int32_t)sample
                      + (int32_t)(((int64_t)g->coeff * g->s1) >> GZ_COEFF_FRAC_BITS)

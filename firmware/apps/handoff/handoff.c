@@ -937,9 +937,13 @@ static void print_stats(void)
     {
         uint32_t sig = 0, noi = 0;
         hal_rx_presence(s_hal, &sig, &noi);
-        printf("           presence signal %lu vs noise %lu (k=%d/%d over %d "
-               "cells); busy windows %lu; framer syncs %lu\n",
-               (unsigned long)sig, (unsigned long)noi,
+        /* The ratio in POWER, because k is one and the two scores are
+         * amplitudes. See linktest's `p`, which made the same mistake once. */
+        const uint32_t pwr = noi ? (uint32_t)(((uint64_t)sig * sig)
+                                              / ((uint64_t)noi * noi)) : 0u;
+        printf("           presence signal %lu vs noise %lu = %lu:1 in power "
+               "(k %d/%d over %d cells); busy windows %lu; framer syncs %lu\n",
+               (unsigned long)sig, (unsigned long)noi, (unsigned long)pwr,
                (int)HANDOFF_CFAR_K_NUM, (int)HANDOFF_CFAR_K_DEN,
                (int)HANDOFF_CFAR_CELLS,
                (unsigned long)hal_pico_busy_windows(),
@@ -1167,6 +1171,26 @@ static void dispatch(const char *line)
         break;
     case 'c': cmd_carrier(have_arg ? arg : HANDOFF_CARRIER_HZ / 1000u); break;
     case 'f': clocks_print(); break;
+    /*
+     * Instrument, link v2 step 5. The five-bin bank off or on, in THIS image
+     * on THIS board, so the core-1 cost can be split from everything else in
+     * the diff. With it off the board is deaf to presence and the link stops
+     * working -- that is expected, and it is the point.
+     */
+    case 'n': {
+        const bool on = have_arg ? (arg != 0u) : !hal_pico_bank_on();
+        uint64_t b0, t0, b1, t1;
+        hal_pico_set_bank(on);
+        hal_pico_core1_busy(&b0, &t0);
+        sleep_ms(2000);
+        hal_pico_core1_busy(&b1, &t1);
+        printf("    bank %s: core-1 load %lu %% over %lu ms, overruns %lu\n",
+               on ? "ON" : "off",
+               (unsigned long)((b1 - b0) * 100u / (t1 - t0)),
+               (unsigned long)((t1 - t0) / 1000u),
+               (unsigned long)hal_pico_overruns());
+        break;
+    }
     case 'h': case '?': help(); break;
     default:  printf("    ? (h for help)\n"); break;
     }

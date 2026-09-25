@@ -123,6 +123,11 @@ static volatile uint32_t s_busy_windows;
 static volatile uint32_t s_pres_windows;
 static volatile bool     s_pres_ready;
 
+/* Core 0 asking core 1 for the two telemetry scores. See
+ * core1_presence_window(): they cost a square root each and the hot path does
+ * not pay for them. */
+static volatile bool     s_tlm_req;
+
 /*
  * A capture, rather than a live mirror of the bank, because a 64-bit read is
  * not atomic between the cores: core 0 asks for N windows, core 1 fills the
@@ -177,7 +182,7 @@ static void core1_bank_window(const gz_bank_t *b)
  * above because they are different jobs: the capture is an instrument that
  * only runs when core 0 asks, this runs always and is what the link consumes.
  */
-static void core1_presence_window(presence_t *pr, const gz_bank_t *b)
+static HANDOFF_HOT_FUNC void core1_presence_window(presence_t *pr, const gz_bank_t *b)
 {
     const bool busy = presence_push_bank(pr, b);
 
@@ -186,13 +191,32 @@ static void core1_presence_window(presence_t *pr, const gz_bank_t *b)
         s_busy_latch   = true;
         s_busy_windows = pr->busy_windows;
     }
-    s_level = presence_signal_score(pr);
-    s_noise = presence_noise_score(pr);
     s_pres_windows = pr->windows;
     s_pres_ready = presence_ready(pr);
+
+    /*
+     * THE TWO SCORES ARE COMPUTED ONLY WHEN SOMEONE IS LOOKING, and that is
+     * not an optimisation — it is design §6's "no square roots on the hot
+     * path", which the first version of this function broke.
+     *
+     * presence_signal_score() and presence_noise_score() each take an
+     * isqrt64, and the noise one also divides the 64-bit accumulator by the
+     * cell count on a part with no 64-bit divider. Taken every window that is
+     * four expensive operations twenty thousand times a second, for numbers
+     * nobody reads more than once a second. MEASURED: core 1 at 73 % against
+     * a 55 % baseline, on a board doing nothing else.
+     *
+     * So core 0 raises a flag, the next window answers it, and the reading
+     * core 0 gets is at worst one window — fifty microseconds — old.
+     */
+    if (s_tlm_req) {
+        s_level = presence_signal_score(pr);
+        s_noise = presence_noise_score(pr);
+        s_tlm_req = false;
+    }
 }
 
-static void core1_main(void)
+static HANDOFF_HOT_FUNC void core1_main(void)
 {
     gz_t       g;
     sync_t     sy;
@@ -482,9 +506,27 @@ static bool p_rx_busy(void *ctx)
     return was;
 }
 
+/*
+ * Ask core 1 for a fresh pair of scores and wait for it, which takes one
+ * window — fifty microseconds. Bounded, because with the bank switched off
+ * nobody is going to answer, and an instrument must not be able to hang the
+ * caller. On a timeout the last published pair stands; the console says the
+ * bank is off beside it.
+ */
+#define TLM_WAIT_US 2000u
+
+static void tlm_refresh(void)
+{
+    const uint64_t deadline = time_us_64() + TLM_WAIT_US;
+
+    s_tlm_req = true;
+    while (s_tlm_req && time_us_64() < deadline) tight_loop_contents();
+}
+
 static void p_rx_presence(void *ctx, uint32_t *signal, uint32_t *noise)
 {
     (void)ctx;
+    tlm_refresh();
     if (signal) *signal = s_level;
     if (noise)  *noise  = s_noise;
 }
@@ -660,6 +702,7 @@ uint32_t hal_pico_busy_windows(void) { return s_busy_windows; }
 void hal_pico_presence(hal_pico_presence_t *out)
 {
     if (!out) return;
+    tlm_refresh();
     out->windows      = s_pres_windows;
     out->busy_windows = s_busy_windows;
     out->signal       = s_level;

@@ -41,7 +41,7 @@ int sync_phase_error(const sync_t *s)
     return off;
 }
 
-bool sync_push(sync_t *s, uint32_t score, uint16_t *chip)
+HANDOFF_HOT_FUNC bool sync_push(sync_t *s, uint32_t score, uint16_t *chip)
 {
     uint32_t delta;
     int i, off, lo, hi;

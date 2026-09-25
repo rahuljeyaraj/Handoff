@@ -285,6 +285,34 @@
 #define HANDOFF_PIO_SLOT_CYCLES   3
 #define HANDOFF_PIO_DIVIDER       (HANDOFF_SYS_CLK_HZ / (2 * HANDOFF_PIO_SLOT_CYCLES * HANDOFF_CARRIER_HZ))
 
+/*
+ * ---- where the hot loop lives ------------------------------------------
+ *
+ * Core 1 runs out of XIP, so every instruction it executes is a flash fetch
+ * through a cache that core 0 is also using. That is survivable when core 0 is
+ * a console; it is not when core 0 is BLTstack. MEASURED, 25 Sep 2026: the
+ * five-bin bank plus presence cost core 1 eighteen points in `linktest`, where
+ * core 0 is idle, and took it to NINETY-NINE PER CENT in `apps/handoff`, where
+ * core 0 is running a Bluetooth stack — with 4433 DMA overruns in thirty
+ * seconds and not one frame decoded. Same code, same clock, same arithmetic.
+ * The difference is contention for flash.
+ *
+ * So the bank's inner loop and the presence decision are placed in RAM. This
+ * changes WHERE the code is, not what it does: not one instruction of the
+ * arithmetic differs, and the host build — which is the thing that keeps
+ * lib/dsp free of SDK headers — sees an empty macro.
+ *
+ * It is spelled out here rather than taken from the SDK's __not_in_flash_func
+ * for exactly that reason: `.time_critical.*` is a plain GCC section
+ * attribute, and the SDK's linker script already collects it into RAM, so
+ * lib/dsp needs no pico header to ask for it.
+ */
+#if defined(__GNUC__) && defined(__arm__)
+#define HANDOFF_HOT_FUNC __attribute__((section(".time_critical.handoff")))
+#else
+#define HANDOFF_HOT_FUNC
+#endif
+
 /* ---- the assertions --------------------------------------------------- */
 
 #if defined(__cplusplus)

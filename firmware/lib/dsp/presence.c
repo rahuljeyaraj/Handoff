@@ -7,8 +7,8 @@ void presence_init(presence_t *p)
     memset(p, 0, sizeof *p);
 }
 
-bool presence_push(presence_t *p, uint64_t signal_mag2, uint64_t guard_mag2,
-                   bool guard_fresh)
+HANDOFF_HOT_FUNC bool presence_push(presence_t *p, uint64_t signal_mag2,
+                                    uint64_t guard_mag2, bool guard_fresh)
 {
     p->signal = signal_mag2;
     p->windows++;
@@ -31,20 +31,30 @@ bool presence_push(presence_t *p, uint64_t signal_mag2, uint64_t guard_mag2,
      *
      *      signal * (K_DEN * N) > sum * K_NUM
      *
-     * which is gzb_ratio_gt()'s cross-multiplication with no division and no
-     * square root. It also halves both sides if a product could ever wrap,
-     * which for a 12-bit converter at HANDOFF_GZ_N it cannot — mag^2 stays
-     * under 2^31, so the left side peaks near 2^43 and the right near 2^47.
+     * No division and no square root, which is the §6 requirement, and the
+     * multiplication is written out here rather than handed to
+     * gzb_ratio_gt(). THAT IS NOT A STYLE CHOICE. gzb_ratio_gt() guards
+     * against a wrapping product by dividing — twice, in 64 bits, on a part
+     * with no 64-bit divider — and this line runs twenty thousand times a
+     * second. Measured on the bench: the first version of this file, with
+     * that guard and with two square roots taken for telemetry, cost core 1
+     * EIGHTEEN POINTS of load.
+     *
+     * The guard is not needed, and config.h static-asserts the reason. mag^2
+     * out of a 12-bit converter at HANDOFF_GZ_N stays under 2^31, so the left
+     * side peaks near 2^43; the reference is HANDOFF_CFAR_CELLS of those, so
+     * the right side peaks near 2^47. Both sit inside a 64-bit product with
+     * sixteen bits to spare.
      */
     p->busy = presence_ready(p) &&
-              gzb_ratio_gt(p->signal, p->sum, HANDOFF_CFAR_K_NUM,
-                           (uint32_t)HANDOFF_CFAR_K_DEN * HANDOFF_CFAR_CELLS);
+              p->signal * ((uint64_t)HANDOFF_CFAR_K_DEN * HANDOFF_CFAR_CELLS)
+                  > p->sum * (uint64_t)HANDOFF_CFAR_K_NUM;
 
     if (p->busy) p->busy_windows++;
     return p->busy;
 }
 
-bool presence_push_bank(presence_t *p, const gz_bank_t *b)
+HANDOFF_HOT_FUNC bool presence_push_bank(presence_t *p, const gz_bank_t *b)
 {
     return presence_push(p, gzb_signal(b), gzb_noise(b), b->guards_fresh);
 }

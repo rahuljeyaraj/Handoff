@@ -14,6 +14,8 @@
  */
 #include "ipc.h"
 
+#include "config.h"
+
 #include "hardware/sync.h"   /* __dmb */
 #include "pico/stdlib.h"
 
@@ -34,7 +36,7 @@ void ipc_init(void)
     s_dropped = 0;
 }
 
-bool ipc_push_chip(uint16_t energy, uint32_t sample_idx)
+HANDOFF_HOT_FUNC bool ipc_push_chip(uint16_t energy, uint32_t sample_idx)
 {
     uint32_t h = s_head;
     uint32_t n = (h + 1u) & IPC_MASK;

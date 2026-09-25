@@ -1113,11 +1113,26 @@ static void rx_presence(uint32_t seconds)
     }
     printf("\n");
 
+    /*
+     * THE RATIO IS PRINTED IN POWER, because k is a power ratio and the two
+     * have to be comparable on one line. The scores either side are
+     * amplitudes -- gz_score_of() takes a square root -- so a signal 18x the
+     * reference in LSB is 324x in power, against a k of 16.8. Printing the
+     * amplitude ratio beside k made a 19x margin read as though it were
+     * scraping past the threshold.
+     */
     printf("    signal %lu LSB vs reference %lu LSB", (unsigned long)b.signal,
            (unsigned long)b.noise);
-    if (b.noise) printf(", ratio %lu:1", (unsigned long)(b.signal / b.noise));
-    printf("    (threshold k = %d/%d)\n",
-           (int)HANDOFF_CFAR_K_NUM, (int)HANDOFF_CFAR_K_DEN);
+    if (b.noise) {
+        const uint32_t pwr = (uint32_t)(((uint64_t)b.signal * b.signal)
+                                        / ((uint64_t)b.noise * b.noise));
+        printf(", ratio %lu:1 in POWER", (unsigned long)pwr);
+        printf("  (k = %lu.%lu, so %lu x clear)",
+               (unsigned long)(HANDOFF_CFAR_K_NUM / HANDOFF_CFAR_K_DEN),
+               (unsigned long)((HANDOFF_CFAR_K_NUM * 10u / HANDOFF_CFAR_K_DEN) % 10u),
+               (unsigned long)(pwr * HANDOFF_CFAR_K_DEN / HANDOFF_CFAR_K_NUM));
+    }
+    printf("\n");
 
     bank_operating_point();
 }
