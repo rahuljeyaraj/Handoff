@@ -959,6 +959,212 @@ every rendezvous accounted for in the counters.
 **Owes:** host tests for nonce tie (both draw the same — must redraw), and for
 a beacon arriving with its CRC damaged (must be ignored, not acted on).
 
+### What step 7 actually measured, 25 Sep 2026
+
+**PASSED.** Two boards, 15 minutes, plate to plate at 5 cm: **308 handshakes,
+308 COMPLETE, 0 partial, 0 abort, 0 both-sender, 0 self-echoes, 0 DMA
+overruns.** The flat-tone shout is gone and so are the six constants that
+timed it.
+
+#### The run
+
+| 930 s, `apps/handoff` on both | 93D1 | 379E |
+|---|---|---|
+| handshakes ended | 308 | 308 |
+| COMPLETE | **308** | **308** |
+| partial / abort | 0 / 0 | 0 / 0 |
+| as sender / receiver | 161 / 147 | 146 / 161 |
+| retries | 0 | 1 |
+| CRC failures | 1 | 0 |
+| frames sent | 1086 | 926 |
+| **self-echoes** | **0** | **0** |
+| nonce draws refused | 1 | 0 |
+| core-1 load | 21–22 % | 21–22 % |
+| DMA overruns during the run | 0 | 0 |
+
+**BOTH SENDER: 0 of 308 paired contacts.** That is beacon.h §2's claim, which
+the brief called the most important test in the file, holding on hardware as
+well as in the sweep.
+
+One contact of 308 showed both ends as RECEIVER, and it is worth reading
+rather than counting: 379E was SENDER, hit a mid-exchange collision, and
+`suspect_collision()` sent it back through the trigger — where 93D1, still in
+its own exchange, was transmitting, so 379E heard a card and came back as
+RECEIVER. Both completed, in 1556 and 1408 ms. The `done` line reports the
+role of the LAST trip through the trigger, which is what makes it look like a
+rendezvous failure when it is a retry doing its job.
+
+#### A band alone, which is the test v1 failed
+
+| 87 s, 93D1 armed, 379E silent | |
+|---|---|
+| beacons transmitted | **774** |
+| sends / receives | **0 / 0** |
+| peers decoded | **0** |
+| self-echoes | **0** |
+| framer syncs | **0** |
+| state throughout | IDLE |
+
+v1 elected itself sender on **60 shouts out of 60** on this bench
+(`handoff-elects-two-senders`). This is 0 out of 774, and the reason is not a
+better threshold — there is no threshold. A beacon that comes back carries our
+own nonce.
+
+774 beacons in 87 s is one every **112.4 ms**, against the 112 ms
+`HANDOFF_BEACON_CYCLE_US` derives. The period arithmetic lands on the bench.
+
+#### Rendezvous latency, off the boards' own clocks
+
+IDLE entered to IDLE left, 308 rendezvous on 379E:
+
+| | |
+|---|---|
+| min | 68.9 ms |
+| median | **142.3 ms** |
+| mean | 152.7 ms |
+| p90 | 179.2 ms |
+| max | 384.7 ms |
+
+**This bench is the pessimistic case and should be read as one.** The two
+bands re-arm within ~150 ms of each other after every handshake, so they are
+partly in lockstep — which is the collision the random listen draw exists to
+break, arriving 308 times in a row. On a wrist two strangers' bands have no
+such relationship. The simulator's steady-state measurement, two bands already
+free-running and touched at every offset, reads 81 ms mean and 157 ms worst.
+
+Against v1, same simulator, same method, v1 built from a `main` worktree:
+
+| touched mid-cycle | v1 | v2 |
+|---|---|---|
+| mean | 64 ms | **86 ms** |
+| worst | 152 ms | **145 ms** |
+
+22 ms on the mean and seven better on the worst, for a trigger **2.8× the
+airtime**. beacon.h has the reason: a beacon is decided on its last chip,
+where v1 had to wait for the carrier to clear, measure how long it had lasted,
+and could sit in `TRIG_WAIT` for 30 ms before giving up.
+
+#### The exchange did not move, which is the point
+
+| | step 6 | step 7 |
+|---|---|---|
+| faster role | 949 ms | 946 / 965 ms |
+| slower role | 1133 ms | 1124 / 1105 ms |
+| core-1 in `handoff` | 21 % | 21–22 % |
+
+Step 7 changed how a contact STARTS. The numbers say it changed nothing else.
+Design §2's one-second budget is still met on one role and missed on the
+other, and the rendezvous is still on top of it — that is the exchange's
+problem, not the trigger's.
+
+#### The settle: measured, and it is the ring
+
+Brief §8 above asks for the AFE's high-pass RC. There is not one to measure.
+`y 4` drives the board's own pad, releases it and watches presence for 200 ms:
+
+| drive | last busy: min | mean | max |
+|---|---|---|---|
+| 7 ms | 2630 | 3230 | 3650 µs |
+| 14 ms | 3616 | 3949 | 4219 µs |
+| 28 ms (a beacon) | 2391 | 3010 | 3956 µs |
+
+The signal bin reads ~670 at 0, 1 and 2 ms and ~20 by 4 ms — a **step at
+exactly one DMA block**, not a decay. The amplifier is back inside
+4219 − 4096 = **123 µs**; the rest is the ring draining. The old 6000 came from
+a 24 Sep reading taken through v1's carrier detector, which had an 8-chip hold
+of its own on top of the ring.
+
+**It does not grow with the beacon**, which was the real worry when the
+transmission went from 10 ms to 28: the three means are 3230, 3949 and
+3010 µs, and the longest drive is not the worst.
+
+So the settle is derived — `HANDOFF_RX_LATENCY_US + HANDOFF_TURNAROUND_US`,
+4096 + 1000 = 5096 µs — against a worst measured run of 4219.
+
+**The first reading of this was wrong and the trace is what caught it.** The
+far board was still running, and its transmissions came back as 400-LSB spikes
+scattered through the watch window, which one number reported as a 40 ms
+settle. A single figure would have been believed.
+
+#### Two things the design asked for that were derived away
+
+**The election.** Design §7 says the sender is the band with the higher nonce.
+A band is deaf from the start of its own beacon, so decoding a peer means you
+had not yet started yours; a decoder stops beaconing, so its beacon never goes
+out; and if the two beacons overlapped, neither of you decoded anything. **At
+most one band ever decodes the other**, and there is nothing for a comparison
+to resolve. The nonce keeps the job that does have a requirement behind it —
+own-echo rejection — and the tie falls out of the same comparison, because a
+band that hears its own nonce cannot tell an echo from a peer that drew the
+same sixteen bits, and both want the same answer.
+
+**The 16-chip preamble.** There is no hunt window for which it meets
+`HANDOFF_FALSE_SYNC_S`: 16 chips plus four marker bits is a run of 24, and a
+23-transition window is four orders of magnitude out. The beacon shares the
+card frame's 32-chip preamble and its hunt, and comes out at 112 chips — 28 ms,
+which is what §7 estimated anyway.
+
+#### One hunt, two tails, and the marker that was picked on the wrong criterion
+
+A marker of the form `1111 0xyz` puts its first chip-pair violation where
+`11110000` does, so both frame types feed one hunt and differ only in the seven
+chips after the 00. Accepting a second tail doubles the false-sync rate, and
+the window pays for it: **29 of 30 transitions becomes 28 of 30**, computed,
+with both ends still asserted. One chip of window is the entire cost of a
+second frame type.
+
+The byte was first picked on Hamming distance, and that was wrong. **A receiver
+that joins a frame late never believes the marker's first 00**, so it goes on
+hunting through the body — and a Manchester run of identical bits is a run of
+alternating chips, which is what a preamble looks like. The furthest-tail
+marker has only two violations, so the window is clean again one chip into the
+body, and a nonce beginning `0000` then presents a perfect card marker. **One
+nonce in sixteen**, and the phase sweep found it as two phases of 141 where
+both bands ended up listening.
+
+| marker | violations | tail distance | bad nonces |
+|---|---|---|---|
+| `11110111` | 2 | 6 | 4096 of 65536 |
+| **`11110101`** | **4** | **4** | **39 of 65536** |
+
+`frame_beacon_nonce_ok()` then refuses those 39 at the draw — one pass over our
+own 112 chips with the hunt's own rule — so it is none. The nonce is the one
+field in this protocol whose value is free, which is why rejection sampling is
+the honest fix and a whitener would not have been: a whitener moves which
+nonces are bad, it does not remove them. One draw in 1700 is thrown away; the
+bench threw away one in 930 seconds.
+
+#### Regression
+
+| | |
+|---|---|
+| suite | **25850 checks**, 0 failures (was 25567) |
+| link at 5 cm, `linktest` | good 465, crc 0, lost 0, **FER 0.0000**, BER 0, margin 584, overruns 0 |
+| `apps/handoff` | **308 complete in 930 s** on each board, 0 partial, 0 abort, 0 overruns |
+| core 1 | 21–22 % in `handoff` |
+| simulator waterfall | −4 dB: 58 good against step 6's 59 — **one frame in sixty**, the stricter hunt's cost |
+
+New instruments:
+
+| | |
+|---|---|
+| `y 4` in linktest | the settle: drive, release, watch presence, with a trace of signal and noise |
+| `trig nonce … beacons/peers/echo/redraws` | printed on leaving the trigger, in place of v1's silence-and-carrier-length pair |
+| `handoff s` trigger line | peers, self-echoes, redraws, refused draws |
+| `frame_rx_t.beacons_good` / `beacons_bad_crc` | and the framer's counters now survive a re-arm — `link_sm.c` calls `frame_rx_reset()` where it used to call `frame_rx_init()`, which was zeroing every counter every contact |
+
+#### What step 7 leaves open
+
+- **`ble_trig_t` still has no caller.** It is redefined for the v2 counters and
+  the version byte is bumped, but nothing emits it, and emitting it would need
+  the phone app to parse a new block — which brief §10 puts out of scope. Step 8
+  is USB-out, so the trigger's counters are not readable on a worn bench. What
+  step 8 actually needs — completions, frames good and bad — is already in
+  `ble_bench_t`, which the app does parse.
+- **The rendezvous is measured on a bench that re-arms in lockstep.** A wrist
+  does not. If that number ever matters, arm the two boards at a deliberate
+  offset and take it again.
+
 ---
 
 ## 9. Step 8 — skin, on cells

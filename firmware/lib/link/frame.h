@@ -436,7 +436,20 @@ typedef struct {
     uint32_t false_syncs;
 } frame_rx_t;
 
+/*
+ * Construct. Zeroes the decode state AND the counters, so it is what a fresh
+ * receiver wants and NOT what a link going back to idle wants: on a bench that
+ * re-arms every couple of seconds, a counter zeroed per contact says nothing
+ * about the hour. link_sm.c calls frame_rx_reset() on those paths.
+ */
 void              frame_rx_init(frame_rx_t *r);
+
+/*
+ * Throw away a part-decoded frame and hunt again. Clears every piece of state
+ * the decoder carries and NOTHING it has counted — frames, syncs, false syncs,
+ * beacons and their CRC failures are all lifetime figures, which is the only
+ * way they are worth reading.
+ */
 void              frame_rx_reset(frame_rx_t *r);
 /*
  * One chip. d is E_B - E_A for that chip, in the bank's mag^2 units — see

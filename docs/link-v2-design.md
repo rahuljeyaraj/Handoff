@@ -335,7 +335,7 @@ Each step is a bench measurement, not a feature. Stop at any step that fails.
 | 4 | Passive: one board TX, one RX, plate to plate | `E_A`/`E_B` separate cleanly; guards do not rise while transmitting — **PASSED**, guard median flat across an 11× signal sweep |
 | 5 | Presence by guard median, tethered | busy tracks reality with the level swept — **PASSED 1fd27d0**, crossover on the derived k |
 | 6 | Frame decode with no slicer | BER at least as good as v1 on the same bench — **PASSED**, better at two gaps of three, and core 1 falls to 21 % |
-| 7 | Nonce beacon and election | two boards, no double-send, no self-trigger |
+| 7 | Nonce beacon and election | two boards, no double-send, no self-trigger — **PASSED**, and the election was derived away rather than built |
 | 8 | Skin path, on cells, floating | §14.1's 447-frame result matched or beaten |
 
 Step 4 is the one that decides whether this is worth it. Do not build past it
@@ -570,6 +570,91 @@ remains is a console probe that runs only while someone is looking at it.
 Correction 4's warning still stands — a budget taken in `linktest` is a lower
 bound — which is why that 21 % is quoted from `handoff` and not from the
 console app.
+
+
+### What step 7 measured, 25 Sep 2026 — and the second thing §7 asked for that does not exist
+
+**PASSED.** The flat-tone shout is a frame carrying a nonce under a CRC-16.
+`SHOUT_US`, `SHOUT_MIN_US`, `LISTEN_MIN_US`, `LISTEN_MAX_US`,
+`QUIET_WAIT_MAX_US`, `DETECT_US` and the whole `TRIG_WAIT` state are deleted.
+Brief §8 has the tables.
+
+#### Correction 7 — §7's election is machinery with nothing to elect
+
+§7's table says the sender is the band with the **higher nonce**. It is not,
+and this is the same shape as correction 6: the requirement the comparison
+would serve does not exist.
+
+A band is deaf from the start of its own beacon until its amplifier and the
+ADC ring have cleared. So:
+
+- Decoding a peer means you had **not yet started your own beacon** this
+  cycle — otherwise you were deaf for part of theirs.
+- A decoder stops beaconing, because it leaves the trigger as the sender. Its
+  beacon never goes out, so the band it decoded has nothing to decode.
+- If you could not decode because the two beacons **overlapped**, neither
+  could they: your beacon began inside their deaf window.
+
+**At most one band ever decodes the other.** That is v1's timing algebra
+surviving intact, which is the part of v1 that was never broken — what was
+broken was inferring "a peer" from how long a tone lasted. The nonce keeps the
+job that does have a requirement behind it, which is the one the 24 Sep bug
+came from: *is this my own echo?* The tie falls out of the same comparison,
+because a band that hears its own nonce cannot tell an echo from a peer that
+drew the same sixteen bits, and both want the same answer — stand down, and go
+out next time under a different name.
+
+Measured: 774 beacons from a band alone on the bench, **0 sends, 0 receives,
+0 self-echoes, 0 framer syncs**. v1 elected itself sender on 60 shouts out of
+60.
+
+#### Correction 8 — §7's 16-chip preamble cannot meet the stated false-sync rate
+
+§7's beacon table gives the preamble as 16 chips. There is no hunt window for
+which that works: the rule needs a run longer than the window, 16 chips plus
+four marker bits is a run of 24, and a 23-transition window against
+`HANDOFF_FALSE_SYNC_S` is four orders of magnitude out. The beacon therefore
+shares the card frame's **32-chip preamble and its hunt**, and the beacon is
+112 chips — 28 ms, which is what §7 estimated anyway.
+
+Accepting a second marker tail doubles the false-sync rate, and the window
+pays for it: 29 of 30 transitions becomes **28 of 30**, computed, with both
+ends still asserted. One chip of window is the entire cost of a second frame
+type.
+
+#### Correction 9 — the settle is the RING, not the AFE
+
+§9's table calls the turnaround "physical — AFE high-pass RC, measured", and
+brief §8 asks for that reading. There is no RC to read. `y 4` drives the
+board's own pad, releases it and watches presence: the signal bin reads ~670 at
+0, 1 and 2 ms and ~20 by 4 ms, which is a **step at exactly one DMA block**,
+not a decay. The amplifier is back inside 123 µs; everything else is the ring
+draining.
+
+So the settle is derived rather than measured-and-typed —
+`HANDOFF_RX_LATENCY_US + HANDOFF_TURNAROUND_US`, 4096 + 1000 — and it **does
+not grow with the beacon**, which was the real worry when the transmission went
+from 10 ms to 28. Three drive lengths, eight runs each: means 3230, 3949 and
+3010 µs, with the longest drive not the worst.
+
+#### What the phase sweep caught that no amount of reading would have
+
+The first beacon marker was picked on the obvious criterion, Hamming distance
+from the card's tail. It was wrong, and the sweep failed on it.
+
+A receiver that joins a frame late never believes the marker's first 00, so it
+goes on hunting **through the body** — and a Manchester run of identical bits
+is a run of alternating chips, which is what a preamble looks like. The marker
+with the furthest tail has only two chip-pair violations, so the window is
+clean again one chip into the body, and a nonce beginning 0000 then presents a
+perfect card marker. One nonce in sixteen, and two phases of 141 where both
+bands ended up listening.
+
+The marker with **four** violations holds it off for 29 chips of the body and
+leaves 39 nonces in 65536; `frame_beacon_nonce_ok()` refuses those at the draw,
+so it is none. The nonce is the one field in this protocol whose value is free,
+which is why rejection sampling is the honest fix and a whitener would not have
+been.
 
 ---
 

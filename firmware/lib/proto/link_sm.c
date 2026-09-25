@@ -121,7 +121,7 @@ static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role,
     sm->role = role;
 
     if (role == LINK_ROLE_SENDER) {
-        frame_rx_init(&sm->framer);
+        frame_rx_reset(&sm->framer);
         sm->turn_frames = 0;
         if (from_trigger) {
             /* Their settle, plus our own amplifier's, so the preamble starts
@@ -140,7 +140,7 @@ static void enter_exchange(link_sm_t *sm, uint64_t now_us, link_role_t role,
 
 void link_sm_begin(link_sm_t *sm, uint64_t now_us, link_role_t role)
 {
-    frame_rx_init(&sm->framer);
+    frame_rx_reset(&sm->framer);
     trig_stop(&sm->trig);
     open_contact(sm, now_us);
     /* The caller decided the roles itself, so there is no peer coming out of a
@@ -151,7 +151,9 @@ void link_sm_begin(link_sm_t *sm, uint64_t now_us, link_role_t role)
 void link_sm_idle(link_sm_t *sm, uint64_t now_us)
 {
     hal_tx_drive(sm->hal, false);
-    frame_rx_init(&sm->framer);
+    /* reset, not init: the framer's counters are the bench's lifetime view of
+     * this band and a band re-arms every contact. frame.h says which is which. */
+    frame_rx_reset(&sm->framer);
     forget_rx_busy(sm);             /* what we heard last was us */
 
     /*

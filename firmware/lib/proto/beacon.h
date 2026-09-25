@@ -201,8 +201,9 @@
  *
  *      L in [2T - S, 4T - S)
  *
- * At T = 28 ms and S = 6 ms that is 50 to 106 ms, a mean cycle of 112 ms, and
- * an expected rendezvous of 224 ms.
+ * At T = 28 ms and S = 5.096 ms that is 50.9 to 106.9 ms, a mean cycle of
+ * 112 ms — which is 4T exactly, however the settle moves, because the settle
+ * is subtracted from the listen — and an expected rendezvous of 224 ms.
  *
  * THE 224 IS A BOUND, NOT A PREDICTION, and the measurement is better than it
  * by a factor of nearly three. The model above holds the relative phase still
