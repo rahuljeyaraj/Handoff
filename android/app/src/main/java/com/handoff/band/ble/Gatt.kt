@@ -236,6 +236,9 @@ data class BandBench(
         /** carrier.c's min_delta: below this the band will not even start. */
         const val MIN_DELTA = 24
 
+        /** carrier.c's ratio_num, in eighths: present at 3x the floor. */
+        const val RATIO_NUM = 24
+
         /** Null for anything that is not a bench block, the score stream included. */
         fun parse(raw: ByteArray): BandBench? {
             if (raw.size < SIZE) return null

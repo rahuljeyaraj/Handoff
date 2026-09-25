@@ -13,6 +13,7 @@ import android.content.IntentFilter
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
@@ -63,6 +64,8 @@ class BandService : LifecycleService(), BandClient.Listener {
         val status: BandStatus? = null,
         /** The body-link bench readings, twice a second while Advanced is open. */
         val bench: BandBench? = null,
+        /** The same readings kept over time, for the Advanced page's chart. */
+        val benchTrace: BenchTrace = BenchTrace.EMPTY,
         val lastError: String? = null,
         /** When a handshake last arrived without a phone or email, and what it said. */
         val lastIncompleteAt: Long? = null,
@@ -338,7 +341,10 @@ class BandService : LifecycleService(), BandClient.Listener {
             clearNotFoundWatch()
         } else {
             syncInFlight = false
-            _state.value = _state.value.copy(status = null)
+            // The trace goes with the link. A gap in it would draw as a
+            // straight line between two readings minutes apart, which is
+            // exactly the shape a floor that does not move makes.
+            _state.value = _state.value.copy(status = null, benchTrace = BenchTrace.EMPTY)
             // autoConnect keeps the controller retrying on its own (BandClient's
             // STATE_DISCONNECTED comment) — this is that retry starting over.
             armNotFoundWatch()
@@ -402,7 +408,12 @@ class BandService : LifecycleService(), BandClient.Listener {
      * reconciliation 120 times a minute.
      */
     override fun onBench(bench: BandBench) {
-        _state.value = _state.value.copy(bench = bench)
+        val s = _state.value
+        val sample = BenchSample(
+            atMs = SystemClock.elapsedRealtime(),
+            level = bench.level, floor = bench.noiseFloor, present = bench.present,
+        )
+        _state.value = s.copy(bench = bench, benchTrace = s.benchTrace.plus(sample))
     }
 
     override fun onStatus(status: BandStatus) {

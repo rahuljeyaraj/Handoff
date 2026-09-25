@@ -33,10 +33,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.handoff.band.ble.BandBench
 import com.handoff.band.ble.BandService
+import com.handoff.band.ble.BenchTrace
 import com.handoff.band.ble.Gatt
 import com.handoff.band.ble.Pairing
 import com.handoff.band.data.OwnCard
 import com.handoff.band.ui.LocalBand
+import com.handoff.band.ui.components.BenchChart
 import com.handoff.band.ui.components.SectionHeader
 import com.handoff.band.ui.components.SettingsRow
 import com.handoff.band.ui.theme.MonoStyle
@@ -133,6 +135,8 @@ fun AdvancedScreen(state: BandService.State?, ownCard: OwnCard?, onBack: () -> U
 
             SectionHeader("Body link")
             BenchDump(state)
+            Spacer(Modifier.height(8.dp))
+            BenchChart(state?.benchTrace ?: BenchTrace.EMPTY)
 
             SectionHeader("Band status")
             StatusDump(state)
