@@ -193,21 +193,27 @@
 /*
  * Cap on TRIG_WAIT. A carrier that never clears is a stuck transmitter, noise,
  * or a floor that has moved, and waiting on it for ever would take the band off
- * the air. On expiry the band resets its carrier detector — the floor may
- * genuinely have moved — returns to listening, and DOES NOT SEND. That last
- * part is the difference from the beacon design this replaces, which elected
- * anyway: sending into a channel that is provably busy is worse than waiting a
- * cycle.
+ * the air. On expiry the band RE-PRIMES its carrier detector — the floor may
+ * genuinely have moved, and this is the one path in the system allowed to throw
+ * it away — returns to listening, and DOES NOT SEND. That last part is the
+ * difference from the beacon design this replaces, which elected anyway:
+ * sending into a channel that is provably busy is worse than waiting a cycle.
  */
 #ifndef HANDOFF_QUIET_WAIT_MAX_US
 #define HANDOFF_QUIET_WAIT_MAX_US 30000u
 #endif
 
-/* carrier.c's floor is a slow EMA over ~128 chips; a shout that outlasted it
- * would be absorbed into the floor and stop reading as a carrier — the
- * detector would lose the very signal it is being shown. */
+/*
+ * A shout has to be short against carrier.c's floor. It is no longer in danger
+ * of being absorbed by it — the floor is frozen while presence is up, so a
+ * carrier of any length cannot become its own floor — but the floor's prime
+ * window still has to contain silence, and the prime is taken from a minimum.
+ * A shout is flat tone with no quiet chips in it, so one approaching the window
+ * in length would let a band re-prime inside a peer's shout and go deaf to it.
+ * The window is 256 chips; this holds a shout to a quarter of that.
+ */
 HANDOFF_STATIC_ASSERT(HANDOFF_SHOUT_US <= 64u * HANDOFF_CHIP_US,
-    "shout outlasts the carrier detector's noise floor tracking");
+    "shout too long against the carrier detector's floor prime window");
 
 HANDOFF_STATIC_ASSERT(HANDOFF_SHOUT_US >= 4u * HANDOFF_DETECT_US,
     "shout too short for a peer to raise its flag and still see it end");
@@ -265,7 +271,7 @@ typedef struct {
     uint64_t last_poll_us;   /* to charge elapsed time to the right bucket  */
 
     bool     burst_due;      /* chips not yet handed to the HAL             */
-    bool     reset_due;      /* the caller owes the carrier detector a reset*/
+    bool     reprime_due;    /* the caller owes the detector a reprime      */
 
     /* counters — telemetry, and the assertions in the tests */
     uint32_t shouts;
@@ -338,11 +344,12 @@ bool         trig_listening(const trig_t *t);
 bool         trig_take_burst(trig_t *t);
 
 /*
- * True once when the quiet-wait cap expired and the carrier detector should be
- * reset. Clears on read. Kept as a request rather than done here because the
- * detector belongs to the caller — the trigger is given a bool, not a carrier_t.
+ * True once when the quiet-wait cap expired and the carrier detector's floor
+ * should be thrown away and primed again. Clears on read. Kept as a request
+ * rather than done here because the detector belongs to the caller — the
+ * trigger is given a bool, not a carrier_t.
  */
-bool         trig_take_carrier_reset(trig_t *t);
+bool         trig_take_carrier_reprime(trig_t *t);
 
 /* The listen duration currently being counted down. Telemetry, and what the
  * simultaneous-start test inspects to know a redraw really happened. */

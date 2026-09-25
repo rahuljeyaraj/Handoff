@@ -917,15 +917,23 @@ is still unmeasured. It is in §13's open items rather than presented as a
 result.
 
 **One thing the spec flagged as its main risk turned out to have a sharp edge
-underneath it.** §5.1 asked whether the receive path should reset the carrier
-detector, and asked for a test rather than an argument. End to end the two
-choices are bit-identical — same frames sent, same turnarounds, same
-rendezvous — because handover during a receive turn counts decoded frames and
-the framer is untouched either way. One layer down they are not: `carrier.c`
-re-primes its level and floor from the next chip after a reset, and during a
-frame that chip is high half the time. Primed on a high chip, the floor sits at
-the carrier's own level and the slow EMA cannot fall back inside the frame —
-measured, presence never returns across the whole remaining 624 chips. So the
-reset is a coin flip on blinding the thing that drives handover, for no gain,
-and the receive path does not do it. `test_beacon.c` pins the asymmetry so that
-a future change to `carrier.c` cannot quietly make this the wrong answer.
+underneath it, and the edge has since been taken off.** §5.1 asked whether the
+receive path should reset the carrier detector, and asked for a test rather than
+an argument. End to end the two choices were bit-identical — same frames sent,
+same turnarounds, same rendezvous — because handover during a receive turn
+counts decoded frames and the framer is untouched either way. One layer down
+they were not: `carrier.c` re-primed its level *and its floor* from the next
+chip after a reset, and during a frame that chip is high half the time. Primed
+on a high one the floor sat at the carrier's own level and could not fall back
+inside the frame — measured, presence never returned across the remaining 624
+chips. So the reset was a coin flip on blinding the thing that drives handover.
+
+**§5.1 is now answered by making the question stop mattering.** The floor is a
+property of the room, not of the state machine: `carrier_reset()` clears
+presence and re-primes `level` alone, and only `carrier_reprime()` — which
+§4.3's quiet-wait cap is the sole caller of — throws the floor away. Adding the
+reset back to the receive path was then measured against the whole suite and
+changed nothing at all: 0 failures either way, worst rendezvous 130900 us
+either way, the same 399/400 on simultaneous starts. It is left out because it
+buys nothing, not because it is dangerous. `test_beacon.c` now pins the four
+properties the floor has to have instead of the asymmetry it used to have.

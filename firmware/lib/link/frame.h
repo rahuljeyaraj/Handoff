@@ -150,17 +150,18 @@ const uint8_t     *frame_rx_payload(const frame_rx_t *r);   /* HANDOFF_FRAG_PAYL
  * answer to "is the far end still transmitting?" than carrier.c is, and that is
  * what it exists for.
  *
- * carrier.c tracks a slow floor over ~128 chips so it can find a preamble
- * against a moving ambient. A whole frame is FRAME_TOTAL_CHIPS — several times
- * that window — so the floor climbs to meet the carrier partway through every
- * frame and carrier_present() goes false while the frame is still arriving.
- * That is not a bug in the detector; it is a detector doing its job over the
- * wrong timescale for this question.
- *
- * Measured on the first assembled PCB, 24 Sep 2026: a receiver reported
- * `carrier level 548 floor 256 present 0` and the framer synced 23 times while
- * finishing exactly zero frames, because the receive turn ended on the
+ * It was once load-bearing. carrier.c's floor used to climb to meet a carrier
+ * that lasted a whole frame, so carrier_present() went false partway through
+ * every one — measured on the first assembled PCB, 24 Sep 2026, as a receiver
+ * reporting `carrier level 548 floor 256 present 0` while the framer synced 23
+ * times and finished exactly zero frames, because the receive turn ended on the
  * detector's silence and reset the framer mid-body every time.
+ *
+ * carrier.c no longer does that: its floor is frozen while presence is up, so
+ * it cannot learn the carrier it is listening to. This stays anyway. A framer
+ * holding a frame is direct evidence that the far end is transmitting, where
+ * the detector is an energy threshold that a fade can drop; and a turn ending
+ * over the top of an arriving frame costs a whole card.
  */
 bool               frame_rx_busy(const frame_rx_t *r);
 

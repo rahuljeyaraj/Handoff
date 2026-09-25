@@ -300,8 +300,12 @@ the four are now measured; the fourth still is not.
 | §7 duty-cycle and power figures (~10.8 mA against ~3.9 mA, ~39 h against ~85 h on 500 mAh) | arithmetic from cycle lengths; datasheet estimates | **still unmeasured.** Carried into firmware-architecture §13's open items rather than presented as a result |
 
 One thing the spec did not anticipate, found while settling §5.1: a `carrier_t`
-re-primed on a high Manchester chip stays blind for the rest of the frame. See
-the note in §5.1.
+re-primed on a high Manchester chip stayed blind for the rest of the frame.
+That is fixed rather than worked around — `carrier_reset()` no longer touches
+the floor, and the floor's own prime is taken from a minimum over a window long
+enough to contain silence, which a Manchester high cannot set. §5.1's question
+is dead as a result: resetting the detector on the receive path now measures
+identically to not resetting it.
 
 ## 11. Visual reference
 

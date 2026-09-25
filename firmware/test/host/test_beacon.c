@@ -382,49 +382,138 @@ static void shout_is_not_a_preamble(void)
 }
 
 /*
- * §5.1, pinned. The receive path deliberately does NOT reset the carrier
- * detector, and the reason is a sharp asymmetry in carrier.c that no amount of
- * end-to-end testing surfaces — both choices measure identically at the link
- * level, so this is the test that actually decides it.
- *
- * carrier_push() re-primes level and floor from the next chip it sees. During a
- * frame that chip is a Manchester chip, so it is high half the time. Primed on
- * a low one, presence returns immediately. Primed on a high one, the floor sits
- * at the carrier's own level and the slow EMA cannot climb back down inside the
- * frame — the detector goes blind for the rest of it, and carrier_present() is
- * what handover runs on.
- *
- * If someone changes carrier.c's floor constants and this starts passing
- * trivially, the reset becomes safe and §5.1 can be revisited. Until then it is
- * a coin flip that buys nothing.
+ * Ambient chip energies with a known mean, pushed until the floor has settled
+ * on them. The mean is returned because that is what the floor is supposed to
+ * land on: an average that can only walk downward lands on the MINIMUM
+ * instead, which is what the old floor did and what these checks have to be
+ * able to tell apart.
  */
-static void re_priming_mid_frame_blinds_the_detector(void)
+static uint32_t settle_on_ambient(carrier_t *c, uint32_t *rng, int chips)
+{
+    const uint16_t lo = 6;
+    uint64_t sum = 0;
+    int i;
+
+    for (i = 0; i < chips; i++) {
+        uint16_t e;
+        *rng = *rng * 1664525u + 1013904223u;
+        e = (uint16_t)(lo + (*rng >> 28));      /* lo .. lo+15 */
+        sum += e;
+        carrier_push(c, e);
+    }
+    return (uint32_t)(sum / (uint64_t)chips);
+}
+
+/*
+ * §5.1, answered. The receive path still does not reset the carrier detector,
+ * but it is no longer a coin flip on blinding it: carrier.c's floor is a
+ * property of the room now, reset() leaves it alone, and only reprime() throws
+ * it away. The asymmetry this test used to pin — primed on a low Manchester
+ * chip presence returns at once, primed on a high one it never returns — does
+ * not exist any more, and the old behaviour was load-bearing for exactly one
+ * reason: the floor could only ever walk downward, so a poisoned floor was
+ * dragged back by the same accident that made the ratio test meaningless.
+ *
+ * What is pinned instead is the five things the redesign has to be true for at
+ * once. Each one is a way the detector has actually failed, on hardware or in
+ * the phase sweep.
+ */
+static void the_floor_is_the_room_not_the_carrier(void)
 {
     /* design §5's link budget at the ADC, as halh_chan_default uses. */
     const uint16_t hi = 200, lo = 6;
     carrier_t c;
-    int ph;
-    int first[2];
+    uint32_t rng = 0xA5A51234u;
+    uint32_t settled, mean;
+    int i, ph;
 
-    hf_begin("trigger: re-priming the carrier detector mid-frame is not safe");
+    hf_begin("carrier: the floor tracks the room, not the carrier");
 
+    /*
+     * ONE. It must not collapse. The old update rounded every move toward minus
+     * infinity, so the floor walked down until it sat on the MINIMUM of what it
+     * was watching, and where ambient reaches zero that is the clamp at 1 — the
+     * ratio test then spent its life comparing against 1. The distance between
+     * a mean and a minimum is the whole check, so the ambient here is generated
+     * with a known mean and the floor has to land on that rather than on `lo`.
+     * 200000 chips because the collapse is slow: 8000 is not enough to see it.
+     */
+    carrier_init(&c);
+    mean = settle_on_ambient(&c, &rng, 200000);   /* ~50 s on a shelf */
+    settled = carrier_floor(&c);
+    HF_CHECK_MSG(settled + 3u >= mean && settled <= mean + 3u,
+             "floor settled at %u on ambient whose mean is %u",
+             (unsigned)settled, (unsigned)mean);
+    HF_CHECK_MSG(!carrier_present(&c), "ambient alone read as a carrier");
+
+    /*
+     * TWO. It must not climb to meet a carrier. An honest average run through
+     * a frame converges on the carrier's own mean, and a detector whose floor
+     * is the carrier's mean cannot hear it — measured on the first assembled
+     * board as `level 548 floor 256 present 0` with a known-good transmitter
+     * mid-frame, which ended every receive turn over the top of the frame it
+     * was waiting for.
+     */
+    for (i = 0; i < FRAME_TOTAL_CHIPS; i++) carrier_push(&c, (i & 1) ? hi : lo);
+    HF_CHECK_MSG(carrier_present(&c),
+             "went deaf inside one frame: floor %u against level %u",
+             (unsigned)carrier_floor(&c), (unsigned)carrier_level(&c));
+    /* One chip is learned before presence latches, so a hair of movement is
+     * honest; what this rejects is a floor walking up toward (hi+lo)/2. */
+    HF_CHECK_MSG(carrier_floor(&c) <= settled + 2u,
+             "the floor climbed from %u to %u across a frame",
+             (unsigned)settled, (unsigned)carrier_floor(&c));
+
+    /*
+     * THREE. A reset mid-frame must not blind it. This is §5.1 itself. The
+     * detector is reset at three points during a handshake and the chip that
+     * arrives next is a Manchester chip, high half the time; the old code
+     * primed the floor from it and lost the rest of the frame on the high
+     * phase. Both phases now come back inside the detector's own latency.
+     */
     for (ph = 0; ph < 2; ph++) {
-        int i;
-        first[ph] = -1;
-        carrier_init(&c);            /* same state carrier_reset() leaves */
+        int first = -1;
+        carrier_reset(&c);
         for (i = 0; i < FRAME_TOTAL_CHIPS; i++) {
             carrier_push(&c, ((i + ph) & 1) ? hi : lo);
-            if (carrier_present(&c)) { first[ph] = i; break; }
+            if (carrier_present(&c)) { first = i; break; }
         }
+        HF_CHECK_MSG(first >= 0 && first <= 4,
+                 "reset on a %s chip: presence took %d chips",
+                 ph ? "high" : "low", first);
     }
 
-    HF_CHECK_MSG(first[0] >= 0 && first[0] <= 4,
-             "re-primed on a low chip, presence took %d chips", first[0]);
+    /*
+     * FOUR. A reprime taken at the worst moment must recover inside one frame,
+     * not inside a rendezvous budget. §4.3's quiet-wait cap is allowed to throw
+     * the floor away, and it can do it mid-frame. The prime is a minimum, so a
+     * Manchester high cannot set it: the next chip is a low one.
+     */
+    for (ph = 0; ph < 2; ph++) {
+        int first = -1;
+        carrier_reprime(&c);
+        for (i = 0; i < FRAME_TOTAL_CHIPS; i++) {
+            carrier_push(&c, ((i + ph) & 1) ? hi : lo);
+            if (carrier_present(&c)) { first = i; break; }
+        }
+        HF_CHECK_MSG(first >= 0 && first <= 8,
+                 "reprime on a %s chip: presence took %d chips",
+                 ph ? "high" : "low", first);
+    }
 
-    HF_CHECK_MSG(first[1] < 0,
-             "re-primed on a high chip, presence came back after %d chips —"
-             " carrier.c's floor has changed, so §5.1 is worth revisiting",
-             first[1]);
+    /*
+     * FIVE. It must barely move across a preamble, which is the window
+     * listen-before-talk has to decide in. That was the original comment's
+     * argument for a slow average and it still stands.
+     */
+    carrier_init(&c);
+    (void)settle_on_ambient(&c, &rng, 8000);
+    settled = carrier_floor(&c);
+    for (i = 0; i < FRAME_PREAMBLE_CHIPS; i++) carrier_push(&c, (i & 1) ? hi : lo);
+    HF_CHECK_MSG(carrier_floor(&c) <= settled + 1u,
+             "the floor moved %u to %u across a %d-chip preamble",
+             (unsigned)settled, (unsigned)carrier_floor(&c),
+             (int)FRAME_PREAMBLE_CHIPS);
 }
 
 /*
@@ -551,7 +640,7 @@ void test_beacon(void)
     simultaneous_start();
     stuck_carrier();
     shout_is_not_a_preamble();
-    re_priming_mid_frame_blinds_the_detector();
+    the_floor_is_the_room_not_the_carrier();
     trigger_completes_a_handshake();
     re_arms_after_a_contact();
 }

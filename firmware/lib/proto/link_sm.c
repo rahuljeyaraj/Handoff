@@ -402,10 +402,10 @@ static void suspect_collision(link_sm_t *sm, uint64_t now_us)
  * The carrier detector and the framer are fed ONLY in the listening phases.
  * Feeding them while our own amplifier is driving is the drain_discard()
  * problem below, and here it has a sharper edge: the band would trigger on its
- * own shout, every cycle, for ever. The detector's level and floor are
- * deliberately NOT reset between cycles — the ambient floor of a room does not
- * change in the 11 ms we are deaf, and re-priming it against a shout that is
- * already on would hide that shout.
+ * own shout, every cycle, for ever. The floor is deliberately NOT thrown away
+ * between cycles — the ambient floor of a room does not change in the 11 ms we
+ * are deaf, and re-priming it against a shout that is already on would hide
+ * that shout. carrier.c holds the floor across a reset for the same reason.
  */
 static void poll_idle(link_sm_t *sm, uint64_t now_us)
 {
@@ -451,9 +451,14 @@ static void poll_idle(link_sm_t *sm, uint64_t now_us)
     ts = trig_poll(&sm->trig, now_us,
                    listening && carrier_present(&sm->carrier), locked);
 
-    /* §4.3: the quiet-wait cap expired, so the floor may genuinely have moved
-     * under the detector. Re-prime it rather than stay deaf to a real peer. */
-    if (trig_take_carrier_reset(&sm->trig)) carrier_reset(&sm->carrier);
+    /*
+     * §4.3: the quiet-wait cap expired, so the floor may genuinely have moved
+     * under the detector. This is the ONLY site that throws the floor away —
+     * the other three reset presence and let the room's floor carry — and it is
+     * also the only way out of a detector that has latched, because a frozen
+     * floor stops learning by design.
+     */
+    if (trig_take_carrier_reprime(&sm->trig)) carrier_reprime(&sm->carrier);
 
     if (trig_take_burst(&sm->trig)) {
         sm->chips_len = trig_fill(sm->chips, sizeof sm->chips);

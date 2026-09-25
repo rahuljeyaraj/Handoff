@@ -61,7 +61,7 @@ void trig_init(trig_t *t, const hal_iface_t *hal)
 void trig_start(trig_t *t, uint64_t now_us)
 {
     t->burst_due = false;
-    t->reset_due = false;
+    t->reprime_due = false;
     t->last_poll_us = now_us;
     t->listen_us = 0;
     t->silent_left_us = 0;
@@ -169,7 +169,7 @@ trig_state_t trig_poll(trig_t *t, uint64_t now_us, bool carrier_heard,
              */
             close_wait(t, now_us);
             t->quiet_timeouts++;
-            t->reset_due = true;
+            t->reprime_due = true;
             enter_listen(t);
         }
         break;
@@ -197,10 +197,10 @@ bool trig_take_burst(trig_t *t)
     return due;
 }
 
-bool trig_take_carrier_reset(trig_t *t)
+bool trig_take_carrier_reprime(trig_t *t)
 {
-    const bool due = t->reset_due;
-    t->reset_due = false;
+    const bool due = t->reprime_due;
+    t->reprime_due = false;
     return due;
 }
 
