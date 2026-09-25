@@ -122,6 +122,52 @@ typedef struct {
 
 _Static_assert(sizeof(ble_status_t) == 20, "status must fit one notify at the 23-byte floor");
 
+/* ---- bench block, on the telemetry characteristic --------------------- */
+
+/*
+ * The numbers a body-coupled bench run actually needs, pushed over telemetry
+ * so they leave the wristband by radio. design §13 forbids a USB tether to a
+ * mains-powered PC while anyone touches an electrode, and 24 Sep 2026 showed
+ * why it is not merely a safety rule: tethered, both bands share the PC ground
+ * and that wire IS the return path under test, so chip energy read 1530 and
+ * carrier level 144 while ZERO frames decoded. The readings were not just
+ * unsafe, they were wrong. See docs/link-debug-brief.md.
+ *
+ * WHY TELEMETRY AND NOT STATUS. ble_status_t is full: 20 bytes is one notify
+ * at the 23-byte ATT floor and its own comment says a version 3 needs a
+ * second notify. telemetry was reserved for "the §14.1 body tests" from M2
+ * and the handoff app never filled it, so it is free.
+ *
+ * A block is tagged because the score stream in tlm_ble.c also rides this
+ * characteristic. A score block is 16 untagged bytes; anything starting with
+ * BLE_BENCH_TAG is one of these. Read level AGAINST floor -- a healthy idle
+ * detector sits with level near floor, and BOTH high is the poisoned floor
+ * that handoff.c's print_stats() warns about.
+ *
+ * Versioned by offset like ble_status_t: append fields, never move them.
+ */
+#define BLE_BENCH_TAG     0xB1u
+#define BLE_BENCH_VERSION 1
+
+typedef struct {
+    uint8_t  tag;           /* BLE_BENCH_TAG, so a score block cannot alias  */
+    uint8_t  version;       /* BLE_BENCH_VERSION                             */
+    uint16_t level;         /* carrier level -- the signal                   */
+    uint16_t noise_floor;   /* carrier floor -- read level against THIS      */
+    uint16_t good;          /* frames decoded since the last zero            */
+    uint16_t bad;           /* CRC failures since the last zero              */
+    uint16_t sent;          /* frames transmitted since the last zero        */
+    uint16_t syncs;         /* framer syncs; 0 with a high level is the tell  */
+    uint8_t  present;       /* carrier_present()                             */
+    uint8_t  link_state;    /* proto/link_sm.h state                         */
+    uint8_t  complete;      /* handshakes completed, saturating at 255        */
+    uint8_t  aborts;        /* handshakes aborted, saturating at 255          */
+    uint8_t  core1_load;    /* per cent                                      */
+    uint8_t  on_usb;        /* 1 = VBUS present, so THIS RUN IS NOT VALID    */
+} ble_bench_t;
+
+_Static_assert(sizeof(ble_bench_t) == 20, "bench must fit one notify at the 23-byte floor");
+
 /* ---- handlers --------------------------------------------------------- */
 
 /* A complete provisioning card. The text is NOT null-terminated and the

@@ -50,9 +50,11 @@ CHARACTERISTIC, 48414e44-0003-4f46-9b2c-1e0a7d3f5c81, NOTIFY | DYNAMIC | ENCRYPT
 // status — read and notify. Link state, last score, fragment bitmap, errors.
 CHARACTERISTIC, 48414e44-0004-4f46-9b2c-1e0a7d3f5c81, READ | NOTIFY | DYNAMIC,
 
-// telemetry — notify. Decimated score stream for the §14.1 body tests, and
-// from M10 the only legal way measurements leave a wristband someone is
-// holding (design §13).
+// telemetry — notify. Two block types, told apart by the first byte:
+//   a 16-byte untagged block   — the decimated score stream (tlm_ble.c)
+//   a 20-byte block tagged 0xB1 — ble_bench_t, the bench counters
+// From M10 the only legal way measurements leave a wristband someone is
+// holding (design §13). The bench block is what scripts/blelog.py reads.
 CHARACTERISTIC, 48414e44-0005-4f46-9b2c-1e0a7d3f5c81, NOTIFY | DYNAMIC,
 
 // control — write. Carrier select, trigger raw capture, force role.

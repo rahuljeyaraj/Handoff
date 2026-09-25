@@ -229,6 +229,14 @@ static btstack_timer_source_t s_status_timer;
 static btstack_timer_source_t s_link_timer;
 #define STATUS_TICK_MS 30000u
 
+/*
+ * The bench block is pushed far faster than status because it is read while
+ * somebody is standing there wearing the band. 30 s is a background poll;
+ * 500 ms is an instrument.
+ */
+static btstack_timer_source_t s_bench_timer;
+#define BENCH_TICK_MS 500u
+
 static void report_status(void)
 {
     ble_status_t st;
@@ -261,6 +269,38 @@ static void report_status(void)
     st.fw_patch = HANDOFF_FW_VERSION_PATCH;
 
     ble_notify_status(&st);
+}
+
+static uint16_t sat16(uint32_t v) { return (uint16_t)(v > 0xFFFFu ? 0xFFFFu : v); }
+static uint8_t  sat8 (uint32_t v) { return (uint8_t) (v > 0xFFu   ? 0xFFu   : v); }
+
+/*
+ * The same numbers print_stats() puts on the console, sent by radio instead.
+ * This is the only path that answers "what is the signal doing?" for a band
+ * that is floating on its cell, which design §13 requires and which the
+ * 24 Sep bench proved is also the only way to get a TRUE answer.
+ */
+static void report_bench(void)
+{
+    ble_bench_t b;
+
+    memset(&b, 0, sizeof b);
+    b.tag         = (uint8_t)BLE_BENCH_TAG;
+    b.version     = BLE_BENCH_VERSION;
+    b.level       = sat16(carrier_level(&s_sm.carrier));
+    b.noise_floor = sat16(carrier_floor(&s_sm.carrier));
+    b.good        = sat16(s_sm.frames_rx_good - s_st.good_at_zero);
+    b.bad         = sat16(s_sm.frames_rx_bad  - s_st.bad_at_zero);
+    b.sent        = sat16(s_sm.frames_sent    - s_st.frames_at_zero);
+    b.syncs       = sat16(s_sm.framer.syncs);
+    b.present     = carrier_present(&s_sm.carrier) ? 1u : 0u;
+    b.link_state  = (uint8_t)s_sm.state;
+    b.complete    = sat8(s_st.complete);
+    b.aborts      = sat8(s_st.abort);
+    b.core1_load  = (uint8_t)hal_pico_core1_load();
+    b.on_usb      = power_on_usb() ? 1u : 0u;
+
+    ble_notify_telemetry(&b, sizeof b);
 }
 
 /*
@@ -417,6 +457,18 @@ static void status_tick(btstack_timer_source_t *ts)
 {
     if (ble_connected()) report_status();
     btstack_run_loop_set_timer(ts, STATUS_TICK_MS);
+    btstack_run_loop_add_timer(ts);
+}
+
+/*
+ * Subscribing to telemetry IS the request for these: BLE_CTRL_TLM_DECIMATE is
+ * left to the score stream it was defined for. Nothing is sent to a phone that
+ * did not subscribe, so a band in ordinary use streams nothing.
+ */
+static void bench_tick(btstack_timer_source_t *ts)
+{
+    if (ble_telemetry_subscribed()) report_bench();
+    btstack_run_loop_set_timer(ts, BENCH_TICK_MS);
     btstack_run_loop_add_timer(ts);
 }
 
@@ -1129,6 +1181,10 @@ int main(void)
     btstack_run_loop_set_timer_handler(&s_status_timer, status_tick);
     btstack_run_loop_set_timer(&s_status_timer, STATUS_TICK_MS);
     btstack_run_loop_add_timer(&s_status_timer);
+
+    btstack_run_loop_set_timer_handler(&s_bench_timer, bench_tick);
+    btstack_run_loop_set_timer(&s_bench_timer, BENCH_TICK_MS);
+    btstack_run_loop_add_timer(&s_bench_timer);
     btstack_run_loop_set_timer_handler(&s_link_timer, link_tick);
     btstack_run_loop_set_timer(&s_link_timer, LINK_TICK_MS);
     btstack_run_loop_add_timer(&s_link_timer);

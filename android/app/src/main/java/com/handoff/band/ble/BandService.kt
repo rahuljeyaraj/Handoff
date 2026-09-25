@@ -61,6 +61,8 @@ class BandService : LifecycleService(), BandClient.Listener {
         val connected: Boolean = false,
         val ready: Boolean = false,
         val status: BandStatus? = null,
+        /** The body-link bench readings, twice a second while Advanced is open. */
+        val bench: BandBench? = null,
         val lastError: String? = null,
         /** When a handshake last arrived without a phone or email, and what it said. */
         val lastIncompleteAt: Long? = null,
@@ -391,6 +393,16 @@ class BandService : LifecycleService(), BandClient.Listener {
         // criterion can be checked from the lock screen rather than by
         // unlocking and hoping.
         notify("Handshake: ${card.displayName}")
+    }
+
+    /*
+     * Straight into the state and nowhere else: these are numbers on the
+     * Advanced page, not something the app acts on. sync() is deliberately
+     * not called — at twice a second it would run the provisioning
+     * reconciliation 120 times a minute.
+     */
+    override fun onBench(bench: BandBench) {
+        _state.value = _state.value.copy(bench = bench)
     }
 
     override fun onStatus(status: BandStatus) {

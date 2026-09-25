@@ -40,10 +40,13 @@ import com.handoff.band.ui.components.SectionHeader
 import com.handoff.band.ui.components.SettingsRow
 
 /**
- * The Advanced row (bench and diagnostic tools) is hidden: the bench no longer
- * uses it. The screen and its route stay; set this true to bring the row back.
+ * The Advanced row (bench and diagnostic tools). Hidden on 19 Sep 2026 because
+ * the bench had stopped using it; back on 25 Sep because it is now the ONLY way
+ * to read the body link while the band is floating on its cell, which design
+ * §13 requires and the 24 Sep bench proved is also the only way to get a true
+ * reading. Set false again to hide the row for a demo build.
  */
-private const val SHOW_ADVANCED = false
+private const val SHOW_ADVANCED = true
 
 /**
  * Settings: the three things about the app itself, then About.

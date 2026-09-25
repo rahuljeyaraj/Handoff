@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.handoff.band.ble.BandBench
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.Gatt
 import com.handoff.band.ble.Pairing
@@ -130,6 +131,9 @@ fun AdvancedScreen(state: BandService.State?, ownCard: OwnCard?, onBack: () -> U
                 onClick = { band.service?.control(Gatt.forget()) },
             )
 
+            SectionHeader("Body link")
+            BenchDump(state)
+
             SectionHeader("Band status")
             StatusDump(state)
 
@@ -160,6 +164,87 @@ fun AdvancedScreen(state: BandService.State?, ownCard: OwnCard?, onBack: () -> U
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * The body link, live, twice a second — the numbers the console prints for `s`,
+ * arriving by radio instead.
+ *
+ * This is the whole point of the section: design §13 forbids a USB tether to a
+ * mains-powered PC while anyone touches an electrode, and the 24 Sep 2026 bench
+ * proved a tethered reading is also WRONG — both bands share the PC ground and
+ * that wire is the return path under test, so the carrier read 144 while zero
+ * frames decoded. To measure the link you must read it from a floating band,
+ * which means reading it here.
+ */
+@Composable
+private fun BenchDump(state: BandService.State?) {
+    val b = state?.bench
+    if (b == null) {
+        Text(
+            "Nothing yet. The band pushes these once the app is connected; " +
+                "they stop when it disconnects.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        return
+    }
+
+    val rows = listOf(
+        // Level alone means nothing; the floor it is measured against is the
+        // other half of the reading, so they sit together.
+        "level / floor" to "${b.level} / ${b.noiseFloor}",
+        "margin" to "${b.margin}",
+        "carrier now" to (if (b.present) "yes" else "no"),
+        "frames good" to "${b.good}",
+        "frames bad CRC" to "${b.bad}",
+        "frames sent" to "${b.sent}",
+        "framer syncs" to "${b.syncs}",
+        "handshakes" to "${b.complete} complete, ${b.aborts} abort",
+        "link state" to "${b.linkState}",
+        "core 1" to "${b.core1Load}%",
+    )
+
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        for ((k, v) in rows) {
+            Row(Modifier.fillMaxWidth()) {
+                Text(k, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                     modifier = Modifier.weight(1f))
+                Text(v, style = MonoStyle)
+            }
+        }
+
+        // The two readings that are worth a sentence rather than a number,
+        // because each one invalidates everything above it.
+        if (b.onUsb) {
+            Text(
+                "The band is on USB. A body-coupled reading taken now is not " +
+                    "valid — the PC ground is the return path under test. " +
+                    "Run it on the cell.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        if (b.margin < BandBench.MIN_DELTA) {
+            Text(
+                "Margin is under ${BandBench.MIN_DELTA}, so the band will not " +
+                    "start a handshake at all.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        } else if (b.level > b.noiseFloor * 2 && b.syncs == 0) {
+            Text(
+                "A strong carrier with no framer sync: the receiver is being " +
+                    "swamped, not starved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
 }

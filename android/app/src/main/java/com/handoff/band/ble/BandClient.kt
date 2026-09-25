@@ -53,6 +53,7 @@ class BandClient(
         fun onConnectionChanged(connected: Boolean, ready: Boolean)
         fun onCardReceived(vcardText: String)
         fun onStatus(status: BandStatus)
+        fun onBench(bench: BandBench)
         fun onProvisioned(ok: Boolean)
         /** A control write was answered: [op] is its opcode, [ok] the ATT status. */
         fun onControlWritten(op: Int, ok: Boolean)
@@ -344,6 +345,10 @@ class BandClient(
                     subscribe(Gatt.RX_VCARD)
                 }
                 queue { subscribe(Gatt.STATUS) }
+                // Unencrypted by design, so a bench session needs no pairing
+                // dance to see anything. Subscribing IS the request: the band
+                // pushes nothing to a phone that did not ask.
+                queue { subscribe(Gatt.TELEMETRY) }
                 // A read as well as the subscription: status only notifies
                 // on change, and the service needs a baseline to decide
                 // whether the band already holds the wearer's card.
@@ -444,6 +449,12 @@ class BandClient(
                     }
                 }
                 Gatt.STATUS -> BandStatus.parse(value)?.let(listener::onStatus)
+                // The score stream shares this characteristic and parses to
+                // null, so an untagged 16-byte block falls through harmlessly.
+                Gatt.TELEMETRY -> BandBench.parse(value)?.let {
+                    Log.i(TAG, "bench ${it.line()}")
+                    listener.onBench(it)
+                }
                 else -> Unit
             }
         }

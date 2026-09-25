@@ -188,3 +188,77 @@ data class BandStatus(
         }
     }
 }
+
+/**
+ * The bench block, on the `telemetry` characteristic — see `ble_bench_t` in
+ * `firmware/lib/hal_pico/ble.h`. Little-endian, 20 bytes, tagged so it cannot
+ * be mistaken for the 16-byte score block that shares the characteristic.
+ *
+ * This exists because design §13 forbids tethering a band to a mains-powered
+ * PC while anyone touches an electrode, and because 24 Sep 2026 showed a
+ * tethered reading is not merely unsafe but WRONG: both bands then share the
+ * PC ground, and that wire is the return path under test.
+ *
+ * READ [level] AGAINST [noiseFloor]. A high level with [syncs] stuck at zero
+ * means the receiver is swamped, not starved.
+ */
+data class BandBench(
+    val version: Int,
+    val level: Int,
+    val noiseFloor: Int,
+    val good: Int,
+    val bad: Int,
+    val sent: Int,
+    val syncs: Int,
+    val present: Boolean,
+    val linkState: Int,
+    val complete: Int,
+    val aborts: Int,
+    val core1Load: Int,
+    /** VBUS at the band. True means the run is not a valid body-coupled test. */
+    val onUsb: Boolean,
+) {
+    /** How far the carrier sits above its own floor. carrier.c gates on 24. */
+    val margin get() = level - noiseFloor
+
+    /** One line, for `adb logcat` — what scripts/blelog.py parses. */
+    fun line(): String =
+        "level $level floor $noiseFloor margin $margin present ${if (present) 1 else 0} " +
+            "good $good bad $bad sent $sent syncs $syncs " +
+            "complete $complete aborts $aborts state $linkState " +
+            "load $core1Load usb ${if (onUsb) 1 else 0}"
+
+    companion object {
+        const val SIZE = 20
+        const val TAG = 0xB1
+        const val VERSION = 1
+
+        /** carrier.c's min_delta: below this the band will not even start. */
+        const val MIN_DELTA = 24
+
+        /** Null for anything that is not a bench block, the score stream included. */
+        fun parse(raw: ByteArray): BandBench? {
+            if (raw.size < SIZE) return null
+            val b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
+            if ((b.get().toInt() and 0xFF) != TAG) return null
+            val version = b.get().toInt() and 0xFF
+            if (version < VERSION) return null
+            val level = b.short.toInt() and 0xFFFF
+            val noiseFloor = b.short.toInt() and 0xFFFF
+            val good = b.short.toInt() and 0xFFFF
+            val bad = b.short.toInt() and 0xFFFF
+            val sent = b.short.toInt() and 0xFFFF
+            val syncs = b.short.toInt() and 0xFFFF
+            return BandBench(
+                version = version, level = level, noiseFloor = noiseFloor,
+                good = good, bad = bad, sent = sent, syncs = syncs,
+                present = (b.get().toInt() and 0xFF) != 0,
+                linkState = b.get().toInt() and 0xFF,
+                complete = b.get().toInt() and 0xFF,
+                aborts = b.get().toInt() and 0xFF,
+                core1Load = b.get().toInt() and 0xFF,
+                onUsb = (b.get().toInt() and 0xFF) != 0,
+            )
+        }
+    }
+}
