@@ -1,28 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="435" viewBox="0 0 1600 435" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <rect width="1600" height="435" fill="#ffffff"/>
-  <text x="36.0" y="66.0" text-anchor="start" font-size="30" fill="#2b2b2b" font-weight="700">Five numbers, every 50 µs. Nothing is remembered between them.</text>
-  <rect x="36.0" y="170.0" width="284.8" height="154.8" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
-  <text x="178.4" y="218.3" text-anchor="middle" font-size="30" fill="#555555" font-weight="700">140 kHz</text>
-  <text x="178.4" y="257.9" text-anchor="middle" font-size="30" fill="#2b2b2b">How loud is</text>
-  <text x="178.4" y="297.5" text-anchor="middle" font-size="30" fill="#2b2b2b">the room?</text>
-  <rect x="346.8" y="170.0" width="284.8" height="154.8" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
-  <text x="489.2" y="218.3" text-anchor="middle" font-size="30" fill="#555555" font-weight="700">160 kHz</text>
-  <text x="489.2" y="257.9" text-anchor="middle" font-size="30" fill="#2b2b2b">How loud is</text>
-  <text x="489.2" y="297.5" text-anchor="middle" font-size="30" fill="#2b2b2b">the room?</text>
-  <rect x="657.6" y="170.0" width="284.8" height="154.8" rx="10" fill="#c0392b" stroke="#c0392b" stroke-width="2.5"/>
-  <text x="800.0" y="238.1" text-anchor="middle" font-size="30" fill="#ffffff" font-weight="700">Tone A, 180 kHz</text>
-  <text x="800.0" y="277.7" text-anchor="middle" font-size="30" fill="#ffffff">A 0.</text>
-  <rect x="968.4" y="170.0" width="284.8" height="154.8" rx="10" fill="#c0392b" stroke="#c0392b" stroke-width="2.5"/>
-  <text x="1110.8" y="238.1" text-anchor="middle" font-size="30" fill="#ffffff" font-weight="700">Tone B, 200 kHz</text>
-  <text x="1110.8" y="277.7" text-anchor="middle" font-size="30" fill="#ffffff">A 1.</text>
-  <rect x="1279.2" y="170.0" width="284.8" height="154.8" rx="10" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
-  <text x="1421.6" y="218.3" text-anchor="middle" font-size="30" fill="#555555" font-weight="700">220 kHz</text>
-  <text x="1421.6" y="257.9" text-anchor="middle" font-size="30" fill="#2b2b2b">How loud is</text>
-  <text x="1421.6" y="297.5" text-anchor="middle" font-size="30" fill="#2b2b2b">the room?</text>
-  <path d="M657.6 144.0 L657.6 160.0 L1253.2 160.0 L1253.2 144.0" stroke="#c0392b" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="955.4" y="127.5" text-anchor="middle" font-size="30" fill="#c0392b" font-weight="700">Sent. The louder of the two is the chip.</text>
-  <path d="M36.0 334.8 L36.0 350.8 L320.8 350.8 L320.8 334.8" stroke="#9a9a9a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M346.8 334.8 L346.8 350.8 L631.6 350.8 L631.6 334.8" stroke="#9a9a9a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M1279.2 334.8 L1279.2 350.8 L1564.0 350.8 L1564.0 334.8" stroke="#9a9a9a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="800.0" y="388.3" text-anchor="middle" font-size="30" fill="#555555" font-weight="700">Never sent. Three live noise meters, in the same amplifier, through the same body.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="632" viewBox="0 0 1600 632" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="632" fill="#ffffff"/>
+  <rect x="36.0" y="427.6" width="158.4" height="32.4" rx="4" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="115.2" y="514.0" text-anchor="middle" font-size="40" fill="#2b2b2b" font-weight="700">140 kHz</text>
+  <text x="115.2" y="566.0" text-anchor="middle" font-size="40" fill="#555555">the room</text>
+  <rect x="238.4" y="416.8" width="158.4" height="43.2" rx="4" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="317.6" y="514.0" text-anchor="middle" font-size="40" fill="#2b2b2b" font-weight="700">160 kHz</text>
+  <text x="317.6" y="566.0" text-anchor="middle" font-size="40" fill="#555555">the room</text>
+  <rect x="440.8" y="100.0" width="158.4" height="360.0" rx="4" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="520.0" y="514.0" text-anchor="middle" font-size="40" fill="#2b2b2b" font-weight="700">180 kHz</text>
+  <text x="520.0" y="566.0" text-anchor="middle" font-size="40" fill="#2f5fae">tone A</text>
+  <rect x="643.2" y="413.2" width="158.4" height="46.8" rx="4" fill="#e9f1fc" stroke="#2f5fae" stroke-width="2.5"/>
+  <text x="722.4" y="514.0" text-anchor="middle" font-size="40" fill="#2b2b2b" font-weight="700">200 kHz</text>
+  <text x="722.4" y="566.0" text-anchor="middle" font-size="40" fill="#2f5fae">tone B</text>
+  <rect x="845.6" y="424.0" width="158.4" height="36.0" rx="4" fill="#f1f1f1" stroke="#9a9a9a" stroke-width="2.5"/>
+  <text x="924.8" y="514.0" text-anchor="middle" font-size="40" fill="#2b2b2b" font-weight="700">220 kHz</text>
+  <text x="924.8" y="566.0" text-anchor="middle" font-size="40" fill="#555555">the room</text>
+  <path d="M28.0 312.4 L1020.0 312.4" stroke="#2b2b2b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="13 10"/>
+  <text x="1034.0" y="305.2" text-anchor="start" font-size="40" fill="#2b2b2b" font-weight="700">the middle of the three,</text>
+  <text x="1034.0" y="354.8" text-anchor="start" font-size="40" fill="#2b2b2b" font-weight="700">plus the margin</text>
+  <text x="520.0" y="80.0" text-anchor="middle" font-size="40" fill="#2f5fae" font-weight="700">Louder. This 50 µs is an A.</text>
+  <text x="36.0" y="566.0" text-anchor="start" font-size="40" fill="#707070"></text>
 </svg>

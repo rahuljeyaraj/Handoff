@@ -1,64 +1,68 @@
 # Generates docs/element14-blog/26-five-bins.svg and .png
-# The five pitches the band weighs in every window (link v2 §4). Two of them
-# are transmitted — the louder of the pair is the chip — and three are never
-# transmitted at all: they are the noise reference, read in the same 50 us as
-# the signal. Red is the signal that crossed the two bodies, as everywhere in
-# this post; grey is the room.
+# The five pitches the band weighs in every window (link v2 §4), drawn as what
+# they are: five heights, side by side, and one line the tone has to clear.
+#
+# Only one of the two tones is on the plate at a time, and step 4 measured the
+# OFF tone as indistinguishable from silence, so tone B is drawn down among the
+# room's three. The line is the middle of those three times the margin: the
+# margin is a power ratio, so on these amplitude-like bars it is its root,
+# about four. Blue is the pair a band sent, grey is the room, as in figure 02.
+# Nothing here is red: red is the two bodies everywhere else in this post.
 
-from figlib import Fig, need, solve, tw, INK, RED, GREY
+from figlib import Fig, tw, INK, MUTED, BLUE, GREY
 
-HEAD = "Five numbers, every 50 µs. Nothing is remembered between them."
+CALL = "Louder. This 50 µs is an A."
+LINE1 = "the middle of the three,"
+LINE2 = "plus the margin"
 
-# (title, body, style, transmitted)
-BINS = [
-    ("140 kHz", "How loud is the room?", GREY, False),
-    ("160 kHz", "How loud is the room?", GREY, False),
-    ("Tone A, 180 kHz", "A 0.", RED, True),
-    ("Tone B, 200 kHz", "A 1.", RED, True),
-    ("220 kHz", "How loud is the room?", GREY, False),
+# (pitch, height as a fraction of the plot, style, what it is)
+BARS = [
+    ("140 kHz", 0.09, GREY, "the room"),
+    ("160 kHz", 0.12, GREY, "the room"),
+    ("180 kHz", 1.00, BLUE, "tone A"),
+    ("200 kHz", 0.13, BLUE, "tone B"),
+    ("220 kHz", 0.10, GREY, "the room"),
 ]
 
-TOP = "Sent. The louder of the two is the chip."
-BOT = "Never sent. Three live noise meters, in the same amplifier, through the same body."
+GUARDS = sorted(h for _, h, st, _ in BARS if st is GREY)
+CUT = GUARDS[1] * 4.1          # the middle of the three, times the margin
 
-W, M, G = 1600, 36, 26
-BR = 16          # bracket depth
+W, M, GAP = 1600, 36, 44
+GUTTER = 560                   # room at the right for the line's label
+PH = 360                       # plot height
+FS = 40
 
 
 def build(fs):
-    unit = (W - 2 * M - 4 * G) / 5
-    xs = [M + i * (unit + G) for i in range(5)]
-    hs = [need(t, b, unit, fs) for t, b, _, _ in BINS]
-    if None in hs:
+    x0, x1 = M, W - M - GUTTER
+    bw = (x1 - x0 - 4 * GAP) / 5
+    if tw(LINE1, fs, True) > GUTTER - 40:
         return None
-    if tw(TOP, fs, True) > W - 2 * M or tw(BOT, fs, True) > W - 2 * M:
-        return None
-    bh = max(hs)
-    head_h = fs * 2.0
-    note_h = fs * 1.6 + BR + 10
-    H = M + head_h + note_h + bh + note_h + M
+
+    call_h = fs * 1.6
+    base = M + call_h + PH
+    H = base + fs * 3.4 + M
 
     f = Fig(W, fs)
-    f.text(M, M + fs, HEAD, INK, bold=True, anchor="start")
+    for i, (pitch, frac, st, what) in enumerate(BARS):
+        x = x0 + i * (bw + GAP)
+        bh = PH * frac
+        f.rect(x, base - bh, bw, bh, st[0], st[1], rx=4)
+        f.text(x + bw / 2, base + fs * 1.35, pitch, INK, bold=True)
+        f.text(x + bw / 2, base + fs * 2.65, what, st[2])
 
-    y = M + head_h + note_h
-    for x, (t, b, st, sent) in zip(xs, BINS):
-        f.box(x, y, unit, bh, t, b, st, solid=sent)
+    # the one line the tone has to clear
+    y = base - PH * CUT
+    f.line([(x0 - 8, y), (x1 + 16, y)], INK, sw=3, dash="13 10")
+    f.text(x1 + 30, y - fs * 0.18, LINE1, INK, bold=True, anchor="start")
+    f.text(x1 + 30, y + fs * 1.06, LINE2, INK, bold=True, anchor="start")
 
-    # the two tones: a bracket over them, with what the pair is for
-    a, b = xs[2], xs[3] + unit
-    ty = y - 10
-    f.line([(a, ty - BR), (a, ty), (b, ty), (b, ty - BR)], RED[1], sw=4)
-    f.text((a + b) / 2, ty - BR - fs * 0.55, TOP, RED[2], bold=True)
-
-    # the three guards: a tick under each, and one line for all three
-    gy = y + bh + 10
-    for i in (0, 1, 4):
-        f.line([(xs[i], gy), (xs[i], gy + BR), (xs[i] + unit, gy + BR), (xs[i] + unit, gy)],
-               GREY[1], sw=4)
-    f.text(W / 2, gy + BR + fs * 1.25, BOT, GREY[2], bold=True)
+    # what the picture is of: the taller of the two tones won this window
+    cx = x0 + 2 * (bw + GAP) + bw / 2
+    f.text(cx, M + call_h - fs * 0.5, CALL, BLUE[2], bold=True)
+    f.text(x0, base + fs * 2.65, "", MUTED, anchor="start")
     return f, H
 
 
-fig, H = solve(build, W)
+fig, H = build(FS)
 fig.save("26-five-bins", H)

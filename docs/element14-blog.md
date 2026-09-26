@@ -318,17 +318,14 @@ The rebuild is one sentence: **stop measuring against a remembered number, and m
 
 ![Five bins](element14-blog/26-five-bins.png)
 
-*What the band weighs, every 50 µs.*
+*What the band weighs, every 50 µs, with nothing remembered between them. One tone is on the plate at a time, and here it is A.*
 
-* **Two tones instead of one.** 180 kHz and 200 kHz. A chip is whichever of the two is louder, in the same window. Gain, grip and coupling are the same for both, so they cancel exactly.
-* **Neighbours, deliberately.** How long each measurement is decides how finely the band can tell pitches apart, and here that is 20 kHz — so 180 and 200 are next-door neighbours, the closest pair that exists. Coupling rises with frequency, so a widely spaced pair would arrive at two different strengths and need correcting; neighbours differ by about a tenth, and both sit at the quiet top of the band.
-* **Three pitches nobody ever transmits.** 140, 160 and 220 kHz are read in the same 50 µs, through the same amplifier and the same body. *Is anyone there?* becomes *is the signal bigger than the middle one of those three?*
-* **The middle one, not the average.** One interferer landing on one of the three cannot move the middle of three. That is textbook radar practice, not an invention.
-* **Even the threshold is computed.** It comes from a sentence — *I will accept one false alarm per minute of listening* — and the arithmetic gives 16.76. Nobody turned a knob until the bench looked happy.
-* **It lands where the arithmetic says.** Swept across an eleven-fold range of signal, the crossover falls on that number: at an instantaneous ratio of 12 against a threshold of 16.76, 58.5 % of windows read busy.
-* **Nothing to climb.** Both bands silent, the five pitches read 29, 24, 17, 18, 19. At contact the tone read **716 and the three noise pitches 74** — and they did not move as the signal was swept from 64 to 716 by closing the gap.
-* **The harmonics were checked, not assumed.** A square wave carries odd harmonics; at 500,000 samples a second they fold back into the band. For these two tones they land on three particular pitches — and the three noise pitches were then chosen as ones no harmonic can reach. The clock at 144 MHz keeps each tone's two halves exactly equal, which is what keeps the even harmonics at zero.
-* **And it is free gain.** A tone switched on and off is off half the time. Two tones are never off. In the simulator, at the same error rate, that is worth about 2 dB.
+* **Two tones, not one.** 180 kHz and 200 kHz. Every 50 µs the band scores both and asks which is louder — that answer is one step of the message. A dry hand or a loose grip makes both quieter together, so the comparison still comes out right.
+* **Three pitches nobody ever sends.** 140, 160 and 220 kHz, scored in the same 50 µs, through the same amplifier and the same body. They are not a message. They are a live reading of how noisy the room is at that instant.
+* **The middle one, not the average.** One stray signal landing on one of the three cannot move the middle of three. Standard radar practice, not an invention.
+* ***Is anybody there?* becomes one comparison.** Is the tone louder than that middle reading, by a set margin? Nothing is remembered from one moment to the next, so there is no level left to drift.
+* **The margin is computed, not tuned.** It comes from a sentence — *I will accept one moment a minute where the band thinks someone is there and nobody is* — and the arithmetic follows. Nobody turned a knob until the bench looked happy.
+* **Two tones are never off.** With one tone, half the message is silence and carries nothing. With two, every step is a tone at the same peak voltage, so each bit arrives with about twice the energy — and nothing in the amplifier changed.
 
 #### 5.6 From tones to bits
 
