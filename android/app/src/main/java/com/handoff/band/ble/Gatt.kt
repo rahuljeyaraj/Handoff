@@ -427,8 +427,8 @@ data class BandTrig(
 }
 
 /**
- * The spectrum: all five Goertzel bins from ONE window - `ble_bank_t` in
- * `firmware/lib/hal_pico/ble.h`, 12 bytes, tag 0xB3.
+ * The spectrum, and the verdict it was taken with - `ble_bank_t` in
+ * `firmware/lib/hal_pico/ble.h`, 20 bytes, tag 0xB3.
  *
  * WHY A THIRD BLOCK. [BandBench] carries the two numbers the detector decided
  * on, and both are derived - signal is a max of two bins, noiseRef a median of
@@ -447,8 +447,17 @@ data class BandTrig(
  * beacon is on air for eleven milliseconds. An instantaneous spectrum would
  * draw the empty room 9 999 times in 10 000.
  *
- * NO THRESHOLD HERE ON PURPOSE. k belongs to [BandBench], which carries the
- * decision; this block carries the picture the decision was taken from.
+ * AND THAT IS WHY IT CARRIES ITS OWN VERDICT SINCE VERSION 2. A peak has no
+ * threshold. For two intervals this page drew these tones against k times the
+ * room because that was the only bar available, and k is a PER-WINDOW constant
+ * — the two were never the same comparison, and the chart read "heard" on an
+ * empty channel continuously. [heardPercent] is the band's own decision counted
+ * over the same windows instead: it needs no line, no axis and no explaining,
+ * and it is 0 when there is nothing there.
+ *
+ * THE BINS STAY, as the thing to look at when the percentage is surprising:
+ * two tones standing out of three flat guards is a band, and all five up
+ * together is the room. They are printed on the page and no longer drawn.
  */
 data class BandBank(
     val version: Int,
@@ -462,6 +471,14 @@ data class BandBank(
     val guardMid: Int,
     /** Guard, 220 kHz. */
     val guardHi: Int,
+    /**
+     * Windows the band scored that were the ROOM's and not its own transmitter's
+     * — the same windows the five bins above were taken from. Cumulative since
+     * the band booted, so it is differenced, never read on its own.
+     */
+    val listenWindows: Long,
+    /** Of those, the ones the detector called busy. Cumulative the same way. */
+    val listenBusy: Long,
 ) {
     val tones get() = listOf(toneA, toneB)
     val guards get() = listOf(guardLo, guardMid, guardHi)
@@ -484,13 +501,60 @@ data class BandBank(
      */
     val measured get() = tones.any { it > 0 } || guards.any { it > 0 }
 
+    /**
+     * THE NUMBER THE CHART DRAWS: of the time the band spent listening between
+     * [previous] and this block, the percentage of it that heard something.
+     *
+     * A PERCENTAGE OF WINDOWS, NOT A LEVEL, and that is the whole point. The
+     * bins above are a MAXIMUM over about ten thousand windows and there is no
+     * honest line to draw a maximum against — k is solved from a false-busy
+     * rate per WINDOW decision, one window in roughly 1.2 million, so a bar
+     * that a single window clears once a minute says nothing about the largest
+     * of ten thousand. Drawing the peak against it read "heard" on an empty
+     * channel continuously until 26 Sep 2026. This is the detector's own
+     * verdict counted instead: same k, same windows, and the only statistic on
+     * the band that needs no threshold beside it.
+     *
+     * Null when the two blocks cannot be differenced — the first block of a
+     * connection, a band on firmware older than bank version 2, or a pair that
+     * went backwards across a band reboot.
+     */
+    fun heardPercent(previous: BandBank?): Float? {
+        if (previous == null) return null
+        // Cumulative uint32 on the band, so a wrap is arithmetic, not a fault.
+        val windows = (listenWindows - previous.listenWindows) and 0xFFFFFFFFL
+        val busy = (listenBusy - previous.listenBusy) and 0xFFFFFFFFL
+        // A band that rebooted restarts both at zero; the wrap above then makes
+        // the deltas enormous rather than negative, so they are refused here.
+        if (windows <= 0L || windows > MAX_DELTA_WINDOWS || busy > windows) return null
+        return busy * 100f / windows
+    }
+
     fun line(): String =
-        "bank A $toneA B $toneB guards $guardLo/$guardMid/$guardHi"
+        "bank A $toneA B $toneB guards $guardLo/$guardMid/$guardHi " +
+            "listen $listenWindows busy $listenBusy"
 
     companion object {
-        const val SIZE = 12
+        const val SIZE = 20
         const val TAG = 0xB3
-        const val VERSION = 1
+
+        /**
+         * 2 since 26 Sep 2026: the block carries the listening counters. A
+         * version 1 band sends the five bins and nothing to read them with, and
+         * this page has no honest picture to draw from bins alone — so it is
+         * refused rather than drawn against a line that was never derived for
+         * a peak.
+         */
+        const val VERSION = 2
+
+        /**
+         * A block interval is half a second and the band scores 20 000 windows
+         * a second, so a legitimate gap is thousands of windows and a long one
+         * — the phone was in a pocket with the screen off — is millions. Ten
+         * minutes of them is past anything the chart will draw and short of the
+         * near-2^32 a reboot produces.
+         */
+        private const val MAX_DELTA_WINDOWS = 12_000_000L
 
         /** Bin centres, from `config.h`. Structural, so they are not sent. */
         val TONE_HZ = listOf(180_000, 200_000)
@@ -509,6 +573,8 @@ data class BandBank(
                 guardLo = b.short.toInt() and 0xFFFF,
                 guardMid = b.short.toInt() and 0xFFFF,
                 guardHi = b.short.toInt() and 0xFFFF,
+                listenWindows = b.int.toLong() and 0xFFFFFFFFL,
+                listenBusy = b.int.toLong() and 0xFFFFFFFFL,
             )
         }
     }

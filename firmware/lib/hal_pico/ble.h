@@ -289,19 +289,63 @@ _Static_assert(sizeof(ble_trig_t) == 20, "trig must fit one notify at the 23-byt
  * set and static-asserts the harmonic clearances — so a reader that did not
  * already know them could not interpret the magnitudes either.
  *
- * Twelve bytes, well inside one notify at the 23-byte ATT floor. Versioned by
- * offset like the others: append, never move.
+ * Versioned by offset like the others: append, never move. Version 2 appended
+ * the two counters the picture is read with — see below, which is where the
+ * threshold question is settled.
  */
 #define BLE_BANK_TAG     0xB3u
-#define BLE_BANK_VERSION 1
+#define BLE_BANK_VERSION 2
 
 typedef struct {
     uint8_t  tag;            /* BLE_BANK_TAG                                 */
     uint8_t  version;        /* BLE_BANK_VERSION                             */
     uint16_t bin[GZB_BINS];  /* gz_bank.h order: A, B, g_lo, g_mid, g_hi     */
+    /* ---- version 2: the verdict, counted ---- */
+    uint32_t listen_windows; /* windows scored that were the room's, not ours */
+    uint32_t listen_busy;    /* of those, the ones the detector called busy   */
 } ble_bank_t;
 
-_Static_assert(sizeof(ble_bank_t) == 12, "bank must fit one notify at the 23-byte floor");
+_Static_assert(sizeof(ble_bank_t) == 20, "bank must fit one notify at the 23-byte floor");
+
+/*
+ * ---- VERSION 2, AND WHY THE SPECTRUM NEEDED A COMPANION -----------------
+ *
+ * THE FIVE BINS ABOVE CANNOT BE DRAWN AGAINST A THRESHOLD, AND FOR TWO
+ * SEPARATE INTERVALS THE PHONE DREW THEM AGAINST ONE ANYWAY.
+ *
+ * The tones are a MAXIMUM over every window of the interval — about ten
+ * thousand of them at HANDOFF_WINDOW_RATE_HZ. The only bar the phone had to
+ * draw them against was k times the room, and k is solved in config.h from a
+ * false-busy rate PER WINDOW DECISION: one window in about 1.2 million. The
+ * largest of ten thousand draws from a noise distribution sits far above any
+ * single-draw bar by construction, so the two were never the same comparison,
+ * and the k the detector uses cannot license the line the peak was judged
+ * against. Nothing in the block said so, because the block was written for a
+ * reader that would read the tones against the GUARDS and not against a rule.
+ *
+ * So the rule comes from the band instead. These two counters are the
+ * detector's own per-window verdict, counted over exactly the windows the
+ * snapshot above is taken from — the ones core1_tx_deaf() judged the room's
+ * rather than our own transmitter's. Difference them across two blocks and the
+ * answer is a fraction between 0 and 1: of the time this band spent listening,
+ * how much of it heard something. No axis to interpret, no threshold to draw,
+ * and the same k the link itself runs on because it IS the link's decision.
+ *
+ * THE COUNTERS ARE CUMULATIVE SINCE BOOT AND THE FRACTION IS NOT SENT. The
+ * band does not know what window the reader wants; every other cumulative
+ * counter on this band follows the same rule (ble_trig_t says why).
+ *
+ * WHY NOT presence.c's OWN windows/busy_windows, WHICH ARE ALREADY THERE. They
+ * count every window including the ones we transmitted in, and we are the
+ * loudest thing in the room while we shout — 24 % of all windows busy on
+ * 26 Sep 2026 with the peer's link switched off, against a beacon duty near
+ * 10 %. A demo number that climbs because this band transmits is worse than no
+ * number. hal_pico.h's hal_pico_presence_t carries both pairs and says which
+ * is which.
+ *
+ * The block is 20 bytes now, which is one notify at the 23-byte ATT floor and
+ * the end of the room in it. A version 3 needs a fourth block.
+ */
 
 /* ---- handlers --------------------------------------------------------- */
 

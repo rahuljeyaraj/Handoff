@@ -348,4 +348,82 @@ void test_presence(void)
                  "peak reference %u is the room NOW, not the room at the peak",
                  (unsigned)noi);
     }
+
+    /*
+     * ELEVEN. A PEAK MAY NOT BE DRAWN AGAINST k, AND THE BUSY FRACTION MAY.
+     * This is the one the phone's chart was rebuilt on, 26 Sep 2026.
+     *
+     * The band reports its spectrum as the loudest window of an interval —
+     * about ten thousand of them between two blocks — because a beacon is on
+     * air eleven milliseconds and an instantaneous read would show the empty
+     * room. The phone then drew that peak against sqrt(k) times the room,
+     * which is the only bar it had. But k is solved from a false-busy rate PER
+     * WINDOW DECISION: one window in HANDOFF_CFAR_FALSE_BUSY_S of listening,
+     * about one in 1.2 million. The largest of ten thousand draws is nothing
+     * like one draw, so the line carries none of the margin its derivation
+     * claims, and on this board's 1/f noise the peak sat above it forever.
+     *
+     * What this pins, in numbers:
+     *
+     *   - over one block interval of a QUIET room the peak already reaches
+     *     most of the way to the line. Textbook exponential noise puts it at
+     *     2.9..3.6 times the room against a line at 4.09, so the whole margin
+     *     between "empty" and "heard" is a factor of 1.2 — and the real board
+     *     is worse than textbook, which is why it crossed.
+     *   - over those same windows the DETECTOR says busy 0 times, because its
+     *     verdict is the one k was derived for.
+     *
+     * Two statistics, four orders of magnitude apart, on the same samples.
+     * The chart draws the second one. If a later change makes the first one
+     * respectable this test fails and the chart can be reconsidered — which is
+     * the only honest way back.
+     */
+    {
+        static const uint32_t k_noise[] = { 8, 32, 128, 512 };
+        /* One phone block interval, HANDOFF_WINDOW_RATE_HZ / 2 windows. */
+        const uint32_t interval = HANDOFF_WINDOW_RATE_HZ / 2u;
+        const double sqrt_k = sqrt((double)HANDOFF_CFAR_K_NUM
+                                   / (double)HANDOFF_CFAR_K_DEN);
+        rng_t rng;
+        size_t i;
+
+        hf_begin("presence: the interval peak is not the detector's verdict");
+        for (i = 0; i < sizeof k_noise / sizeof k_noise[0]; i++) {
+            presence_t p;
+            uint32_t w, busy = 0, peak = 0, guards = 0;
+            double guard_pwr = 0.0, room, ratio;
+
+            rng_seed(&rng, 260926u + (uint32_t)i);
+            presence_init(&p);
+            (void)quiet_windows(&p, &rng, k_noise[i], HANDOFF_CFAR_CELLS * 8u);
+
+            /* The same interval the band reports: the tones as a maximum, the
+             * guards as a mean, which is what hal_pico.c publishes and why. */
+            for (w = 0; w < interval; w++) {
+                const double u = 1e-9 + rng_uniform(&rng);
+                const uint32_t s = (uint32_t)(k_noise[i] * sqrt(-log(u)));
+                const double ug = 1e-9 + rng_uniform(&rng);
+                const uint32_t g = (uint32_t)(k_noise[i] * sqrt(-log(ug)));
+                const bool fresh = (w % HANDOFF_GUARD_DECIM) == 0u;
+
+                if (presence_push(&p, mag2_of(s), mag2_of(g), fresh)) busy++;
+                if (s > peak) peak = s;
+                if (fresh) { guard_pwr += (double)g * (double)g; guards++; }
+            }
+
+            room  = sqrt(guard_pwr / (double)guards);
+            ratio = (double)peak / room;
+
+            HF_CHECK_MSG(ratio > 2.5,
+                     "noise %u: the quiet peak is only %.2fx the room, so a "
+                     "line at %.2fx would in fact have margin and this test "
+                     "has stopped describing the chart",
+                     (unsigned)k_noise[i], ratio, sqrt_k);
+            HF_CHECK_MSG(busy <= 2u,
+                     "noise %u: %u of %u windows busy in a quiet room — the "
+                     "verdict the chart is drawn from is not reliable either",
+                     (unsigned)k_noise[i], (unsigned)busy, (unsigned)interval);
+        }
+    }
 }
+

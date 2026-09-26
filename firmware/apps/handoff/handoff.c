@@ -195,6 +195,9 @@ typedef struct {
     uint32_t sends;                        /* beacons + frames on the pad    */
     uint32_t shouts_at_zero, frames_at_zero;   /* beacons, now */
     uint32_t good_at_zero, bad_at_zero, turns_at_zero;
+    /* The listening pair, so the console can print the fraction over the run
+     * rather than since boot — the same differencing the phone does. */
+    uint32_t listen_at_zero, listen_busy_at_zero;
 } stats_t;
 
 static stats_t s_st;
@@ -208,6 +211,8 @@ static uint32_t elapsed_s(uint64_t since)
 
 static void zero_stats(void)
 {
+    hal_pico_presence_t pr;
+
     memset(&s_st, 0, sizeof s_st);
     s_st.since          = hal_now_us(s_hal);
     s_st.shouts_at_zero = s_sm.trig.beacons;
@@ -215,6 +220,10 @@ static void zero_stats(void)
     s_st.good_at_zero   = s_sm.frames_rx_good;
     s_st.bad_at_zero    = s_sm.frames_rx_bad;
     s_st.turns_at_zero  = s_sm.turnarounds;
+
+    hal_pico_presence(&pr);
+    s_st.listen_at_zero      = pr.listen_windows;
+    s_st.listen_busy_at_zero = pr.listen_busy;
 }
 
 static const char *role_name(link_role_t r)
@@ -407,6 +416,7 @@ static void report_trig(void)
 static void report_bank(void)
 {
     ble_bank_t k;
+    hal_pico_presence_t pr;
     uint32_t bins[GZB_BINS];
     int i;
 
@@ -416,6 +426,17 @@ static void report_bank(void)
 
     hal_pico_take_bin_peak(bins);
     for (i = 0; i < GZB_BINS; i++) k.bin[i] = sat16(bins[i]);
+
+    /*
+     * And the verdict counted over the same windows the snapshot came from,
+     * which is what makes the block drawable: a peak has no threshold, and
+     * ble.h version 2 says at length why drawing one against it was wrong
+     * twice over. Not a take — nothing is consumed, so the console reads the
+     * same two numbers.
+     */
+    hal_pico_presence(&pr);
+    k.listen_windows = pr.listen_windows;
+    k.listen_busy    = pr.listen_busy;
 
     ble_notify_telemetry(&k, sizeof k);
 }
@@ -1071,6 +1092,7 @@ static void print_stats(void)
      */
     {
         uint32_t sig = 0, noi = 0;
+        hal_pico_presence_t pr;
         hal_rx_presence(s_hal, &sig, &noi);
         /* The ratio in POWER, because k is one and the two scores are
          * amplitudes. See linktest's `p`, which made the same mistake once. */
@@ -1083,6 +1105,31 @@ static void print_stats(void)
                (int)HANDOFF_CFAR_CELLS,
                (unsigned long)hal_pico_busy_windows(),
                (unsigned long)s_sm.framer.syncs);
+        /*
+         * THE SAME VERDICT OVER THE LISTENING WINDOWS ONLY, which is the one
+         * of the two a human should read: the line above counts our own
+         * shouts, and we are the loudest thing in the room while we shout.
+         * Two of these, subtracted, are what the phone's chart draws — so a
+         * disagreement between the two places is a bug in one of them and not
+         * two instruments measuring different things.
+         *
+         * WHAT TO LOOK FOR. Peer silent: listening climbs, busy does not.
+         * Peer shouting: busy climbs with it. In tenths of a per cent, because
+         * an empty channel is meant to read zero and a per cent that rounds to
+         * zero cannot be told from a counter that is not moving.
+         */
+        hal_pico_presence(&pr);
+        {
+            const uint32_t w = pr.listen_windows - s_st.listen_at_zero;
+            const uint32_t n = pr.listen_busy    - s_st.listen_busy_at_zero;
+            const uint32_t tenths = w ? (uint32_t)((uint64_t)n * 1000u / w) : 0u;
+            printf("           listening %lu windows since z, %lu of them busy "
+                   "= %lu.%lu%% (the chart's number); %lu / %lu since boot\n",
+                   (unsigned long)w, (unsigned long)n,
+                   (unsigned long)(tenths / 10u), (unsigned long)(tenths % 10u),
+                   (unsigned long)pr.listen_busy,
+                   (unsigned long)pr.listen_windows);
+        }
         if (!hal_pico_bank_on())
             printf("           *** the bank is OFF: presence is dead ***\n");
     }

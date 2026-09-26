@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.handoff.band.ble.BandBench
 import com.handoff.band.ble.BandService
 import com.handoff.band.ble.BenchTrace
 import com.handoff.band.ble.Gatt
@@ -218,19 +217,25 @@ private fun verdictOf(state: BandService.State?): Verdict {
     if (b.noiseRef == 0) return Verdict.WARMING
     if (b.complete > 0) return Verdict.EXCHANGED
     if (b.good > 0) return Verdict.HEARING
-    // The GATED spectrum, not trig.peakHeard. The trigger's peak is scored
-    // over every window including the ones this band is transmitting in, so
-    // its own beacon clears the detector on every cycle and this test read
-    // SWAMPED forever on a bench with one band on it. `bank` is blanked
-    // while the pad is being driven (hal_pico.c, core1_tx_deaf), so it is
-    // the only one of the two that can answer "did somebody ELSE make a
-    // noise". Same k, applied to the same CFAR comparison.
-    val heardOther = state.bank?.let {
-        it.measured && BandBench.powerRatioClears(it.signal, it.room)
-    } ?: false
-    if (heardOther && b.syncs == 0) return Verdict.SWAMPED
+    // THE COUNTED VERDICT, NOT A LEVEL AGAINST A LINE. This test used to
+    // compare the band's peak spectrum with k times the room, and a peak has
+    // no business being compared with a per-window k: with the peer's link
+    // switched off it read SWAMPED continuously, which is the same fault the
+    // chart had and for the same reason (BenchChart says it at length).
+    //
+    // The floor is 0.5 % of the band's listening time. Both sides of that are
+    // measured rather than picked: an empty channel read 0.03 % on 26 Sep 2026
+    // with nothing but this band on it, and ONE beacon from the other band is
+    // eleven milliseconds of a five-hundred millisecond interval, so 2.2 % is
+    // what a single shout looks like. 0.5 % sits fifteen times above the floor
+    // and four times under one shout.
+    val heard = state.benchTrace.lastHeardPct()
+    if (heard != null && heard >= HEARD_FLOOR_PCT && b.syncs == 0) return Verdict.SWAMPED
     return Verdict.QUIET
 }
+
+/** See [verdictOf]: measured floor 0.03 %, one beacon 2.2 %. */
+private const val HEARD_FLOOR_PCT = 0.5f
 
 @Composable
 private fun LinkVerdict(state: BandService.State?) {
@@ -316,14 +321,21 @@ private fun LinkDetail(state: BandService.State?) {
                     if (it.peakHeard) " — heard" else ""
             } ?: "—"),
             "busy now" to (if (b.present) "yes" else "no"),
-            // The chart's own three numbers, printed, because a line is hard
-            // to read a value off. These are gated against our own
-            // transmitter; the three above are not, which is why they can
-            // disagree and why the chart uses these.
-            "heard signal" to (bank?.signal?.toString() ?: "—"),
-            "heard room" to (bank?.room?.toString() ?: "—"),
-            "heard needs" to (bank?.let {
-                BandBench.amplitudeThreshold(it.room).toString() } ?: "—"),
+            // The chart's own number, printed, because a line is hard to read a
+            // value off — and the two counters it is differenced from, because
+            // that is what makes it checkable against the band's console.
+            "heard" to (state.benchTrace.lastHeardPct()?.let { "%.2f%% of the time".format(it) }
+                ?: "—"),
+            "listening" to (bank?.let { "${it.listenWindows} windows" } ?: "—"),
+            "of them busy" to (bank?.listenBusy?.toString() ?: "—"),
+            // The spectrum is no longer drawn and is still the thing to look at
+            // when the percentage surprises you: two tones out of three flat
+            // guards is a band, all five up together is the room. Gated against
+            // our own transmitter, unlike the pair at the top of this list,
+            // which is why the two can disagree.
+            "tones A / B" to (bank?.let { "${it.toneA} / ${it.toneB}" } ?: "—"),
+            "guards" to (bank?.let {
+                "${it.guardLo} / ${it.guardMid} / ${it.guardHi}" } ?: "—"),
             "frames sent" to "${b.sent}",
             "framer syncs" to "${b.syncs}",
             "handshakes" to "${b.complete} complete, ${b.aborts} abort",

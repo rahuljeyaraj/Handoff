@@ -14,8 +14,21 @@ pushes ble_bench_t AND ble_trig_t to its own phone over BLE twice a second; the
 app logs one line per block; this reads both phones' logcat over adb. The phones
 are tethered to the PC, the bands are not, and the radio hop is the isolation.
 
-BOTH BLOCKS ARE LOGGED, and the second is the one that answers the question a
-two-band run is asking. The bench line is what the signal is doing:
+ALL THREE BLOCKS ARE LOGGED, and the LAST one is the one that answers the
+question a two-band run is asking. The bank line carries the chart's own pair:
+
+    listen  windows the band spent LISTENING - its own transmissions cut out -
+            and busy, how many of those its detector called busy. Difference two
+            bank lines and that is the fraction of the time this band could hear
+            the other one: 0 on an uncoupled channel, climbing with coupling,
+            and the same verdict the link itself runs on. Nothing has to be
+            drawn against a threshold, which is why the chart was rebuilt on it
+            on 26 Sep 2026 - see ble_bank_t in firmware/lib/hal_pico/ble.h.
+    A B     the two tone bins at the loudest window of the interval, and the
+            three guards averaged over it. Not a verdict; the picture that says
+            WHERE energy was when busy is not still.
+
+The bench line is what the signal is doing:
 
     signal  the louder tone bin, and noise the guard reference it was judged
             against; thr is k*noise, the ONE test the detector applies. There
@@ -72,10 +85,17 @@ import time
 TAG = "BandClient"
 LOGCAT = ["logcat", "-T", "1", "-v", "brief", "%s:I" % TAG, "*:S"]
 
-# Two blocks, one pattern. Anchored on the first field of each so a line that
+# Three blocks, one pattern. Anchored on the first field of each so a line that
 # merely mentions the word cannot match, which is what the old `bench (level
 # ...)` was doing for free and is worth keeping.
-BLOCK = re.compile(r"\b(?:bench (signal .*)|trig (nonce .*))$")
+#
+# THE BANK LINE IS HERE BECAUSE IT NOW CARRIES THE ANSWER. Its two counters --
+# listening windows and how many of them the detector called busy -- are what
+# the phone's chart draws, and differencing two of these lines is the whole
+# measurement of a worn run: an uncoupled channel holds busy still while
+# listening climbs. The five bins beside them say WHERE the energy was when it
+# is not still. See ble_bank_t in firmware/lib/hal_pico/ble.h.
+BLOCK = re.compile(r"\b(?:bench (signal .*)|trig (nonce .*)|bank (A .*))$")
 
 
 def adb(*args: str) -> str:
@@ -120,6 +140,7 @@ class Phone:
         self.raw = raw
         self.last = None
         self.last_trig = None
+        self.last_bank = None
         self.blocks = 0
         self.proc = subprocess.Popen(
             ["adb", "-s", serial, *LOGCAT],
@@ -134,15 +155,17 @@ class Phone:
             line = line.rstrip()
             m = BLOCK.search(line)
             if m:
-                body = m.group(1) or m.group(2)
+                body = m.group(1) or m.group(2) or m.group(3)
                 # Only the bench block counts as a block, so the rate printed
                 # at the end stays the rate it always was.
                 if m.group(1):
                     self.blocks += 1
                     self.last = body
-                else:
+                elif m.group(2):
                     self.last_trig = body
-                self.sink(self.label, body)
+                else:
+                    self.last_bank = body
+                self.sink(self.label, "bank " + body if m.group(3) else body)
             elif self.raw and line:
                 self.sink(self.label, line)
 
@@ -222,6 +245,8 @@ def main() -> int:
             print("%s| %d blocks, last: %s" % (label, p.blocks, p.last))
             if p.last_trig:
                 print("%s|              %s" % (label, p.last_trig))
+            if p.last_bank:
+                print("%s|              bank %s" % (label, p.last_bank))
             if " usb 1" in p.last:
                 print("%s| THE BAND WAS ON USB. This run is not a valid "
                       "body-coupled measurement." % label)

@@ -134,6 +134,43 @@ static uint32_t          s_binmean_n;           /* guard windows in them     */
 static volatile uint32_t s_binpeak_out[GZB_BINS]; /* scores, for core 0      */
 static volatile bool     s_binpeak_req;         /* core 0 asks for the next  */
 /*
+ * ---- THE LISTENING WINDOWS, AND HOW MANY OF THEM READ BUSY --------------
+ *
+ * THE ONE STATISTIC ON THIS BAND THAT NEEDS NO THRESHOLD DRAWN AGAINST IT,
+ * and the reason it had to be added: a peak has no threshold. The spectrum
+ * above is a MAXIMUM over ten thousand windows, and the only number the phone
+ * could draw it against was k times the room — a k solved in config.h from a
+ * false-busy rate PER WINDOW DECISION. A bar that one window in 1.2 million
+ * crosses says nothing about whether the largest of ten thousand crosses, so
+ * the phone's chart was comparing two statistics that were never derived
+ * against each other. 26 Sep 2026: it read "heard" on an empty channel
+ * continuously.
+ *
+ * These two are the detector's own verdict, counted. The k they carry is the k
+ * it was solved for, because the counting IS the deciding — presence.c already
+ * keeps the same pair in `windows` and `busy_windows`, and nothing here
+ * re-derives anything.
+ *
+ * SO WHY NOT SEND presence.c's PAIR. Because it counts every window, including
+ * the ones our own transmitter was on the pad for, and those read busy by
+ * construction — we are the loudest thing in the room while we shout. Measured
+ * the same day with the peer's link switched off at its console: 24 % of all
+ * windows busy, against a beacon duty of about 10 %. A demo number that climbs
+ * because this band transmits is worse than no number.
+ *
+ * So the pair is counted only over the windows the snapshot above is taken
+ * from — the ones core1_tx_deaf() says were the room's and not ours. Then a
+ * reader differencing two blocks gets "of the windows we were listening in,
+ * this fraction heard something", which is 0 on a dead channel, climbs with
+ * coupling, and is the same verdict the link itself runs on.
+ *
+ * CUMULATIVE SINCE BOOT, like every other counter that leaves this band: the
+ * reader differences them over whatever window it chose (ble.h says why).
+ * Core 1 is the only writer and each is one aligned 32-bit store.
+ */
+static volatile uint32_t s_listen_windows;      /* windows that were the room's */
+static volatile uint32_t s_listen_busy;         /* of those, the busy ones      */
+/*
  * A SEQLOCK, AND WHY THIS READ DOES NOT SPIN WHEN THE OTHER TWO DO.
  *
  * s_peak_req and s_tlm_req block core 0 until core 1 answers, with a 2 ms
@@ -183,8 +220,8 @@ static volatile uint32_t s_binpeak_seq;
  * So the test is on the sample clock: the window's own conversion time
  * against the span our pad was ours. The span runs from the DMA start to
  * pad-idle plus the turnaround — the amplifier's recovery is deaf here too —
- * and is widened by one window so a window straddling either edge is cut
- * with the rest.
+ * and is widened by CORE1_TX_TAIL_WINDOWS, which is where the measurement of
+ * what is still ours after that edge is written down.
  *
  * UNSIGNED DIFFERENCE, NOT SIGNED. A window long before the last send gives
  * a huge unsigned number and reads "not deaf" with no comparison against a
@@ -202,6 +239,33 @@ static volatile uint32_t s_binpeak_seq;
  * exactly the kind of coupling link v2 exists to remove.
  */
 #define CORE1_WINDOW_US  ((uint32_t)HANDOFF_GZ_N * 1000000u / HANDOFF_ADC_FS_HZ)
+
+/*
+ * HOW MANY WINDOWS PAST THE TURNAROUND ARE STILL OURS, AND THE MEASUREMENT
+ * THAT SAYS TWO.
+ *
+ * One window was enough to cover a window STRADDLING the edge, which is all it
+ * was ever claimed to do, and it left the first whole window after the edge in
+ * the listening pool. That window still holds our own last chip: measured on
+ * board one, 26 Sep 2026, with the peer's link switched off at its console —
+ * so nothing but this band was on the pad — the gated spectrum reported tone B
+ * at 400..520 against a room of 37, four times what the same board reports with
+ * its own link off entirely (120..135). One window per beacon, which is one
+ * window in ten thousand and invisible in the busy fraction, is enough to own
+ * a MAXIMUM: the peak the phone draws was our own transmitter about eight
+ * times a second.
+ *
+ * At two windows tone B reads 165..260 against a room of 44, and at four it
+ * reads 127..217 — the same number, so the tail is inside the second window
+ * and there is nothing after it to cut. Two it is.
+ *
+ * Whether that window is the amplifier still ringing or the sample clock's own
+ * quantisation at the edge is not decided here, and does not need to be: the
+ * cut is the same either way, and the cost is 50 us of deafness per send
+ * against a 12 ms beacon — 0.1 % of the listening windows, measured as no
+ * change at all in the count.
+ */
+#define CORE1_TX_TAIL_WINDOWS 2u
 
 static volatile uint32_t s_tx_deaf_from;    /* time_us_64() low word, DMA start */
 static volatile uint32_t s_tx_deaf_span;    /* microseconds; 0 = never sent     */
@@ -388,6 +452,11 @@ static HANDOFF_HOT_FUNC void core1_presence_window(presence_t *pr, const gz_bank
             for (i = 0; i < GZB_GUARDS; i++) s_binmean[i] += b->mag2[GZB_G_LO + i];
             s_binmean_n++;
         }
+        /* And the verdict counted over exactly the windows this picture is
+         * made of, which is the one reading a viewer needs no axis for. See
+         * s_listen_windows. */
+        s_listen_windows++;
+        if (busy) s_listen_busy++;
     }
 
     s_busy_now = busy;
@@ -729,10 +798,13 @@ static size_t p_tx_chips(void *ctx, const uint8_t *chips, size_t n)
     /* The same span, in the two words core 1 can read without tearing. The
      * turnaround is included because the amplifier is still recovering
      * through it — p_rx_chips() cuts the chip stream on exactly this edge —
-     * and one window is added so a window straddling an edge goes too. */
+     * and CORE1_TX_TAIL_WINDOWS go after it: one for a window straddling the
+     * edge, and one because the whole window after the edge was measured to
+     * still be carrying our own last chip. */
     s_tx_deaf_from = (uint32_t)s_tx_started;
     s_tx_deaf_span = (uint32_t)(s_tx_until - s_tx_started)
-                   + HANDOFF_TURNAROUND_US + CORE1_WINDOW_US;
+                   + HANDOFF_TURNAROUND_US
+                   + CORE1_TX_TAIL_WINDOWS * CORE1_WINDOW_US;
     return n;
 }
 
@@ -1057,8 +1129,10 @@ void hal_pico_presence(hal_pico_presence_t *out)
 {
     if (!out) return;
     tlm_refresh();
-    out->windows      = s_pres_windows;
-    out->busy_windows = s_busy_windows;
+    out->windows        = s_pres_windows;
+    out->busy_windows   = s_busy_windows;
+    out->listen_windows = s_listen_windows;
+    out->listen_busy    = s_listen_busy;
     out->signal       = s_level;
     out->noise        = s_noise;
     out->busy         = s_busy_now;

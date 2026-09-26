@@ -266,13 +266,31 @@ uint32_t hal_pico_busy_windows(void);
  * its latch, and an instrument must never take an event away from the link.
  * Nothing here clears anything.
  *
- * `busy` is the last window's verdict, not the latch; `windows` and
- * `busy_windows` are since boot, so two readings and a subtraction give the
- * busy FRACTION over an interval, which is what a level sweep wants.
+ * `busy` is the last window's verdict, not the latch; the counters are since
+ * boot, so two readings and a subtraction give the busy FRACTION over an
+ * interval, which is what a level sweep wants — and what the phone's chart
+ * draws, off the listening pair rather than the raw one.
  */
 typedef struct {
     uint32_t windows;
     uint32_t busy_windows;
+    /*
+     * THE SAME PAIR OVER THE LISTENING WINDOWS ONLY — the ones core1_tx_deaf()
+     * says were the room's and not our own transmitter's, which is the same
+     * set the five-bin snapshot is taken from.
+     *
+     * READ THESE AND NOT THE TWO ABOVE FOR ANYTHING A HUMAN LOOKS AT. The pair
+     * above counts every window, so it counts our own shouts, and we are the
+     * loudest thing in the room while we shout: measured 26 Sep 2026 with the
+     * peer silent, 24 % of all windows busy against a beacon duty near 10 %.
+     * Differenced over an interval these two give the fraction of the time
+     * this band could hear SOMEBODY ELSE, which is 0 on a dead channel and
+     * climbs with coupling.
+     *
+     * Cumulative since boot. Nothing resets them.
+     */
+    uint32_t listen_windows;
+    uint32_t listen_busy;
     uint32_t signal;      /* max(E_A, E_B) this window, as a score   */
     uint32_t noise;       /* the CFAR reference: mean of the boxcar  */
     bool     busy;

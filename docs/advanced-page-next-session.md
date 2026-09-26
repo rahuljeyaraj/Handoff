@@ -1,141 +1,101 @@
-# Next session: the body-link plot is still wrong
+# Next session: the plot is a percentage now, and two runs are owed
 
-Written for whoever picks this up. Everything below is committed at `2b0281e`.
+Written for whoever picks this up. The chart fault in the previous version of
+this file is **fixed** — what is left is bench time with the bands coupled, and
+a walk of the page on a phone.
 
-## The job
+## What the plot was doing, measured rather than reasoned
 
-The Advanced page's chart does not represent the link honestly. Debug it
-properly, then decide what the right picture is — you are **not** obliged to
-keep the three lines that are there now. The page is being used to demonstrate
-the link to a viewer, so the answer has to be readable by someone who has
-never seen it before, and it has to be true.
+Both boards on the bench, both on USB, the peer's link switched **off** at its
+console with `g` — so nothing at all was on the channel:
 
-## The symptom, exactly as observed
-
-Bands are two PCBs on the bench, both on USB to the same PC.
-
-| bands | what the chart does |
+| reading | value |
 |---|---|
-| far apart | signal sits **above** the `needs` line, continuously |
-| close together | signal **zigzags** above and below the line |
-| USB in or out | makes no difference to the above |
+| plotted signal (tone B, the peak of the interval) | 400–520 |
+| plotted room (the guards, averaged) | 37 |
+| plotted `needs` line, `sqrt(k) x room` | 151 |
+| the detector's own verdict, over the same windows | **79 busy of 295 021 — 0.03 %** |
 
-That is backwards. Far apart should be quiet — the signal under the line —
-and close should be a clean crossing.
+The picture said "hearing something" continuously. The detector said it heard
+nothing 9 997 times in 10 000, and the detector was right: `peers` was 0 all
+run. Two statistics on the same samples, four orders of magnitude apart.
 
-Handshakes **do** only complete when the bands are close, so the link itself
-behaves correctly. It is the plotted statistic that is wrong, not the radio.
+**The leading hypothesis in the old brief was half right.** A peak compared
+against a per-window `k` is indeed not a comparison — textbook noise puts the
+peak of one interval at 2.9..3.6x the room against a line at 4.09x, so the line
+carries none of the million-to-one margin its derivation claims
+(`test_presence.c`, check ELEVEN, pins this). But that alone would not have put
+the signal *three times* over the line. The rest was **our own transmitter**:
 
-Do not repeat this session's mistake of claiming distance cannot matter on a
-USB-tethered bench. It does. The operator has watched it.
+- The blanking added one window past pad-idle plus the turnaround. That covers a
+  window straddling the edge, which is all it ever claimed to do, and leaves the
+  first whole window after it in the listening pool. That window still holds our
+  last chip.
+- One window per beacon is one in ten thousand — invisible in a fraction, and
+  **enough to own a maximum**. The peak the phone drew was this band's own
+  beacon, about eight times a second, which is why tone B (200 kHz, the last
+  chip) towered over tone A.
 
-## Leading hypothesis: a maximum compared against a per-window threshold
+With the band's own link also off, the same board reads tone B at 120..135 —
+under the line. That was the control that separated the two halves.
 
-This is where to start, and it explains the "far apart is always above" half
-directly.
+## What changed
 
-`ble_bank_t` reports **the loudest window of the whole interval**. At
-`HANDOFF_WINDOW_RATE_HZ` = 20 000 windows/s and two blocks a second, each
-reported number is the maximum of about **10 000 windows**.
+**The chart is one line: the percentage of the band's listening time that its
+detector called busy.** No threshold, no level axis, nothing to interpret.
 
-The threshold it is drawn against is `sqrt(k) × room`, where `k` comes from
-`HANDOFF_CFAR_K_NUM / _K_DEN` — and that k is solved in `presence.h` from a
-false-busy rate **per window decision**. A k chosen so that a *single* window
-crosses rarely says nothing about whether the *maximum of ten thousand* of
-them crosses. The extreme value of a noise distribution sits well above its
-mean by construction, so a peak-versus-mean comparison at a per-window k will
-read "busy" on an empty channel more or less always.
+- `ble_bank_t` is **version 2**, 20 bytes: the five bins plus `listen_windows`
+  and `listen_busy`, cumulative since boot. The phone differences two blocks.
+  A version 1 band is refused rather than drawn.
+- The pair is counted **only over the windows `core1_tx_deaf()` says were the
+  room's**, which is the same set the spectrum is taken from. `presence.c`'s own
+  `windows`/`busy_windows` count every window and therefore count our own
+  shouts: 24 % of all windows busy with the peer silent, against a beacon duty
+  near 10 %.
+- `CORE1_TX_TAIL_WINDOWS` is 2, not 1, with the measurement written beside it.
+- The page's verdict line no longer compares a peak with `k` either. "Something
+  on the skin" is now 0.5 % of listening time — fifteen times the measured empty
+  channel, four times under one beacon in one interval.
+- The five bins stay in the block and are **printed** under *More link numbers*.
+  They are what to look at when the percentage surprises you.
+- `scripts/blelog.py` logs the bank line now, because that is where the answer
+  is on a worn run.
+- Deleted: `BenchSample.threshold`, which multiplied an amplitude by `k` — the
+  four-times-too-high bar, in a second place, with no reader.
 
-Measured just before the handover, bands close: signal 490, needs 254,
-room 62. Note 490/62 ≈ 8 in amplitude with no peer contribution assumed —
-check what that ratio is with the peer's link switched off (`g` on its
-console) and see whether it stays near 8. **If it does, the hypothesis is
-confirmed and the rest of the chart discussion is moot until it is fixed.**
+## What is verified, and on what
 
-### The second half of the symptom
+Firmware, both boards, final image:
 
-Why *close* is worse than far is probably the blanking. When the bands are
-close they handshake, so the band transmits far more, and
-`core1_tx_deaf()` removes every window where our own pad was driven. The peak
-is then taken over a smaller and differently-distributed pool of windows, so
-it moves around. That would make the close-together case noisier than the
-far-apart case, which is what is seen.
+| state | listening | busy | chart |
+|---|---|---|---|
+| band beaconing, peer silent, 30 s | 446 423 | 53 | 0.0 % |
+| band beaconing, peer shouting, 30 s | 444 403 | 92 | 0.0 % |
 
-Both halves come from the same root: **a peak is being compared against a
-threshold that was never derived for a peak.**
+The second row reads zero **because the bands are not coupled where they sit on
+the bench** — `peers` stayed 0 both times. That is the honest answer, and it is
+also the hole in the verification: nobody has yet seen this number rise.
 
-## The instrument I would reach for instead
+`scripts/test.py` is green at 25 868 checks.
 
-`presence_t` already counts `windows` and `busy_windows`, and
-`hal_pico_presence()` already hands both out. The **busy fraction over an
-interval** — the delta of `busy_windows` divided by the delta of `windows` —
-is:
+## The two runs that are owed
 
-- the detector's own per-window verdict, so the k it uses is the k it was
-  solved for, with no statistical mismatch to reason about;
-- a number between 0 and 100 %, which needs no threshold line drawn at all
-  and no axis a viewer has to interpret;
-- monotonic with how well the two bands are coupled, which is exactly the
-  thing the demo is trying to show.
-
-Bands apart should read near 0 %. Bands together should climb. One line, one
-axis, no second series to explain. Consider it seriously before rebuilding the
-three-line plot.
-
-It is not carried in `ble_bench_t` today — that block is full at 20 bytes —
-but `ble_bank_t` is only 12 and is the natural place for it, or for the two
-counters it is computed from. **Send the counters, not the fraction**, so the
-reader can difference them over whatever window it chose; that is the rule
-every other cumulative counter on this band follows.
-
-## What is already fixed — do not re-debug these
-
-Three real faults were found and fixed this session. Each was verified on the
-bench, and all three are load-bearing for whatever you build next.
-
-1. **Only the first telemetry notify per tick landed.** `att_server_notify` is
-   not queued (`ble.c` says why), so bench + trig + bank sent back to back
-   took the one free ACL buffer and dropped the other two silently. Measured:
-   63 bench blocks in thirty seconds, **zero** trigger blocks. The Rendezvous
-   section had therefore never filled in on any bench in the project's
-   history. Now one block per tick, rotating, `BENCH_TICK_MS` 500 → 167.
-
-2. **The band was hearing its own transmitter.** Tone A sat at ~960 with the
-   peer's link switched off. The blanking asked "is the pad driven *now*", but
-   core 1 scores samples up to a DMA block old. It is now placed on the sample
-   clock via `adc_ring_sample_us()`, the way `p_rx_chips()` has cut chips
-   since M13. Tone A fell to ~80. See `core1_tx_deaf()` in `hal_pico.c` — the
-   comment there is the full account.
-
-3. **The threshold was drawn 4× too high.** `presence.c` decides on mag²
-   (`signal² > k · noise²`); what leaves the band is the amplitude, root
-   already taken. The app multiplied the amplitude by k, drawing the bar
-   √16.76 = 4.09× too high. From the v2 merge until now the band would call a
-   channel busy while the phone showed the signal far below its own line —
-   and that is why v1's level-and-floor plot visibly crossed and v2's never
-   did. `BandBench.amplitudeThreshold` / `powerRatioClears` in `Gatt.kt`.
-
-A fourth, smaller one: taking all five bins at the loudest-*tone* window made
-the room pulse **inversely** to the signal, because in a quiet interval the
-loudest-tone window is simply the noisiest window and its guards are high too.
-Tones are now a peak over the interval and guards a mean. Keep that split
-whatever else changes — see the `s_binmean` comment.
-
-## Where things are
-
-**Firmware**
-- `firmware/lib/hal_pico/ble.h` — `ble_bank_t`, tag `0xB3`, version 1, 12 bytes
-- `firmware/lib/hal_pico/hal_pico.c` — `s_binpeak` / `s_binmean`,
-  `core1_tx_deaf()`, the seqlock on `s_binpeak_seq`
-- `firmware/lib/hal_pico/hal_pico.h` — `hal_pico_take_bin_peak()`, and why it
-  does not block where `hal_pico_take_peak()` does
-- `firmware/apps/handoff/handoff.c` — `report_bank()`, `bench_tick()`'s rotation
-
-**App**
-- `ble/Gatt.kt` — `BandBank`, and the amplitude/power threshold helpers
-- `ble/BenchTrace.kt` — `BenchSample.bank`, `withBank()`, the `measured` gate
-- `ui/components/BenchChart.kt` — the three-line chart
-- `ui/screens/AdvancedScreen.kt` — the page, the verdict states, `More`
+1. **Make it rise.** Bands coupled — plates touching through a wire, or worn on
+   two wrists off USB — and watch the chart leave zero before any card is
+   exchanged. Expect the tens of per cent: one beacon is 11 ms of a 500 ms
+   interval, so a peer that is only beaconing is about 2 % per shout and a
+   handshake is far more. If it stays at zero with `peers` climbing, the gating
+   is cutting too much and `CORE1_TX_TAIL_WINDOWS` is the first thing to look at.
+2. **Walk the page on a phone.** The app builds and the APK is at
+   `android/app/build/outputs/apk/debug/app-debug.apk`, but the bench phone
+   dropped off USB before it could be installed, so *nothing on the phone side
+   has been run against a band* — the version-2 parse, the differencing and the
+   chart are unproven on a handset. Install, open Advanced, and check: the line
+   sits on zero with the bands apart, *More link numbers* prints `listening` and
+   `of them busy` climbing, and the console's own percentage agrees with the
+   chart. `python scripts/link2.py --a 93D1 --run 30 --at 2:A:z --at 28:A:s`
+   prints the same fraction the phone is drawing — they are the same two
+   counters, so a disagreement is a bug in one of them.
 
 ## Bench recipe
 
@@ -153,12 +113,10 @@ app    JAVA_HOME=~/.handoff-toolchain/jdk/jdk-17.0.20.1+1
 Walk to the page: launch, tap `998 203` (gear), tap `400 1560` (Advanced).
 Read the blocks with `adb logcat -d -s BandClient:I`.
 
-**The single most useful instrument** is silencing one board and watching the
-other: `g` on its serial console toggles the link off and on. Every fault
-above was found that way — if a number does not move when the peer goes
-silent, that number is not measuring the peer.
-
-`scripts/test.py` is green at 25 860 checks; keep it that way.
+**The single most useful instrument** is still silencing one board and watching
+the other: `g` on its serial console toggles the link off and on. Every fault in
+this file was found that way — including this one, twice over, because `g` on
+*both* boards is what separated our own tail from the room.
 
 ## Also outstanding, unrelated to the plot
 
@@ -169,5 +127,4 @@ Both phones' own cards should carry the screenshot details before the demo:
 - **Savithri Raghavan** · +91 98765 00112 · savithri@example.com ·
   Expo registration · Front desk lead
 
-Only Rohit's phone was attached this session, and its card currently has no
-ORG or TITLE and uses `rohit@gmail.com`.
+Rohit's phone still has no ORG or TITLE and uses `rohit@gmail.com`.
