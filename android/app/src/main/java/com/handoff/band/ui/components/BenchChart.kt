@@ -134,21 +134,28 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
             Canvas(Modifier.fillMaxWidth().height(170.dp)) {
                 val h = size.height
                 val w = size.width
+                // Half a stroke of room top and bottom. A reading of 0.0 % is
+                // the normal state of this chart — bands apart — and centred
+                // on the canvas edge it drew as half a line, which reads as a
+                // rendering fault rather than as the answer.
+                val stroke = 2.5.dp.toPx()
+                val pad = stroke / 2f
+                val plot = h - stroke
 
                 // Recessive chrome, and the only other marks on the canvas.
                 for (f in listOf(0f, 0.5f, 1f)) {
-                    val y = h - f * h
+                    val y = h - pad - f * plot
                     drawLine(grid, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
                 }
 
                 val t0 = samples.first().atMs
                 val span = (samples.last().atMs - t0).coerceAtLeast(1L).toFloat()
                 fun x(s: BenchSample) = (s.atMs - t0) / span * w
-                fun y(v: Float) = h - (v.coerceIn(0f, top) / top) * h
+                fun y(v: Float) = h - pad - (v.coerceIn(0f, top) / top) * plot
 
                 drawPath(
                     drawSeries(samples, ::x) { y(it.heardPct ?: 0f) }, heardColor,
-                    style = Stroke(width = 2.5.dp.toPx(),
+                    style = Stroke(width = stroke,
                                    cap = StrokeCap.Round, join = StrokeJoin.Round),
                 )
             }

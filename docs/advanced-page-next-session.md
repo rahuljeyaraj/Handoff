@@ -1,8 +1,8 @@
-# Next session: the plot is a percentage now, and two runs are owed
+# Next session: the plot is a percentage now, and one run is owed
 
 Written for whoever picks this up. The chart fault in the previous version of
-this file is **fixed** — what is left is bench time with the bands coupled, and
-a walk of the page on a phone.
+this file is **fixed**, on the band and on the phone. What is left is one bench
+run with the two bands actually coupled.
 
 ## What the plot was doing, measured rather than reasoned
 
@@ -73,29 +73,48 @@ Firmware, both boards, final image:
 | band beaconing, peer shouting, 30 s | 444 403 | 92 | 0.0 % |
 
 The second row reads zero **because the bands are not coupled where they sit on
-the bench** — `peers` stayed 0 both times. That is the honest answer, and it is
-also the hole in the verification: nobody has yet seen this number rise.
+the bench** — `peers` stayed 0 both times. That is the honest answer, and the
+hole it leaves in the verification is closed only halfway below.
 
 `scripts/test.py` is green at 25 868 checks.
 
-## The two runs that are owed
+## The phone, walked
 
-1. **Make it rise.** Bands coupled — plates touching through a wire, or worn on
-   two wrists off USB — and watch the chart leave zero before any card is
-   exchanged. Expect the tens of per cent: one beacon is 11 ms of a 500 ms
-   interval, so a peer that is only beaconing is about 2 % per shout and a
-   handshake is far more. If it stays at zero with `peers` climbing, the gating
-   is cutting too much and `CORE1_TX_TAIL_WINDOWS` is the first thing to look at.
-2. **Walk the page on a phone.** The app builds and the APK is at
-   `android/app/build/outputs/apk/debug/app-debug.apk`, but the bench phone
-   dropped off USB before it could be installed, so *nothing on the phone side
-   has been run against a band* — the version-2 parse, the differencing and the
-   chart are unproven on a handset. Install, open Advanced, and check: the line
-   sits on zero with the bands apart, *More link numbers* prints `listening` and
-   `of them busy` climbing, and the console's own percentage agrees with the
-   chart. `python scripts/link2.py --a 93D1 --run 30 --at 2:A:z --at 28:A:s`
-   prints the same fraction the phone is drawing — they are the same two
-   counters, so a disagreement is a bug in one of them.
+Installed on the bench phone and walked to Advanced against board one:
+
+- The verdict reads **Nothing on the skin**, where the old chart's own test read
+  *Something on the skin* forever.
+- The line sits on zero, `heard 0.0% of the time`, axis top 20 %.
+- *More link numbers* prints `listening 5 893 922 windows`, `of them busy 1057`,
+  and `heard 0.01 % of the time`, beside the five bins — tones 200 / 108 against
+  guards 47 / 38 / 39, which is what a band that is no longer hearing its own
+  tail looks like.
+- Cross-checked against the console five seconds earlier: `1082 / 6 107 559`
+  there, `1095 / 6 175 635` on the phone. Same two counters, same scale.
+
+**And the chain was proved to move.** A throwaway image with the blanking
+disabled (`s_tx_deaf_span = 0`, never committed) makes the band hear its own
+beacon: the chart went to **27.2 %**, the axis stepped to 40 %, the line drew a
+live series, and the verdict flipped to *Something on the skin, but no card in
+it* — which is exactly right, the energy is real and carries no card this band
+can decode. The honest image was flashed straight back and reads 0.01 % again.
+
+So the differencing, the scaling, the axis and the verdict floor are all
+verified with a signal of known size. What is **not** verified is the one thing
+hands are needed for:
+
+## The run that is owed
+
+**Make it rise off the other band.** Bands coupled — plates bridged, or worn on
+two wrists, off USB and gated at SW1 — and watch the chart leave zero before any
+card is exchanged. Expect the tens of per cent: one beacon is 11 ms of a 500 ms
+interval, so a peer that is only beaconing is about 2 % per shout and a
+handshake is far more. If it stays at zero while `peers` climbs, the gating is
+cutting too much and `CORE1_TX_TAIL_WINDOWS` is the first thing to look at.
+
+`python scripts/link2.py --a 93D1 --run 30 --at 2:A:z --at 28:A:s` prints the
+same fraction the phone is drawing — the same two counters, so a disagreement
+is a bug in one of them.
 
 ## Bench recipe
 
