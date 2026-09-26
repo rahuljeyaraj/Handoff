@@ -71,6 +71,8 @@ He turned it over in his hands. No screen. Nothing to type on. He looked up.
 
 "Yes, there's an app." A little surprised, she pointed at the sign beside her: two hands clasped in a handshake, and the word *Handoff* under it. "It's on the store, just search Handoff. Same logo."
 
+![The Handoff logo](element14-blog/13-logo.png)
+
 He found it and installed it. The queue behind him, mercifully, was short.
 
 "Open it up. It'll ask for the band. See the little QR code on the back? Scan it with the app."
@@ -97,9 +99,9 @@ He keyed in his details and tapped `Save`. In his hand the band blinked green, t
 
 He put it on. Left wrist, out of habit, and glanced at her.
 
-"Either one," she said. "Doesn't matter."
+"Other wrist," she said. "It has to be on the hand you shake with."
 
-He looked at the phone. An empty page. `No handshakes yet`.
+He moved it across and looked at the phone. An empty page. `No handshakes yet`.
 
 ![Your contact card](element14-blog/15-your-card.png)
 
@@ -113,7 +115,7 @@ He looked at the phone. An empty page. `No handshakes yet`.
 
 He took it.
 
-It was an ordinary handshake: warm, firm, a second long. The band on his wrist flickered white, and as he let go it went green and gave a small buzz against his skin.
+It was an ordinary handshake: warm, firm, a second long. The band on his wrist flickered white. Before he had even let go it went green and gave a small buzz against his skin.
 
 "Check your phone."
 
@@ -259,7 +261,9 @@ He had met most of it already, from the outside.
 * **Two amplifiers** between the plate and the Pico, because what arrives is tiny (5.4).
 * **The rest is for the wearer:** the button Savithri held for five seconds, the light that blinked, the buzz on his wrist.
 
-**Why a Pico 2 W.** One module does every job in the middle box.
+**Why a Pico 2 W?**
+
+One module does every job in the middle box.
 
 * **The tones come straight from a pin.** PIO, the Pico's small programmable I/O engines, switches a pin between 180 kHz and 200 kHz on its own, to the cycle. No oscillator, no driver chip, and the processor is free.
 * **The converter reads them directly.** It samples 500,000 times a second, fast enough for 200 kHz, so there is no mixer to bring anything down first.
