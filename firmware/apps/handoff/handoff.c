@@ -235,7 +235,27 @@ static btstack_timer_source_t s_link_timer;
  * 500 ms is an instrument.
  */
 static btstack_timer_source_t s_bench_timer;
-#define BENCH_TICK_MS 500u
+
+/*
+ * ONE BLOCK PER TICK, AND THAT IS NOT A THROTTLE — IT IS THE ONLY WAY MORE
+ * THAN ONE OF THEM ARRIVES.
+ *
+ * ble_notify_telemetry() is att_server_notify(), which is deliberately not
+ * queued (ble.c says why: a queued score stream hides a stalled receive
+ * path). Three calls in a row therefore take the one ACL buffer that is free
+ * and DROP the other two, silently, because nothing was checking the return.
+ * Measured 26 Sep 2026: 63 bench blocks reached the phone in thirty seconds
+ * and not one trigger block did — which is why the Rendezvous section had
+ * never filled in on any bench, and why the peak reading it carries was only
+ * ever reachable over USB, the one place design §13 forbids reading it from.
+ *
+ * So the tick is a third of what it was and sends one block each time, and
+ * the three arrive in the order BenchTrace pairs them in: the bench block
+ * opens a sample, the trigger block fills in its peak, the bank block fills
+ * in its spectrum. A full set still lands every 500 ms.
+ */
+#define BENCH_TICK_MS 167u
+#define BENCH_BLOCKS  3u
 
 static void report_status(void)
 {
@@ -367,6 +387,37 @@ static void report_trig(void)
     t.trig_state      = (uint8_t)s_sm.trig.state;
 
     ble_notify_telemetry(&t, sizeof t);
+}
+
+/*
+ * The spectrum, by radio — all five bins, so a reader can see WHERE the
+ * energy sits rather than only how much there is.
+ *
+ * The two blocks above both carry derived numbers: signal is a max of two
+ * bins, the reference is a median of three through a boxcar. When both rise
+ * together they cannot say why, and by design they often do — the reference
+ * is MEANT to move with the room. Five bins say it immediately: two tones
+ * standing out of three flat guards is a band being heard, and all five
+ * rising together is the room, a charger, a hand on the bench.
+ *
+ * A TAKE, and the second one on this band. hal_pico.h's one-caller rule
+ * applies to it separately from the peak above — each resets its own
+ * snapshot, and two readers of either would halve both.
+ */
+static void report_bank(void)
+{
+    ble_bank_t k;
+    uint32_t bins[GZB_BINS];
+    int i;
+
+    memset(&k, 0, sizeof k);
+    k.tag     = (uint8_t)BLE_BANK_TAG;
+    k.version = BLE_BANK_VERSION;
+
+    hal_pico_take_bin_peak(bins);
+    for (i = 0; i < GZB_BINS; i++) k.bin[i] = sat16(bins[i]);
+
+    ble_notify_telemetry(&k, sizeof k);
 }
 
 /*
@@ -533,9 +584,20 @@ static void status_tick(btstack_timer_source_t *ts)
  */
 static void bench_tick(btstack_timer_source_t *ts)
 {
+    static unsigned phase;
+
     if (ble_telemetry_subscribed()) {
-        report_bench();
-        report_trig();
+        switch (phase) {
+        case 0:  report_bench(); break;
+        case 1:  report_trig();  break;
+        default: report_bank();  break;
+        }
+        phase = (phase + 1u) % BENCH_BLOCKS;
+    } else {
+        /* Start a fresh set on the next subscriber, so a phone that connects
+         * mid-rotation does not open its first sample on a trigger block and
+         * hang a peak on nothing. */
+        phase = 0;
     }
     btstack_run_loop_set_timer(ts, BENCH_TICK_MS);
     btstack_run_loop_add_timer(ts);

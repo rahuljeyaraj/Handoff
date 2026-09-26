@@ -54,6 +54,12 @@ object HandoffIcons {
     /** Three lines of decreasing length — the sort control. */
     val Sort: ImageVector by lazy { stroked("Sort", 1.75f, "M4 7h13M4 12h9M4 17h5") }
 
+    /** A chevron pointing down: the closed state of a disclosure. */
+    val ExpandMore: ImageVector by lazy { stroked("ExpandMore", 2f, "M6 9.5l6 6l6 -6") }
+
+    /** The same, up: the open state. */
+    val ExpandLess: ImageVector by lazy { stroked("ExpandLess", 2f, "M6 14.5l6 -6l6 6") }
+
     /** An ID card: your contact card is on the band. */
     val Card: ImageVector by lazy {
         stroked("Card", 1.6f,

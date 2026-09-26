@@ -70,6 +70,12 @@ class BandService : LifecycleService(), BandClient.Listener {
          * signal numbers cannot.
          */
         val trig: BandTrig? = null,
+        /**
+         * The five Goertzel bins from the loudest window of the interval. The
+         * one reading that says WHERE the energy is rather than how much of
+         * it there is, and what the Advanced page's chart draws.
+         */
+        val bank: BandBank? = null,
         /** The same readings kept over time, for the Advanced page's chart. */
         val benchTrace: BenchTrace = BenchTrace.EMPTY,
         val lastError: String? = null,
@@ -432,6 +438,18 @@ class BandService : LifecycleService(), BandClient.Listener {
     override fun onTrig(trig: BandTrig) {
         val s = _state.value
         _state.value = s.copy(trig = trig, benchTrace = s.benchTrace.withPeak(trig.peakSignal))
+    }
+
+    /** Third of the three, a few milliseconds behind its bench block. */
+    override fun onBank(bank: BandBank) {
+        val s = _state.value
+        // An unmeasured block (five zeros) is kept out of `bank` as well as
+        // out of the trace: the verdict line reads it, and "the band told us
+        // nothing this interval" must not be shown as "the room is silent".
+        _state.value = s.copy(
+            bank = if (bank.measured) bank else s.bank,
+            benchTrace = s.benchTrace.withBank(bank),
+        )
     }
 
     override fun onStatus(status: BandStatus) {

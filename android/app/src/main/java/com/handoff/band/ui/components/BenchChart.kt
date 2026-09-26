@@ -33,36 +33,52 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.handoff.band.ble.BandBench
 import com.handoff.band.ble.BenchSample
 import com.handoff.band.ble.BenchTrace
 import com.handoff.band.ui.theme.MonoStyle
 
 /**
- * The CFAR pair against time, from the band's own readings: the peak signal of
- * each interval, the instantaneous signal, and the threshold the band judged
- * them by.
+ * Three lines against time: the SIGNAL, the ROOM it is measured against, and
+ * the THRESHOLD between them. Signal above threshold is the band hearing
+ * something that is not itself.
  *
- * WHY THIS EXISTS AS A PICTURE. The numbers are already printed above it, and
- * for "is it hearing anything right now" a number is better. This answers a
- * different question: WHEN was it hearing. Under link v2 a beacon is on air for
- * eleven milliseconds and the band sends a block twice a second, so the
- * instantaneous signal lands in the empty room nearly every time — on
- * 25 Sep 2026 exactly that drew a flat line under the threshold while the band
- * was tripping its detector about seven times a second. The peak series is the
- * loudest window of each whole interval, so a brief event cannot hide between
- * two samples.
+ * ALL THREE COME FROM THE BANK BLOCK, which is why that block still exists
+ * even though its five bins are no longer drawn. It is the only source on the
+ * band that is BLANKED DURING OUR OWN TRANSMISSION (hal_pico.c,
+ * core1_tx_deaf, placed on the sample clock). The bench block's pair is not:
+ * measured 26 Sep 2026 with the peer's link switched off at the console, the
+ * ungated signal sat at 960 against a room of 20 and never moved, because
+ * what it was hearing was this band's own beacon. A chart drawn from that
+ * cannot show anything arriving, because it is already saturated by us.
  *
- * READ BOTH SIGNAL SERIES AGAINST THE DASHED THRESHOLD, which is k times the
- * guard reference and is the ONE test the detector applies. There is no floor
- * and no second additive gate any more; step 5 deleted the detector that had
- * them. The threshold is a series rather than a constant because the reference
- * is measured live, so the bar moves with the room — and the reference itself
- * is not drawn, because the threshold is the only thing about it a reader acts
- * on.
+ *   signal      max(E_A, E_B) at the loudest window of the interval, skipping
+ *               every window our own pad was driven. A peak, because a beacon
+ *               is on air for eleven milliseconds and these blocks arrive
+ *               twice a second — an instantaneous reading lands in the empty
+ *               room 9 999 times out of 10 000.
+ *   room        the guard bins, averaged over every guard window of the same
+ *               interval. A mean, because the room is steady and a peak of it
+ *               would just select the noisiest window of ten thousand.
+ *   threshold   sqrt(k) x room, and it is a LINE the signal crosses rather
+ *               than a number to be inferred.
  *
- * PEAK ABOVE THE LINE WHILE THE INSTANT SITS UNDER IT IS THE HEALTHY SHAPE for
- * two bands beaconing at each other. Both under it is a channel that carried
- * nothing at all in that interval.
+ * THE THRESHOLD IS sqrt(k), NOT k, AND THAT IS THE WHOLE REASON THIS CHART
+ * WENT BACK TO THREE LINES. presence.c decides on mag^2 — `signal^2 > k *
+ * noise^2` — and what leaves the band is the amplitude, the root already
+ * taken. From the v2 merge until 26 Sep 2026 the app multiplied the amplitude
+ * by k anyway, drawing the bar 4.09x too high, so the signal could never
+ * reach it: the band would call a channel busy while the phone drew the
+ * reading far below its own line. Under v1 no such gap existed, which is
+ * exactly why the old level-and-floor plot visibly crossed and this one never
+ * did. BandBench.amplitudeThreshold is where that is put right.
+ *
+ * WHAT THIS IS NOT. It is not v1's level and floor. The floor was a
+ * REMEMBERED average of the same bin the signal was in, so the signal could
+ * poison it and it lagged behind every change — half the drama of the old
+ * plot was the floor crawling after a level that had already jumped. This
+ * room is measured live, in the same windows, in bins our transmitter cannot
+ * reach. It does not lag and it cannot be poisoned.
  */
 
 /* Categorical slots 1 and 5 of the validated palette, stepped per mode.
@@ -74,11 +90,11 @@ import com.handoff.band.ui.theme.MonoStyle
  * target of 8, normal-vision 27.5 / 26.5 against a floor of 15.
  *
  * Light-mode magenta sits at 2.57:1 on the surface, under the 3:1 bar, so the
- * relief rule applies and both series carry a visible value label. */
-private val PeakLight = Color(0xFF2A78D6)
-private val PeakDark = Color(0xFF3987E5)
-private val NowLight = Color(0xFFE87BA4)
-private val NowDark = Color(0xFFD55181)
+ * relief rule applies and every series carries a visible value label. */
+private val SignalLight = Color(0xFF2A78D6)
+private val SignalDark = Color(0xFF3987E5)
+private val ThresholdLight = Color(0xFFD55181)
+private val ThresholdDark = Color(0xFFE87BA4)
 
 private enum class Window(val label: String, val ms: Long) {
     SHORT("30 s", 30_000),
@@ -88,18 +104,25 @@ private enum class Window(val label: String, val ms: Long) {
 
 @Composable
 fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
-    var window by remember { mutableStateOf(Window.MEDIUM) }
+    var window by remember { mutableStateOf(Window.SHORT) }
     // Off the surface rather than isSystemInDarkTheme(), because the app has
     // its own light/dark override (Prefs.Theme) and the chart has to follow
     // the surface it is actually drawn on.
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val peakColor = if (dark) PeakDark else PeakLight
-    val nowColor = if (dark) NowDark else NowLight
+    val signalColor = if (dark) SignalDark else SignalLight
+    val thresholdColor = if (dark) ThresholdDark else ThresholdLight
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     val grid = MaterialTheme.colorScheme.outlineVariant
+    // The room is the baseline the other two are read against, so it is the
+    // quietest thing on the canvas — present, never competing.
+    val roomColor = ink.copy(alpha = 0.55f)
 
-    val samples = trace.window(window.ms)
+    val samples = trace.window(window.ms).filter { it.bank != null }
     val last = samples.lastOrNull()
+
+    fun signalOf(s: BenchSample) = s.bank!!.signal
+    fun roomOf(s: BenchSample) = s.bank!!.room
+    fun thresholdOf(s: BenchSample) = BandBench.amplitudeThreshold(s.bank!!.room)
 
     Column(modifier.padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -126,16 +149,15 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
             return@Column
         }
 
-        val top = niceTop(samples.maxOf { maxOf(maxOf(it.signal, it.peak ?: 0), it.threshold) })
+        val top = niceTop(samples.maxOf { maxOf(signalOf(it), thresholdOf(it)) })
 
-        Box(Modifier.fillMaxWidth().height(160.dp)) {
-            Canvas(Modifier.fillMaxWidth().height(160.dp)) {
+        Box(Modifier.fillMaxWidth().height(170.dp)) {
+            Canvas(Modifier.fillMaxWidth().height(170.dp)) {
                 val h = size.height
                 val w = size.width
 
-                // Recessive chrome: hairline, solid, never dashed (that is what
-                // the threshold is, and the two must not read as the same
-                // thing).
+                // Recessive chrome: hairline, solid, never dashed — that is
+                // what the threshold is, and the two must not read alike.
                 for (f in listOf(0f, 0.5f, 1f)) {
                     val y = h - f * h
                     drawLine(grid, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
@@ -146,35 +168,33 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
                 fun x(s: BenchSample) = (s.atMs - t0) / span * w
                 fun y(v: Int) = h - (v.coerceIn(0, top).toFloat() / top) * h
 
+                // The room first and thinnest: it is the baseline, not a
+                // result.
+                drawPath(
+                    drawSeries(samples, ::x) { y(roomOf(it)) }, roomColor,
+                    style = Stroke(width = 1.5.dp.toPx(),
+                                   cap = StrokeCap.Round, join = StrokeJoin.Round),
+                )
+
                 // Dashed, and the only dashed thing here: it is a rule the
                 // data is read against, not data and not chrome.
                 drawPath(
-                    drawSeries(samples, ::x) { y(it.threshold) }, ink,
+                    drawSeries(samples, ::x) { y(thresholdOf(it)) }, thresholdColor,
                     style = Stroke(
-                        width = 1.dp.toPx(),
+                        width = 1.5.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(
                             floatArrayOf(6.dp.toPx(), 5.dp.toPx())),
                     ),
                 )
 
-                // The instant first, so the peak — the series a reader acts
-                // on — is the one on top where the two cross.
+                // The signal last and thickest, so where it crosses the
+                // threshold it is the line on top — the crossing is the whole
+                // content of this chart.
                 drawPath(
-                    drawSeries(samples, ::x) { y(it.signal) }, nowColor,
-                    style = Stroke(width = 2.dp.toPx(),
+                    drawSeries(samples, ::x) { y(signalOf(it)) }, signalColor,
+                    style = Stroke(width = 2.5.dp.toPx(),
                                    cap = StrokeCap.Round, join = StrokeJoin.Round),
                 )
-                // Absent until a trigger block has landed; falling back to the
-                // instant would draw one series twice and read as agreement
-                // between two measurements.
-                if (samples.any { it.peak != null }) {
-                    drawPath(
-                        drawSeries(samples.filter { it.peak != null }, ::x) { y(it.peak ?: 0) },
-                        peakColor,
-                        style = Stroke(width = 2.dp.toPx(),
-                                       cap = StrokeCap.Round, join = StrokeJoin.Round),
-                    )
-                }
             }
 
             Text("$top", style = MonoStyle.copy(fontSize = 11.sp), color = ink,
@@ -191,11 +211,11 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
         // at right now. The value is also the relief the light-mode contrast
         // warning asks for.
         Row(Modifier.fillMaxWidth()) {
-            Key(peakColor, "peak", last?.peak?.toString() ?: "-")
-            Spacer(Modifier.width(16.dp))
-            Key(nowColor, "now", last?.signal?.toString() ?: "-")
-            Spacer(Modifier.width(16.dp))
-            Key(ink, "busy above", last?.threshold?.toString() ?: "-")
+            Key(signalColor, "signal", last?.let { signalOf(it).toString() } ?: "-")
+            Spacer(Modifier.width(14.dp))
+            Key(thresholdColor, "needs", last?.let { thresholdOf(it).toString() } ?: "-")
+            Spacer(Modifier.width(14.dp))
+            Key(roomColor, "room", last?.let { roomOf(it).toString() } ?: "-")
         }
     }
 }

@@ -38,6 +38,7 @@
 #include <stdint.h>
 
 #include "chunk.h"
+#include "gz_bank.h"    /* GZB_BINS: the bank block is one entry per bin */
 
 #define BLE_CHUNK_HDR_BYTES CHUNK_HDR_BYTES
 #define BLE_MIN_ATT_MTU     23   /* the floor everything must work at */
@@ -253,6 +254,54 @@ typedef struct {
  */
 
 _Static_assert(sizeof(ble_trig_t) == 20, "trig must fit one notify at the 23-byte floor");
+
+/* ---- bank block, on the same characteristic --------------------------- */
+
+/*
+ * THE SPECTRUM: all five Goertzel bins, so a reader can see WHERE the energy
+ * is and not merely how much of it there is.
+ *
+ * WHY A THIRD BLOCK. ble_bench_t carries signal and noise_ref, which are the
+ * two numbers the detector decided on — but they are both DERIVED, one a max
+ * of two bins and the other a median of three put through a boxcar. When the
+ * pair moves together there is no way back from it to the cause: a band
+ * arriving raises the tones, and a hand on the bench or a charger plugged in
+ * raises everything, and signal-against-reference reads nearly the same in
+ * both cases because the reference is designed to move with the room. The
+ * five bins separate them at a glance. Nothing in the link reads this; it is
+ * an instrument, and it is the one the demo is built on.
+ *
+ * EVERY BIN IS FROM THE SAME WINDOW. hal_pico_take_bin_peak() snapshots the
+ * whole bank at the window where the tones were loudest since the last take,
+ * which is the only way five numbers drawn side by side mean anything — five
+ * independent maxima would be five different instants wearing the shape of a
+ * spectrum. It is also why this is a peak and not an instantaneous read: the
+ * bank scores 20 000 windows a second, these blocks go out twice a second,
+ * and a beacon is on air for eleven milliseconds. An instantaneous spectrum
+ * would draw the empty room 9 999 times out of 10 000 — the 25 Sep 2026
+ * failure, in five bins instead of one.
+ *
+ * READ THE TONES AGAINST THE GUARDS, NOT AGAINST A THRESHOLD. There is no
+ * threshold in this block on purpose: k belongs to ble_bench_t, which carries
+ * the decision. This block carries the picture the decision was taken from.
+ *
+ * The frequencies are not sent. They are structural — config.h fixes the bin
+ * set and static-asserts the harmonic clearances — so a reader that did not
+ * already know them could not interpret the magnitudes either.
+ *
+ * Twelve bytes, well inside one notify at the 23-byte ATT floor. Versioned by
+ * offset like the others: append, never move.
+ */
+#define BLE_BANK_TAG     0xB3u
+#define BLE_BANK_VERSION 1
+
+typedef struct {
+    uint8_t  tag;            /* BLE_BANK_TAG                                 */
+    uint8_t  version;        /* BLE_BANK_VERSION                             */
+    uint16_t bin[GZB_BINS];  /* gz_bank.h order: A, B, g_lo, g_mid, g_hi     */
+} ble_bank_t;
+
+_Static_assert(sizeof(ble_bank_t) == 12, "bank must fit one notify at the 23-byte floor");
 
 /* ---- handlers --------------------------------------------------------- */
 

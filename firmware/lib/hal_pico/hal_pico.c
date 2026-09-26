@@ -72,6 +72,148 @@ static volatile uint32_t s_noise;         /* the reference it was judged against
 static volatile uint32_t s_peak_level;    /* ...and the same pair at the peak  */
 static volatile uint32_t s_peak_noise;
 static volatile bool     s_peak_req;      /* core 0 asks; the take resets it  */
+/*
+ * ALL FIVE BINS, FROM THE ONE WINDOW WHERE THE TONES WERE LOUDEST.
+ *
+ * s_peak_level above answers "how loud did it get". It cannot answer "loud
+ * WHERE", and that is the question a reader looking at a spectrum asks: is
+ * the energy in our two tone bins, or is the whole band up because the room
+ * got noisy? Two tones over a rising room is a signal; five bins rising
+ * together is mains, or a hand on the bench, or a phone charger.
+ *
+ * WHY A SNAPSHOT AND NOT FIVE SEPARATE PEAKS. Five independent maxima would
+ * each come from a different window, and a spectrum whose bars were measured
+ * at five different instants is not a spectrum — the comparison between bins
+ * is the whole content, and it only means something when they were scored
+ * over the SAME samples through the same gain. So the trigger is the tone
+ * pair, and when it sets a new maximum the entire bank is copied.
+ *
+ * THE GUARDS ARE DECIMATED and hold their last value between guard windows
+ * (gz_bank.h), so a snapshot can pick up a guard reading up to
+ * HANDOFF_GUARD_DECIM windows old — 200 us at this rate. That is correct
+ * rather than tolerated: it is exactly the number presence.c judged this
+ * window against, so the picture shows the comparison the detector made.
+ *
+ * mag^2 on core 1, scores only when a reader asks — design §6, the same rule
+ * s_level follows and for the same measured reason.
+ */
+static uint64_t          s_binpeak[GZB_BINS];   /* core 1 only, mag^2        */
+static uint64_t          s_binpeak_sig;         /* the max that selected it  */
+/*
+ * THE GUARDS ARE AVERAGED OVER THE INTERVAL, NOT TAKEN AT THE TONE PEAK, AND
+ * THE DIFFERENCE IS NOT A REFINEMENT — THE OTHER WAY IS WRONG.
+ *
+ * The first version of this block snapshotted all five bins together at the
+ * window where the tones were loudest, on the reasoning that five numbers
+ * drawn side by side must come from the same samples. That reasoning is
+ * right about the two tones and backwards about the three guards, because of
+ * what "loudest tone" selects when there is no tone:
+ *
+ *   peer transmitting   the max-tone window is the signal. Guards read
+ *                       whatever the room was. Normal.
+ *   nothing on the pad  the max-tone window is just the NOISIEST window of
+ *                       ten thousand, and in that window the guards are
+ *                       high too, because noise is broadband.
+ *
+ * So the room drew as pulsing INVERSELY to the signal — high in the gaps,
+ * normal during traffic — which is an artefact of the selection and not
+ * something happening on the pad. Seen immediately on the 26 Sep 2026 bench.
+ *
+ * A peak is the right statistic for a thing that is brief and a mean is the
+ * right statistic for a thing that is steady, and this block carries one of
+ * each: the tones are the loudest window of the interval, the guards are
+ * every guard window in it. Mixing the two is the honest answer to a genuine
+ * asymmetry in what is being measured, and the chart says which is which.
+ *
+ * Summed only on guards_fresh, because a decimated guard holds its last
+ * value between guard windows and counting it again would weight one reading
+ * HANDOFF_GUARD_DECIM times — the same rule core1_bank_window() follows.
+ */
+static uint64_t          s_binmean[GZB_GUARDS]; /* mag^2 sums, core 1 only   */
+static uint32_t          s_binmean_n;           /* guard windows in them     */
+static volatile uint32_t s_binpeak_out[GZB_BINS]; /* scores, for core 0      */
+static volatile bool     s_binpeak_req;         /* core 0 asks for the next  */
+/*
+ * A SEQLOCK, AND WHY THIS READ DOES NOT SPIN WHEN THE OTHER TWO DO.
+ *
+ * s_peak_req and s_tlm_req block core 0 until core 1 answers, with a 2 ms
+ * deadline. That works for them and did NOT work here: measured 26 Sep 2026,
+ * 24 % of intervals came back as five zeros. The deadline was not the
+ * problem, the timing of the request was — core 0 asks from the BTstack
+ * timer, which lands inside our own beacon about a quarter of the time, and
+ * during a transmission no bank window closes for core 1 to answer in. Two
+ * milliseconds is forty windows when the ring is running and none when it is
+ * not, and a timeout here is indistinguishable on the chart from a silent
+ * room.
+ *
+ * So this reader never waits. Core 1 publishes whenever it next closes a
+ * window with a request outstanding, and core 0 reads whatever was last
+ * published and asks for the next. The value is therefore up to one interval
+ * old, which for a peak MEASURED over that interval is not staleness at all.
+ *
+ * The seq makes the five bins one value: core 1 bumps it odd before writing
+ * and even after, so a reader that sees the same even number either side read
+ * a complete set. Core 1 writes twice a second, so the retry never fires in
+ * practice — it is here so that when it does, the picture is not a spectrum
+ * half from one instant and half from another, which is the one thing this
+ * block exists to avoid.
+ */
+static volatile uint32_t s_binpeak_seq;
+
+/*
+ * WHEN CORE 1 MUST NOT BELIEVE ITS OWN EARS — the spectrum's half of the
+ * blanking p_rx_chips() already does for the chip stream, AND PLACED THE
+ * SAME WAY IT IS: on the sample clock, never on the wall clock.
+ *
+ * Our transmitter drives the same pad the receiver is sampling, so during a
+ * beacon the tone bin we are sending reads enormous. The chip stream cuts
+ * those samples out; the bank snapshot did not, and the result was a demo
+ * chart with tone A pinned near 1900 above a room of 28 while peers stayed
+ * at zero. Every one of those peaks was this band's own shout.
+ *
+ * THE FIRST FIX WAS WRONG AND THE WAY IT WAS WRONG IS THE WHOLE POINT. It
+ * asked "is the pad being driven RIGHT NOW", and core 1 is not scoring right
+ * now — the ring hands it a block at a time, so the window it is closing was
+ * converted up to HANDOFF_RX_LATENCY_US ago. Measured 26 Sep 2026 with the
+ * peer's link switched off at the console: tone A sat at 960 against a room
+ * of 20, unchanged, because every beacon's samples arrived to be scored
+ * after the wall clock said the beacon was over. p_rx_chips' comment says
+ * exactly this about chips and has said it since M13.
+ *
+ * So the test is on the sample clock: the window's own conversion time
+ * against the span our pad was ours. The span runs from the DMA start to
+ * pad-idle plus the turnaround — the amplifier's recovery is deaf here too —
+ * and is widened by one window so a window straddling either edge is cut
+ * with the rest.
+ *
+ * UNSIGNED DIFFERENCE, NOT SIGNED. A window long before the last send gives
+ * a huge unsigned number and reads "not deaf" with no comparison against a
+ * second edge, so there is no 35-minute sign-flip to reason about. Before
+ * any send at all s_tx_deaf_span is zero and nothing is cut.
+ *
+ * WHY TWO 32-BIT WORDS rather than reading core 0's uint64_t deadlines. A
+ * 64-bit read on this part is two loads that core 0 can write between. These
+ * are aligned 32-bit words, so a reader sees an old value or a new one and
+ * never half of each.
+ *
+ * THE DECISION IS NOT GATED, only the picture. presence.c must keep scoring
+ * every window: busy is what the link lives on, link_sm does its own
+ * turnaround, and a detector with holes cut in it by another subsystem is
+ * exactly the kind of coupling link v2 exists to remove.
+ */
+#define CORE1_WINDOW_US  ((uint32_t)HANDOFF_GZ_N * 1000000u / HANDOFF_ADC_FS_HZ)
+
+static volatile uint32_t s_tx_deaf_from;    /* time_us_64() low word, DMA start */
+static volatile uint32_t s_tx_deaf_span;    /* microseconds; 0 = never sent     */
+
+/* Was the window ending at sample-clock time t_end_us ours rather than the
+ * room's. t_end_us is the low word of adc_ring_sample_us(). */
+static inline bool core1_tx_deaf(uint32_t t_end_us)
+{
+    const uint32_t span = s_tx_deaf_span;
+    if (span == 0u) return false;
+    return (uint32_t)(t_end_us - s_tx_deaf_from) <= span;
+}
 static volatile uint32_t s_chips;
 static volatile uint32_t s_windows;
 /*
@@ -223,9 +365,30 @@ static void core1_bank_window(const gz_bank_t *b)
  * above because they are different jobs: the capture is an instrument that
  * only runs when core 0 asks, this runs always and is what the link consumes.
  */
-static HANDOFF_HOT_FUNC void core1_presence_window(presence_t *pr, const gz_bank_t *b)
+static HANDOFF_HOT_FUNC void core1_presence_window(presence_t *pr, const gz_bank_t *b,
+                                                  uint32_t t_end_us)
 {
     const bool busy = presence_push_bank(pr, b);
+    const uint64_t sig = gzb_signal(b);
+
+    /* The snapshot. A compare every window, five stores only on a new
+     * maximum — which after the first windows of an interval is rare, and
+     * is the whole cost of the spectrum leaving this core.
+     *
+     * Skipped entirely while our own transmitter is on the pad: see
+     * core1_tx_deaf(). The verdict above is NOT skipped. */
+    if (!core1_tx_deaf(t_end_us)) {
+        int i;
+        if (sig >= s_binpeak_sig) {
+            s_binpeak_sig = sig;
+            for (i = 0; i < GZB_BINS; i++) s_binpeak[i] = b->mag2[i];
+        }
+        /* The room, averaged rather than selected — see s_binmean. */
+        if (b->guards_fresh) {
+            for (i = 0; i < GZB_GUARDS; i++) s_binmean[i] += b->mag2[GZB_G_LO + i];
+            s_binmean_n++;
+        }
+    }
 
     s_busy_now = busy;
     if (busy) {
@@ -268,6 +431,29 @@ static HANDOFF_HOT_FUNC void core1_presence_window(presence_t *pr, const gz_bank
         s_peak_level = sig;
         s_peak_noise = noi;
         s_peak_req = false;
+    }
+
+    /* Its own request for its own reason: this take resets the snapshot, so
+     * a console reading it would steal the phone's interval and the phone
+     * would plot a spectrum from a window it did not choose. */
+    if (s_binpeak_req) {
+        int i;
+        s_binpeak_seq++;                       /* odd: a write is in progress */
+        __dmb();
+        /* Tones: the loudest window. Guards: the mean of every guard window
+         * in the interval — two statistics on purpose, see s_binmean. */
+        s_binpeak_out[GZB_A] = gzb_score(s_binpeak[GZB_A]);
+        s_binpeak_out[GZB_B] = gzb_score(s_binpeak[GZB_B]);
+        for (i = 0; i < GZB_GUARDS; i++)
+            s_binpeak_out[GZB_G_LO + i] =
+                s_binmean_n ? gzb_score(s_binmean[i] / s_binmean_n) : 0u;
+        __dmb();
+        s_binpeak_seq++;                       /* even: the set is complete   */
+        for (i = 0; i < GZB_BINS; i++) s_binpeak[i] = 0;
+        for (i = 0; i < GZB_GUARDS; i++) s_binmean[i] = 0;
+        s_binmean_n = 0;
+        s_binpeak_sig = 0;
+        s_binpeak_req = false;
     }
 }
 
@@ -432,7 +618,12 @@ static HANDOFF_HOT_FUNC void core1_main(void)
                 if (!done) break;
 
                 s_windows++;
-                core1_presence_window(&pres, &bank);
+                /* The window placed on the SAMPLE clock, not the wall clock:
+                 * the ring is up to a block late and the spectrum's blanking
+                 * has to know when these samples were converted, not when
+                 * they were scored. See core1_tx_deaf(). */
+                core1_presence_window(&pres, &bank,
+                    (uint32_t)adc_ring_sample_us(base + off - 1u));
                 core1_bank_window(&bank);
 
                 {
@@ -480,6 +671,7 @@ static uint64_t s_tx_until;
 static uint64_t s_tx_started;    /* DMA start of the last send               */
 static uint64_t s_tx_pad_idle;   /* when the last chip of the last send ends */
 static uint32_t s_rx_cut;        /* chips dropped as our own, see p_rx_chips */
+
 
 /*
  * A transmit that is still busy well after its airtime has stalled: the
@@ -534,6 +726,13 @@ static size_t p_tx_chips(void *ctx, const uint8_t *chips, size_t n)
     s_tx_started  = pio_carrier_started_us();
     s_tx_pad_idle = s_tx_started + (uint64_t)n * HANDOFF_CHIP_US;
     s_tx_until    = s_tx_pad_idle + tail_us;
+    /* The same span, in the two words core 1 can read without tearing. The
+     * turnaround is included because the amplifier is still recovering
+     * through it — p_rx_chips() cuts the chip stream on exactly this edge —
+     * and one window is added so a window straddling an edge goes too. */
+    s_tx_deaf_from = (uint32_t)s_tx_started;
+    s_tx_deaf_span = (uint32_t)(s_tx_until - s_tx_started)
+                   + HANDOFF_TURNAROUND_US + CORE1_WINDOW_US;
     return n;
 }
 
@@ -882,6 +1081,29 @@ void hal_pico_take_peak(uint32_t *signal, uint32_t *noise)
     }
     if (signal) *signal = s_peak_level;
     if (noise)  *noise  = s_peak_noise;
+}
+
+void hal_pico_take_bin_peak(uint32_t out[GZB_BINS])
+{
+    int attempt, i;
+
+    if (!out) return;
+
+    /* Read the last complete set — see the seqlock note by s_binpeak_seq.
+     * Two attempts: core 1 writes these twice a second, so a second collision
+     * against a five-word copy is not a thing that happens. */
+    for (attempt = 0; attempt < 2; attempt++) {
+        const uint32_t before = s_binpeak_seq;
+        if (before & 1u) continue;             /* caught mid-write */
+        __dmb();
+        for (i = 0; i < GZB_BINS; i++) out[i] = s_binpeak_out[i];
+        __dmb();
+        if (s_binpeak_seq == before) break;
+    }
+
+    /* And ask for the next one. Never waited on: the answer arrives at core
+     * 1's convenience and is read by the call after this. */
+    s_binpeak_req = true;
 }
 
 bool hal_pico_bank_capture(uint32_t windows, uint32_t timeout_us,

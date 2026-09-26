@@ -344,21 +344,42 @@ object Pairing {
      * exhaust the phone's shared scan-filter slots for every app.
      */
     @Suppress("MissingPermission")
-    fun debugScan(context: Context, onDone: (String) -> Unit): Locate? {
+    fun debugScan(context: Context, onDone: (ScanReport) -> Unit): Locate? {
         val scanner = BluetoothAdapter.getDefaultAdapter()?.bluetoothLeScanner
-            ?: run { onDone("no LE scanner"); return null }
+            ?: run { onDone(ScanReport(error = "This phone has no LE scanner.")); return null }
         val handler = Handler(Looper.getMainLooper())
         var live = true
-        val seen = LinkedHashMap<String, String>()
+        var failure: Int? = null
+        // Strongest reading wins, not the first: RSSI on a single advertisement
+        // is noisy enough that the first one seen is a worse answer to "how well
+        // does this phone hear it" than the best of ten seconds of them.
+        val seen = LinkedHashMap<String, ScanHit>()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, r: ScanResult) {
                 if (!live) return
                 val rec = r.scanRecord
-                val line = "${r.device.address} rssi=${r.rssi} name=${rec?.deviceName} " +
-                    "uuids=${rec?.serviceUuids} raw=${rec?.bytes?.joinToString("") { "%02x".format(it) }}"
-                if (seen.put(r.device.address, line) == null) Log.i("HandoffScan", line)
+                val name = rec?.deviceName
+                val isBand = name?.contains("Handoff", ignoreCase = true) == true ||
+                    rec?.serviceUuids?.any {
+                        it.uuid.toString().startsWith("48414e44-0001", ignoreCase = true)
+                    } == true
+                val hit = ScanHit(r.device.address, name, r.rssi, isBand)
+                val old = seen[r.device.address]
+                if (old == null) {
+                    seen[r.device.address] = hit
+                    // The raw advertisement stays in logcat, where a developer
+                    // can grep it. It has no business on a screen.
+                    Log.i("HandoffScan", "${r.device.address} rssi=${r.rssi} name=$name " +
+                        "uuids=${rec?.serviceUuids} " +
+                        "raw=${rec?.bytes?.joinToString("") { b -> "%02x".format(b) }}")
+                } else if (r.rssi > old.rssi) {
+                    seen[r.device.address] = old.copy(rssi = r.rssi)
+                }
             }
-            override fun onScanFailed(errorCode: Int) { Log.e("HandoffScan", "failed $errorCode") }
+            override fun onScanFailed(errorCode: Int) {
+                failure = errorCode
+                Log.e("HandoffScan", "failed $errorCode")
+            }
         }
         val stop = {
             if (live) {
@@ -368,8 +389,15 @@ object Pairing {
         }
         val finish = Runnable {
             stop()
-            val hit = seen.values.firstOrNull { it.contains("48414e44-0001", ignoreCase = true) || it.contains("Handoff") }
-            onDone("scan: ${seen.size} devices, band ${hit ?: "NOT seen"}")
+            val all = seen.values.toList()
+            onDone(
+                ScanReport(
+                    total = all.size,
+                    bands = all.filter { it.isBand }.sortedByDescending { it.rssi },
+                    named = all.count { !it.isBand && !it.name.isNullOrBlank() },
+                    error = failure?.let { scanFailureText(it) },
+                )
+            )
         }
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
@@ -380,4 +408,46 @@ object Pairing {
             stop()
         }
     }
+
+    /*
+     * SCAN_FAILED_APPLICATION_REGISTRATION_FAILED (2) is the one that matters
+     * on this bench: it is what the OnePlus handset returns once its shared
+     * scan-filter slots are exhausted, and its own message would send a reader
+     * hunting for a bug in this app. The recovery is in the text.
+     */
+    private fun scanFailureText(code: Int) = when (code) {
+        1 -> "A scan was already running."
+        2 -> "The phone refused to register the scan. Its filter slots are " +
+            "full — turn Bluetooth off and on, then try again."
+        3 -> "The phone's Bluetooth stack returned an internal error."
+        4 -> "This phone does not support the scan settings asked for."
+        else -> "The scan failed (code $code)."
+    }
 }
+
+/** One device heard during [Pairing.debugScan], at its strongest reading. */
+data class ScanHit(
+    val address: String,
+    val name: String?,
+    /** dBm. Closer to zero is louder; below about -90 is barely there. */
+    val rssi: Int,
+    /** It advertised the Handoff service UUID, or a Handoff name. */
+    val isBand: Boolean,
+)
+
+/**
+ * What a ten-second unfiltered scan found, as something a screen can lay out.
+ *
+ * It used to be one string with every advertisement's raw bytes in it, which
+ * answered nothing: the question this scan exists for is "does this handset
+ * hear the band at all, or hear it and fail the filter", and that is [bands]
+ * plus, as context, how busy the air was. The raw bytes are still logged.
+ */
+data class ScanReport(
+    /** Distinct devices heard, band or not. */
+    val total: Int = 0,
+    val bands: List<ScanHit> = emptyList(),
+    /** Of the rest, how many advertised a name — i.e. were not just a MAC. */
+    val named: Int = 0,
+    val error: String? = null,
+)

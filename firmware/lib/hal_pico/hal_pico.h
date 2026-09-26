@@ -299,6 +299,36 @@ void hal_pico_presence(hal_pico_presence_t *out);
 void hal_pico_take_peak(uint32_t *signal, uint32_t *noise);
 
 /*
+ * The whole bank from the one window where the tones were loudest, as scores,
+ * in gz_bank.h's order: A, B, guard lo, guard mid, guard hi.
+ *
+ * WHAT THIS IS FOR. The pair above says how loud it got; this says WHERE the
+ * energy was. Two tone bins standing out of three flat guards is a band being
+ * heard. All five rising together is the room — mains, a charger, a hand on
+ * the bench — and no amount of looking at signal-against-reference tells the
+ * two apart, because the reference moves with the room by design.
+ *
+ * ALL FIVE COME FROM ONE WINDOW, which is what makes them comparable at all;
+ * five independently-maximised bins would be five different instants drawn as
+ * a spectrum. The guard entries may be up to HANDOFF_GUARD_DECIM windows old
+ * because the guards are decimated, and that is the same staleness presence.c
+ * judged the window against.
+ *
+ * A TAKE: the snapshot resets, so there is exactly one caller — report_bank()
+ * in apps/handoff. Five zeros mean nothing has been published yet, i.e. the
+ * bank is off or this is the first call; they never mean a silent room.
+ *
+ * UNLIKE hal_pico_take_peak() THIS DOES NOT WAIT. It reads the set core 1
+ * last published and asks for the next, so the value is up to one interval
+ * old — which for a peak measured over that interval is not staleness. It
+ * used to spin with a 2 ms deadline like the peak above, and 24 % of reads
+ * timed out to zeros because core 0 asks from a BTstack timer that lands
+ * inside our own beacon about a quarter of the time, and no bank window
+ * closes while the pad is being driven. See the seqlock note in hal_pico.c.
+ */
+void hal_pico_take_bin_peak(uint32_t out[GZB_BINS]);
+
+/*
  * One capture of the bank: core 1 accumulates `windows` windows and core 0
  * reads the result afterwards, so nothing is read while it is being written.
  *

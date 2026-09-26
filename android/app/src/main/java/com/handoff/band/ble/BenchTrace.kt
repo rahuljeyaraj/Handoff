@@ -33,6 +33,17 @@ data class BenchSample(
      * the two series above.
      */
     val peak: Int? = null,
+    /**
+     * All five bins from the loudest window of the same interval, from
+     * [BandBank]. Null on a band whose firmware sends no bank block.
+     *
+     * This is what the chart actually draws. [signal] and [noise] are both
+     * derived — a max of two bins and a median of three — and when they move
+     * together they cannot say whether a band arrived or the room got loud.
+     * The five bins can, and that difference is the whole reason a picture is
+     * worth drawing here at all.
+     */
+    val bank: BandBank? = null,
     val present: Boolean = false,
 ) {
     /**
@@ -71,6 +82,29 @@ class BenchTrace private constructor(val samples: List<BenchSample>) {
         if (last.peak != null) return this
         return BenchTrace(samples.dropLast(1) + last.copy(peak = peak))
     }
+
+    /**
+     * The same, for the bank block, which the band sends third — bench, then
+     * trigger, then this, a few milliseconds apart. Paired by arrival for the
+     * reason [withPeak] is: at two blocks a second the alternative is a second
+     * trace at the same timestamps, drawn on the same axis, kept apart for no
+     * reason.
+     */
+    fun withBank(bank: BandBank): BenchTrace {
+        val last = samples.lastOrNull() ?: return this
+        if (last.bank != null) return this
+        // An unmeasured block is five zeros, and five zeros are NOT a silent
+        // room — they mean the band published nothing for that interval,
+        // which happens while its own transmitter has the pad. Attaching it
+        // would draw the tones crashing to the floor on a regular beat, which
+        // reads as the link dropping out. The sample keeps its other readings
+        // and the chart steps over the gap.
+        if (!bank.measured) return this
+        return BenchTrace(samples.dropLast(1) + last.copy(bank = bank))
+    }
+
+    /** Has any sample in the trace carried a spectrum — i.e. can it be drawn. */
+    fun hasBank(): Boolean = samples.any { it.bank != null }
 
     /** The tail of the trace covering [windowMs], newest last. */
     fun window(windowMs: Long): List<BenchSample> {

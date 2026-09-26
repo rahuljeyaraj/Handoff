@@ -235,7 +235,10 @@ data class BandBench(
      * additive floor to be the other one - so this is the whole rule the
      * detector applied, and signal above it means the band heard it.
      */
-    val threshold get() = (noiseRef.toLong() * K_NUM / K_DEN).toInt()
+    val threshold get() = amplitudeThreshold(noiseRef)
+
+    /** The band's own test, without the rounding a drawn [threshold] costs. */
+    val heard get() = noiseRef > 0 && powerRatioClears(signal, noiseRef)
 
     /** One line, for `adb logcat` - what scripts/blelog.py parses. */
     fun line(): String =
@@ -264,6 +267,35 @@ data class BandBench(
          */
         const val K_NUM = 1676
         const val K_DEN = 100
+
+        /**
+         * k IS A POWER RATIO AND THESE SCORES ARE AMPLITUDES. Getting that
+         * wrong is why the phone's plot never showed the signal crossing
+         * anything.
+         *
+         * presence.c decides `signal_mag2 > k * noise_mag2`, on mag^2, with
+         * no square root anywhere near the hot path. What leaves the band is
+         * `gzb_score()` of each — an AMPLITUDE, the square root already
+         * taken, because that is the number a human reads. Multiplying an
+         * amplitude by k therefore draws a bar sqrt(k) = 4.09 times higher
+         * than the one the detector used, and from the v2 merge until
+         * 26 Sep 2026 that is exactly what this file did: the band called a
+         * channel busy and the phone drew the signal far below a line it had
+         * put four times too high. v1 had no such gap, which is why the old
+         * level-and-floor plot visibly crossed and this one never did.
+         *
+         * So: compare in power, and when a LINE has to be drawn on an
+         * amplitude axis, draw it at sqrt(k) * reference.
+         */
+        private val K_AMPLITUDE = Math.sqrt(K_NUM.toDouble() / K_DEN)
+
+        /** Where the detector's bar sits on an amplitude axis. */
+        fun amplitudeThreshold(reference: Int) =
+            Math.round(reference * K_AMPLITUDE).toInt()
+
+        /** The detector's test itself, squared up so no root is taken. */
+        fun powerRatioClears(signal: Int, reference: Int): Boolean =
+            signal.toLong() * signal * K_DEN > reference.toLong() * reference * K_NUM
 
         /** Null for anything that is not a bench block. */
         fun parse(raw: ByteArray): BandBench? {
@@ -339,11 +371,11 @@ data class BandTrig(
     val trigState: Int,
 ) {
     /** The threshold that peak was judged against, on its own window. */
-    val peakThreshold
-        get() = (peakNoise.toLong() * BandBench.K_NUM / BandBench.K_DEN).toInt()
+    val peakThreshold get() = BandBench.amplitudeThreshold(peakNoise)
 
     /** Did the loudest window of the interval clear the detector at all. */
-    val peakHeard get() = peakNoise > 0 && peakSignal > peakThreshold
+    val peakHeard get() =
+        peakNoise > 0 && BandBench.powerRatioClears(peakSignal, peakNoise)
 
     /** `firmware/lib/proto/beacon.h`s `trig_state_t`. */
     val stateName get() = when (trigState) {
@@ -389,6 +421,94 @@ data class BandTrig(
                 peakNoise = b.short.toInt() and 0xFFFF,
                 beaconsBadCrc = b.get().toInt() and 0xFF,
                 trigState = b.get().toInt() and 0xFF,
+            )
+        }
+    }
+}
+
+/**
+ * The spectrum: all five Goertzel bins from ONE window - `ble_bank_t` in
+ * `firmware/lib/hal_pico/ble.h`, 12 bytes, tag 0xB3.
+ *
+ * WHY A THIRD BLOCK. [BandBench] carries the two numbers the detector decided
+ * on, and both are derived - signal is a max of two bins, noiseRef a median of
+ * three through a boxcar. When the pair rises together it cannot say why, and
+ * by design it often does: the reference is MEANT to track the room. So a band
+ * arriving and a charger being plugged in look nearly alike in that pair. Five
+ * bins tell them apart at a glance - two tones out of three flat guards is a
+ * band being heard; all five up together is the room.
+ *
+ * ALL FIVE COME FROM THE SAME WINDOW, which is the only reason they can be
+ * drawn side by side. Five independently-maximised bins would be five
+ * different instants wearing the shape of a spectrum.
+ *
+ * IT IS A PEAK, NOT AN INSTANT, for the reason written all over this file: the
+ * band scores 20 000 windows a second, these arrive twice a second, and a
+ * beacon is on air for eleven milliseconds. An instantaneous spectrum would
+ * draw the empty room 9 999 times in 10 000.
+ *
+ * NO THRESHOLD HERE ON PURPOSE. k belongs to [BandBench], which carries the
+ * decision; this block carries the picture the decision was taken from.
+ */
+data class BandBank(
+    val version: Int,
+    /** Tone A, 180 kHz. */
+    val toneA: Int,
+    /** Tone B, 200 kHz. */
+    val toneB: Int,
+    /** Guard, 140 kHz. */
+    val guardLo: Int,
+    /** Guard, 160 kHz. */
+    val guardMid: Int,
+    /** Guard, 220 kHz. */
+    val guardHi: Int,
+) {
+    val tones get() = listOf(toneA, toneB)
+    val guards get() = listOf(guardLo, guardMid, guardHi)
+
+    /** The louder tone - the same quantity [BandBench.signal] carries. */
+    val signal get() = maxOf(toneA, toneB)
+
+    /**
+     * The room, as the detector measures it: the MEDIAN of the three, which is
+     * what `gzb_noise()` computes. Not the mean - one interferer in one guard
+     * must not be able to move it, and on this board's 1/f slope the median
+     * selects the middle bin every time while the outer two do the outlier
+     * protection CFAR wants them for.
+     */
+    val room get() = guards.sorted()[1]
+
+    /**
+     * Did any window in this interval close at all. Five zeros mean the bank
+     * is off, NOT a silent room - an idle detector still reports the room.
+     */
+    val measured get() = tones.any { it > 0 } || guards.any { it > 0 }
+
+    fun line(): String =
+        "bank A $toneA B $toneB guards $guardLo/$guardMid/$guardHi"
+
+    companion object {
+        const val SIZE = 12
+        const val TAG = 0xB3
+        const val VERSION = 1
+
+        /** Bin centres, from `config.h`. Structural, so they are not sent. */
+        val TONE_HZ = listOf(180_000, 200_000)
+        val GUARD_HZ = listOf(140_000, 160_000, 220_000)
+
+        fun parse(raw: ByteArray): BandBank? {
+            if (raw.size < SIZE) return null
+            val b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
+            if ((b.get().toInt() and 0xFF) != TAG) return null
+            val version = b.get().toInt() and 0xFF
+            if (version < VERSION) return null
+            return BandBank(
+                version = version,
+                toneA = b.short.toInt() and 0xFFFF,
+                toneB = b.short.toInt() and 0xFFFF,
+                guardLo = b.short.toInt() and 0xFFFF,
+                guardMid = b.short.toInt() and 0xFFFF,
+                guardHi = b.short.toInt() and 0xFFFF,
             )
         }
     }
