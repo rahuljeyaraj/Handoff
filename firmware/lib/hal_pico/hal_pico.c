@@ -69,6 +69,9 @@ static volatile uint32_t s_carrier_req = HANDOFF_CARRIER_HZ;
 static volatile uint32_t s_carrier_ack;
 static volatile uint32_t s_level;         /* presence signal score, telemetry */
 static volatile uint32_t s_noise;         /* the reference it was judged against */
+static volatile uint32_t s_peak_level;    /* ...and the same pair at the peak  */
+static volatile uint32_t s_peak_noise;
+static volatile bool     s_peak_req;      /* core 0 asks; the take resets it  */
 static volatile uint32_t s_chips;
 static volatile uint32_t s_windows;
 /*
@@ -251,6 +254,20 @@ static HANDOFF_HOT_FUNC void core1_presence_window(presence_t *pr, const gz_bank
         s_level = presence_signal_score(pr);
         s_noise = presence_noise_score(pr);
         s_tlm_req = false;
+    }
+
+    /*
+     * The peak is TAKEN, not read, so it has its own request rather than
+     * riding s_tlm_req: a console `s` and a phone block must not reset each
+     * other's window. Same discipline — the roots happen in the window that
+     * answers the flag, never in every window.
+     */
+    if (s_peak_req) {
+        uint32_t sig = 0, noi = 0;
+        presence_take_peak(pr, &sig, &noi);
+        s_peak_level = sig;
+        s_peak_noise = noi;
+        s_peak_req = false;
     }
 }
 
@@ -847,6 +864,24 @@ void hal_pico_presence(hal_pico_presence_t *out)
     out->noise        = s_noise;
     out->busy         = s_busy_now;
     out->ready        = s_pres_ready;
+}
+
+void hal_pico_take_peak(uint32_t *signal, uint32_t *noise)
+{
+    const uint64_t deadline = time_us_64() + TLM_WAIT_US;
+
+    s_peak_req = true;
+    while (s_peak_req && time_us_64() < deadline) tight_loop_contents();
+
+    /* If core 1 never answered — the bank is off, so no window will ever
+     * close — the peak is genuinely nothing rather than stale. */
+    if (s_peak_req) {
+        s_peak_req = false;
+        s_peak_level = 0;
+        s_peak_noise = 0;
+    }
+    if (signal) *signal = s_peak_level;
+    if (noise)  *noise  = s_peak_noise;
 }
 
 bool hal_pico_bank_capture(uint32_t windows, uint32_t timeout_us,

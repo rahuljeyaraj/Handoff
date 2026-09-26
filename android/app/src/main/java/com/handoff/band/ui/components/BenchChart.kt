@@ -38,22 +38,31 @@ import com.handoff.band.ble.BenchTrace
 import com.handoff.band.ui.theme.MonoStyle
 
 /**
- * Carrier level and noise floor against time, from the band's own readings.
+ * The CFAR pair against time, from the band's own readings: the peak signal of
+ * each interval, the instantaneous signal, and the threshold the band judged
+ * them by.
  *
  * WHY THIS EXISTS AS A PICTURE. The numbers are already printed above it, and
- * for "is it hearing anything" a number is better. This answers a different
- * question: does the floor MOVE. Until 25 Sep 2026 carrier.c's floor could only
- * ever walk downward, so it slid onto the quietest chip it had heard and sat
- * there — and one reading of `floor 6` is indistinguishable from a correct
- * floor in a quiet room. Only the shape over a minute tells those apart, which
- * is why the floor is a series here and not an annotation.
+ * for "is it hearing anything right now" a number is better. This answers a
+ * different question: WHEN was it hearing. Under link v2 a beacon is on air for
+ * eleven milliseconds and the band sends a block twice a second, so the
+ * instantaneous signal lands in the empty room nearly every time — on
+ * 25 Sep 2026 exactly that drew a flat line under the threshold while the band
+ * was tripping its detector about seven times a second. The peak series is the
+ * loudest window of each whole interval, so a brief event cannot hide between
+ * two samples.
  *
- * Read the level against the GATE, not against the floor. carrier.c calls a
- * carrier present on two tests at once, the ratio and min_delta, and which one
- * binds changes with the floor: at a floor of 77 the ratio wants 231 while
- * min_delta wants only 101, and down near a floor of 2 it is the other way
- * round. The dashed line is whichever is higher, so level above it means the
- * band heard it and level below it means the band did not.
+ * READ BOTH SIGNAL SERIES AGAINST THE DASHED THRESHOLD, which is k times the
+ * guard reference and is the ONE test the detector applies. There is no floor
+ * and no second additive gate any more; step 5 deleted the detector that had
+ * them. The threshold is a series rather than a constant because the reference
+ * is measured live, so the bar moves with the room — and the reference itself
+ * is not drawn, because the threshold is the only thing about it a reader acts
+ * on.
+ *
+ * PEAK ABOVE THE LINE WHILE THE INSTANT SITS UNDER IT IS THE HEALTHY SHAPE for
+ * two bands beaconing at each other. Both under it is a channel that carried
+ * nothing at all in that interval.
  */
 
 /* Categorical slots 1 and 5 of the validated palette, stepped per mode.
@@ -66,10 +75,10 @@ import com.handoff.band.ui.theme.MonoStyle
  *
  * Light-mode magenta sits at 2.57:1 on the surface, under the 3:1 bar, so the
  * relief rule applies and both series carry a visible value label. */
-private val LevelLight = Color(0xFF2A78D6)
-private val LevelDark = Color(0xFF3987E5)
-private val FloorLight = Color(0xFFE87BA4)
-private val FloorDark = Color(0xFFD55181)
+private val PeakLight = Color(0xFF2A78D6)
+private val PeakDark = Color(0xFF3987E5)
+private val NowLight = Color(0xFFE87BA4)
+private val NowDark = Color(0xFFD55181)
 
 private enum class Window(val label: String, val ms: Long) {
     SHORT("30 s", 30_000),
@@ -84,8 +93,8 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
     // its own light/dark override (Prefs.Theme) and the chart has to follow
     // the surface it is actually drawn on.
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val levelColor = if (dark) LevelDark else LevelLight
-    val floorColor = if (dark) FloorDark else FloorLight
+    val peakColor = if (dark) PeakDark else PeakLight
+    val nowColor = if (dark) NowDark else NowLight
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     val grid = MaterialTheme.colorScheme.outlineVariant
 
@@ -117,7 +126,7 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
             return@Column
         }
 
-        val top = niceTop(samples.maxOf { maxOf(it.level, it.gate) })
+        val top = niceTop(samples.maxOf { maxOf(maxOf(it.signal, it.peak ?: 0), it.threshold) })
 
         Box(Modifier.fillMaxWidth().height(160.dp)) {
             Canvas(Modifier.fillMaxWidth().height(160.dp)) {
@@ -125,7 +134,8 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
                 val w = size.width
 
                 // Recessive chrome: hairline, solid, never dashed (that is what
-                // the gate is, and the two must not read as the same thing).
+                // the threshold is, and the two must not read as the same
+                // thing).
                 for (f in listOf(0f, 0.5f, 1f)) {
                     val y = h - f * h
                     drawLine(grid, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
@@ -139,7 +149,7 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
                 // Dashed, and the only dashed thing here: it is a rule the
                 // data is read against, not data and not chrome.
                 drawPath(
-                    drawSeries(samples, ::x) { y(it.gate) }, ink,
+                    drawSeries(samples, ::x) { y(it.threshold) }, ink,
                     style = Stroke(
                         width = 1.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(
@@ -147,16 +157,24 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
                     ),
                 )
 
+                // The instant first, so the peak — the series a reader acts
+                // on — is the one on top where the two cross.
                 drawPath(
-                    drawSeries(samples, ::x) { y(it.floor) }, floorColor,
+                    drawSeries(samples, ::x) { y(it.signal) }, nowColor,
                     style = Stroke(width = 2.dp.toPx(),
                                    cap = StrokeCap.Round, join = StrokeJoin.Round),
                 )
-                drawPath(
-                    drawSeries(samples, ::x) { y(it.level) }, levelColor,
-                    style = Stroke(width = 2.dp.toPx(),
-                                   cap = StrokeCap.Round, join = StrokeJoin.Round),
-                )
+                // Absent until a trigger block has landed; falling back to the
+                // instant would draw one series twice and read as agreement
+                // between two measurements.
+                if (samples.any { it.peak != null }) {
+                    drawPath(
+                        drawSeries(samples.filter { it.peak != null }, ::x) { y(it.peak ?: 0) },
+                        peakColor,
+                        style = Stroke(width = 2.dp.toPx(),
+                                       cap = StrokeCap.Round, join = StrokeJoin.Round),
+                    )
+                }
             }
 
             Text("$top", style = MonoStyle.copy(fontSize = 11.sp), color = ink,
@@ -173,11 +191,11 @@ fun BenchChart(trace: BenchTrace, modifier: Modifier = Modifier) {
         // at right now. The value is also the relief the light-mode contrast
         // warning asks for.
         Row(Modifier.fillMaxWidth()) {
-            Key(levelColor, "level", last?.level?.toString() ?: "-")
+            Key(peakColor, "peak", last?.peak?.toString() ?: "-")
             Spacer(Modifier.width(16.dp))
-            Key(floorColor, "floor", last?.floor?.toString() ?: "-")
+            Key(nowColor, "now", last?.signal?.toString() ?: "-")
             Spacer(Modifier.width(16.dp))
-            Key(ink, "gate", last?.gate?.toString() ?: "-")
+            Key(ink, "busy above", last?.threshold?.toString() ?: "-")
         }
     }
 }

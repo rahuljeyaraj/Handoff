@@ -296,4 +296,56 @@ void test_presence(void)
         HF_CHECK_MSG(!presence_push(&p, 0, 0, false),
                  "still busy the window after the signal stopped");
     }
+
+    /*
+     * TEN. THE PEAK, which is the only thing a slow reader can read.
+     *
+     * The failure this guards is not arithmetic, it is sampling: the phone's
+     * Body link block goes out twice a second and a beacon is on air for
+     * eleven milliseconds, so an instantaneous read misses it roughly two
+     * hundred windows out of two hundred and one. The peak must survive the
+     * whole interval, must come back with the reference from ITS OWN window
+     * and not the latest one, and must reset on the take so the next interval
+     * is the next interval.
+     */
+    {
+        presence_t p;
+        uint32_t w, sig = 0, noi = 0;
+
+        hf_begin("presence: the peak survives a slow reader");
+        presence_init(&p);
+        for (w = 0; w < HANDOFF_CFAR_CELLS; w++)
+            (void)presence_push(&p, 0, mag2_of(10), true);
+
+        /* One loud window, then two hundred silent ones: the sampling ratio
+         * the phone actually reads at. */
+        (void)presence_push(&p, mag2_of(400), 0, false);
+        for (w = 0; w < 200u; w++) (void)presence_push(&p, mag2_of(20), 0, false);
+
+        presence_take_peak(&p, &sig, &noi);
+        HF_CHECK_MSG(sig == 400u, "peak signal %u, wanted 400", (unsigned)sig);
+        HF_CHECK_MSG(noi == 10u, "peak reference %u, wanted 10", (unsigned)noi);
+
+        /* A take is a take. The next interval starts from the room, and the
+         * room is what it reports — never a peak of zero, which a reader
+         * would have to tell apart from silence. */
+        for (w = 0; w < 10u; w++) (void)presence_push(&p, mag2_of(20), 0, false);
+        presence_take_peak(&p, &sig, &noi);
+        HF_CHECK_MSG(sig == 20u, "peak did not reset: %u", (unsigned)sig);
+
+        /* And the reference is the one from the peak's window, not the last:
+         * push a loud window against a quiet room, then flood the boxcar. */
+        presence_init(&p);
+        for (w = 0; w < HANDOFF_CFAR_CELLS; w++)
+            (void)presence_push(&p, 0, mag2_of(10), true);
+        (void)presence_push(&p, mag2_of(400), 0, false);
+        for (w = 0; w < HANDOFF_CFAR_CELLS; w++)
+            (void)presence_push(&p, 0, mag2_of(200), true);
+
+        presence_take_peak(&p, &sig, &noi);
+        HF_CHECK_MSG(sig == 400u, "peak signal %u, wanted 400", (unsigned)sig);
+        HF_CHECK_MSG(noi == 10u,
+                 "peak reference %u is the room NOW, not the room at the peak",
+                 (unsigned)noi);
+    }
 }

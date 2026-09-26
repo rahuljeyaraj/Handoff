@@ -64,6 +64,12 @@ class BandService : LifecycleService(), BandClient.Listener {
         val status: BandStatus? = null,
         /** The body-link bench readings, twice a second while Advanced is open. */
         val bench: BandBench? = null,
+        /**
+         * The trigger counters, arriving with each [bench] block. This is the
+         * half that says whether the two bands hear EACH OTHER, which the
+         * signal numbers cannot.
+         */
+        val trig: BandTrig? = null,
         /** The same readings kept over time, for the Advanced page's chart. */
         val benchTrace: BenchTrace = BenchTrace.EMPTY,
         val lastError: String? = null,
@@ -343,8 +349,10 @@ class BandService : LifecycleService(), BandClient.Listener {
             syncInFlight = false
             // The trace goes with the link. A gap in it would draw as a
             // straight line between two readings minutes apart, which is
-            // exactly the shape a floor that does not move makes.
-            _state.value = _state.value.copy(status = null, benchTrace = BenchTrace.EMPTY)
+            // exactly the shape a quiet channel makes.
+            _state.value = _state.value.copy(
+                status = null, bench = null, trig = null,
+                benchTrace = BenchTrace.EMPTY)
             // autoConnect keeps the controller retrying on its own (BandClient's
             // STATE_DISCONNECTED comment) — this is that retry starting over.
             armNotFoundWatch()
@@ -411,9 +419,19 @@ class BandService : LifecycleService(), BandClient.Listener {
         val s = _state.value
         val sample = BenchSample(
             atMs = SystemClock.elapsedRealtime(),
-            level = bench.level, floor = bench.noiseFloor, present = bench.present,
+            signal = bench.signal, noise = bench.noiseRef, present = bench.present,
         )
         _state.value = s.copy(bench = bench, benchTrace = s.benchTrace.plus(sample))
+    }
+
+    /*
+     * The trigger block follows its bench block by a few milliseconds, so the
+     * peak lands on the sample that was just appended rather than opening a
+     * second series at the same timestamps.
+     */
+    override fun onTrig(trig: BandTrig) {
+        val s = _state.value
+        _state.value = s.copy(trig = trig, benchTrace = s.benchTrace.withPeak(trig.peakSignal))
     }
 
     override fun onStatus(status: BandStatus) {

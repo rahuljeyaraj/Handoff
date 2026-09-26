@@ -119,6 +119,25 @@ typedef struct {
     uint32_t windows;          /* windows scored since init                 */
     uint32_t cells;            /* guard windows taken into the reference    */
     uint32_t busy_windows;     /* of windows, the ones that read busy       */
+
+    /*
+     * THE PEAK, AND WHY A DETECTOR THAT NEEDS NO MEMORY STILL KEEPS ONE.
+     *
+     * Nothing in the decision reads these. They exist because a reader two
+     * hops away — the phone's Body link page, twice a second — is sampling a
+     * beacon that is on air for eleven milliseconds. On 25 Sep 2026 that
+     * reader drew a flat line under the threshold while the band was in fact
+     * tripping its detector about seven times a second: not a wrong number,
+     * a number taken at the wrong moments. The peak is every moment.
+     *
+     * The pair is taken together, at the same window, because a peak signal
+     * printed beside a reference from a different instant is not the
+     * comparison the detector made. mag^2 on both, so the hot path stays a
+     * compare and two stores and the square roots wait for a reader.
+     */
+    uint64_t peak_signal;      /* max signal since the last take            */
+    uint64_t peak_sum;         /* the reference sum as it stood at THAT peak */
+    uint16_t peak_filled;      /* ...and the cell count to divide it by     */
 } presence_t;
 
 void presence_init(presence_t *p);
@@ -160,5 +179,16 @@ static inline bool presence_ready(const presence_t *p) {
  */
 uint32_t presence_signal_score(const presence_t *p);
 uint32_t presence_noise_score(const presence_t *p);
+
+/*
+ * The highest signal seen since the last call, and the reference it stood
+ * against in that same window, both as scores. Takes: the peak is reset, so
+ * two readers would steal windows from each other and there is exactly one.
+ *
+ * Zero for both when no window has closed since the last take — which a
+ * reader must not confuse with a quiet room, so it is worth saying that an
+ * idle detector never reports a peak of zero, it reports the room.
+ */
+void presence_take_peak(presence_t *p, uint32_t *signal, uint32_t *noise);
 
 #endif /* HANDOFF_PRESENCE_H */

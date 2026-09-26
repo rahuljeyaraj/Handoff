@@ -147,14 +147,29 @@ PC ground, and that wire is the return path under test.
 **Passes when:** the 447-frame worn result from 24 Sep is matched or beaten,
 and the ~30 % FER is no worse.
 
-### What step 8 can and cannot read
+### What a worn bench can read
 
-`r` is wiped by every handshake. The trigger's counters — `peers`,
-`self_echoes` — are **not readable on a worn bench**: `ble_trig_t` is defined
-and versioned for them but nothing emits it, and emitting it would need the
-phone app to parse a new block, which is out of scope. What step 8 needs is
-already in `ble_bench_t`, which the app does parse: completions, frames good
-and bad, level and noise. `scripts/blelog.py` reads it off the phone's logcat.
+`r` is wiped by every handshake, so everything below comes off the phone.
+
+Both blocks now leave the band by radio and the app parses both — done
+26 Sep 2026, after step 8, because the diagnostics the page was showing still
+described v1's carrier floor:
+
+- `ble_bench_t` — completions, frames good and bad, and the CFAR pair. The pair
+  is **signal against `k * noise`**, not a level against a floor; there is no
+  floor, no gate and no `min_delta` in this design.
+- `ble_trig_t` — `beacons`, `peers`, `self_echoes`, the elections, and the
+  **peak** signal of each interval. Read `peers` against `beacons`, and read
+  one band's pair against the other's: the step-7 fault was an asymmetry, and
+  no level reading would ever have shown it.
+
+**Read the peak, not the instantaneous signal.** A beacon is on air 11 ms and
+these blocks arrive twice a second, so `signal` samples the empty room roughly
+two hundred windows out of two hundred and one — which is exactly how 25 Sep
+drew a flat line under the threshold while the band was tripping its detector
+seven times a second. `hal_pico_take_peak()` is a take and has one caller.
+
+`scripts/blelog.py` reads both lines off the phones' logcat.
 
 ### What step 7 leaves you
 

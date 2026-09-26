@@ -51,6 +51,19 @@ HANDOFF_HOT_FUNC bool presence_push(presence_t *p, uint64_t signal_mag2,
                   > p->sum * (uint64_t)HANDOFF_CFAR_K_NUM;
 
     if (p->busy) p->busy_windows++;
+
+    /*
+     * The peak, for a reader that samples far slower than this runs. One
+     * 64-bit compare and, rarely, three stores; no division and no root, so
+     * the §6 rule this whole file is built around still holds. The reference
+     * is captured HERE rather than divided here, for the same reason.
+     */
+    if (signal_mag2 > p->peak_signal) {
+        p->peak_signal = signal_mag2;
+        p->peak_sum    = p->sum;
+        p->peak_filled = p->filled;
+    }
+
     return p->busy;
 }
 
@@ -68,4 +81,14 @@ uint32_t presence_noise_score(const presence_t *p)
 {
     if (p->filled == 0u) return 0u;
     return gzb_score(p->sum / p->filled);
+}
+
+void presence_take_peak(presence_t *p, uint32_t *signal, uint32_t *noise)
+{
+    if (signal) *signal = gzb_score(p->peak_signal);
+    if (noise)  *noise  = p->peak_filled ? gzb_score(p->peak_sum / p->peak_filled)
+                                         : 0u;
+    p->peak_signal = 0u;
+    p->peak_sum    = 0u;
+    p->peak_filled = 0u;
 }

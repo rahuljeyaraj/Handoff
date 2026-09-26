@@ -282,6 +282,23 @@ typedef struct {
 void hal_pico_presence(hal_pico_presence_t *out);
 
 /*
+ * The highest signal since the LAST CALL, and the CFAR reference as it stood
+ * in that same window. Both scores, like the pair above.
+ *
+ * This is a take, and it exists because every reader outside core 1 samples
+ * far slower than the detector decides. A beacon is on air for eleven
+ * milliseconds and the phone's Body link block goes out twice a second, so
+ * the instantaneous pair above will almost always report the empty room —
+ * which on 25 Sep 2026 drew as a flat line under the threshold while the band
+ * was tripping its detector seven times a second. dsp/presence.h has the
+ * reasoning; this is the only way to read it.
+ *
+ * ONE CALLER. Two would each reset the other's window and both would
+ * under-report. It is report_trig() in apps/handoff.
+ */
+void hal_pico_take_peak(uint32_t *signal, uint32_t *noise);
+
+/*
  * One capture of the bank: core 1 accumulates `windows` windows and core 0
  * reads the result afterwards, so nothing is read while it is being written.
  *

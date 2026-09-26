@@ -54,6 +54,7 @@ class BandClient(
         fun onCardReceived(vcardText: String)
         fun onStatus(status: BandStatus)
         fun onBench(bench: BandBench)
+        fun onTrig(trig: BandTrig)
         fun onProvisioned(ok: Boolean)
         /** A control write was answered: [op] is its opcode, [ok] the ATT status. */
         fun onControlWritten(op: Int, ok: Boolean)
@@ -449,11 +450,19 @@ class BandClient(
                     }
                 }
                 Gatt.STATUS -> BandStatus.parse(value)?.let(listener::onStatus)
-                // The score stream shares this characteristic and parses to
-                // null, so an untagged 16-byte block falls through harmlessly.
-                Gatt.TELEMETRY -> BandBench.parse(value)?.let {
-                    Log.i(TAG, "bench ${it.line()}")
-                    listener.onBench(it)
+                // Three things ride this characteristic: the bench block, the
+                // trigger block, and the score stream. Each tagged parse
+                // rejects the other two, and an untagged 16-byte score block
+                // falls through all of them harmlessly.
+                Gatt.TELEMETRY -> {
+                    BandBench.parse(value)?.let {
+                        Log.i(TAG, "bench ${it.line()}")
+                        listener.onBench(it)
+                    }
+                    BandTrig.parse(value)?.let {
+                        Log.i(TAG, "trig ${it.line()}")
+                        listener.onTrig(it)
+                    }
                 }
                 else -> Unit
             }

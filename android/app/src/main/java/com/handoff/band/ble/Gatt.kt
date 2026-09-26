@@ -190,22 +190,33 @@ data class BandStatus(
 }
 
 /**
- * The bench block, on the `telemetry` characteristic — see `ble_bench_t` in
+ * The bench block, on the `telemetry` characteristic - see `ble_bench_t` in
  * `firmware/lib/hal_pico/ble.h`. Little-endian, 20 bytes, tagged so it cannot
- * be mistaken for the 16-byte score block that shares the characteristic.
+ * be mistaken for the 16-byte score block that shares the characteristic, or
+ * for [BandTrig] which also rides it.
  *
- * This exists because design §13 forbids tethering a band to a mains-powered
+ * This exists because design 13 forbids tethering a band to a mains-powered
  * PC while anyone touches an electrode, and because 24 Sep 2026 showed a
  * tethered reading is not merely unsafe but WRONG: both bands then share the
  * PC ground, and that wire is the return path under test.
  *
- * READ [level] AGAINST [noiseFloor]. A high level with [syncs] stuck at zero
- * means the receiver is swamped, not starved.
+ * READ [signal] AGAINST [noiseRef], AND KNOW WHAT THAT PAIR IS. Link v2 step 5
+ * deleted the carrier detector and with it the remembered floor: this design
+ * has no floor, no gate, no ratio and no min_delta. The pair is CFAR - signal
+ * is the louder of the two tone bins, noiseRef is the mean of the guard bins,
+ * and the band called the channel busy when signal cleared [threshold]. Both
+ * sides come from the same windows through the same body, so both high is a
+ * loud room and not, as it was under v1, a detector that has gone deaf.
+ *
+ * A high signal with [syncs] stuck at zero still means what it always did: the
+ * receiver is swamped, not starved.
  */
 data class BandBench(
     val version: Int,
-    val level: Int,
-    val noiseFloor: Int,
+    /** CFAR signal: the louder tone bin, as a score. */
+    val signal: Int,
+    /** CFAR reference: the mean of the guard-bin boxcar, the same scale. */
+    val noiseRef: Int,
     val good: Int,
     val bad: Int,
     val sent: Int,
@@ -218,12 +229,17 @@ data class BandBench(
     /** VBUS at the band. True means the run is not a valid body-coupled test. */
     val onUsb: Boolean,
 ) {
-    /** How far the carrier sits above its own floor. carrier.c gates on 24. */
-    val margin get() = level - noiseFloor
+    /**
+     * What [signal] had to clear for the band to call the channel busy:
+     * `k * noiseRef`, and nothing else. ONE test, not v1s two - there is no
+     * additive floor to be the other one - so this is the whole rule the
+     * detector applied, and signal above it means the band heard it.
+     */
+    val threshold get() = (noiseRef.toLong() * K_NUM / K_DEN).toInt()
 
-    /** One line, for `adb logcat` — what scripts/blelog.py parses. */
+    /** One line, for `adb logcat` - what scripts/blelog.py parses. */
     fun line(): String =
-        "level $level floor $noiseFloor margin $margin present ${if (present) 1 else 0} " +
+        "signal $signal noise $noiseRef thr $threshold present ${if (present) 1 else 0} " +
             "good $good bad $bad sent $sent syncs $syncs " +
             "complete $complete aborts $aborts state $linkState " +
             "load $core1Load usb ${if (onUsb) 1 else 0}"
@@ -231,29 +247,39 @@ data class BandBench(
     companion object {
         const val SIZE = 20
         const val TAG = 0xB1
-        const val VERSION = 1
 
-        /** carrier.c's min_delta: below this the band will not even start. */
-        const val MIN_DELTA = 24
+        /**
+         * 2 since link v2. A version 1 band reports a remembered floor from
+         * the deleted carrier detector, and labelling that as a CFAR
+         * reference would be a lie about which comparison the band made - so
+         * an older band is refused rather than mislabelled.
+         */
+        const val VERSION = 2
 
-        /** carrier.c's ratio_num, in eighths: present at 3x the floor. */
-        const val RATIO_NUM = 24
+        /**
+         * `HANDOFF_CFAR_K_NUM` / `HANDOFF_CFAR_K_DEN` from
+         * `firmware/lib/hal/config.h`. Not a tuned number: it is solved from a
+         * stated false-busy rate of one per minute of continuous listening, and
+         * the firmwares own test recomputes the formula and fails if it drifts.
+         */
+        const val K_NUM = 1676
+        const val K_DEN = 100
 
-        /** Null for anything that is not a bench block, the score stream included. */
+        /** Null for anything that is not a bench block. */
         fun parse(raw: ByteArray): BandBench? {
             if (raw.size < SIZE) return null
             val b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
             if ((b.get().toInt() and 0xFF) != TAG) return null
             val version = b.get().toInt() and 0xFF
             if (version < VERSION) return null
-            val level = b.short.toInt() and 0xFFFF
-            val noiseFloor = b.short.toInt() and 0xFFFF
+            val signal = b.short.toInt() and 0xFFFF
+            val noiseRef = b.short.toInt() and 0xFFFF
             val good = b.short.toInt() and 0xFFFF
             val bad = b.short.toInt() and 0xFFFF
             val sent = b.short.toInt() and 0xFFFF
             val syncs = b.short.toInt() and 0xFFFF
             return BandBench(
-                version = version, level = level, noiseFloor = noiseFloor,
+                version = version, signal = signal, noiseRef = noiseRef,
                 good = good, bad = bad, sent = sent, syncs = syncs,
                 present = (b.get().toInt() and 0xFF) != 0,
                 linkState = b.get().toInt() and 0xFF,
@@ -261,6 +287,108 @@ data class BandBench(
                 aborts = b.get().toInt() and 0xFF,
                 core1Load = b.get().toInt() and 0xFF,
                 onUsb = (b.get().toInt() and 0xFF) != 0,
+            )
+        }
+    }
+}
+
+/**
+ * The trigger block, on the same characteristic - `ble_trig_t` in
+ * `firmware/lib/hal_pico/ble.h`, 20 bytes, tag 0xB2.
+ *
+ * WHY THERE ARE TWO BLOCKS. [BandBench] answers "what is the signal doing".
+ * It cannot answer "did these two bands hear each other", and under link v2
+ * that is the question every worn run turns on.
+ *
+ * READ [peers] AGAINST [beacons]. beacons is how many this band transmitted;
+ * peers is how many it decoded from the other one. Two bands that both beacon
+ * and neither hears is a channel fault; one hearing and not the other is the
+ * asymmetry that WAS the step-7 fault - 379E heard 2 of 93D1s 107 while 93D1
+ * heard 20 of 379Es 60.
+ *
+ * AND READ [selfEchoes], which v1 could not see at all: beacons that passed
+ * CRC carrying this bands OWN nonce, i.e. its amplifier still ringing past the
+ * settle. Under v1 that was a band electing itself sender with no counter for
+ * it; here it is caught, discarded and counted.
+ *
+ * EVERY COUNTER IS CUMULATIVE SINCE BOOT, deliberately - difference two blocks
+ * and you have a rate over a window you chose, which is what the USB bench did
+ * by hand. Erasing the stats on the band does not reset them.
+ *
+ * [peakSignal] is the exception and is not cumulative: it is the loudest window
+ * since the previous block, which is the only level reading that means anything
+ * at this rate. A beacon is on air for eleven milliseconds and these arrive
+ * twice a second, so [BandBench.signal] samples the empty room almost every
+ * time - on 25 Sep 2026 it drew a flat line under the threshold while the band
+ * was in fact tripping its detector about seven times a second.
+ */
+data class BandTrig(
+    val version: Int,
+    /** Who this band is, this arming. Redrawn after every self-echo. */
+    val nonce: Int,
+    val beacons: Int,
+    val peers: Int,
+    val selfEchoes: Int,
+    val sends: Int,
+    val receives: Int,
+    /** The loudest window since the previous block, not an instant. */
+    val peakSignal: Int,
+    /** The CFAR reference as it stood in that same window. */
+    val peakNoise: Int,
+    val beaconsBadCrc: Int,
+    val trigState: Int,
+) {
+    /** The threshold that peak was judged against, on its own window. */
+    val peakThreshold
+        get() = (peakNoise.toLong() * BandBench.K_NUM / BandBench.K_DEN).toInt()
+
+    /** Did the loudest window of the interval clear the detector at all. */
+    val peakHeard get() = peakNoise > 0 && peakSignal > peakThreshold
+
+    /** `firmware/lib/proto/beacon.h`s `trig_state_t`. */
+    val stateName get() = when (trigState) {
+        0 -> "off"
+        1 -> "beacon"
+        2 -> "settle"
+        3 -> "listen"
+        4 -> "send"
+        5 -> "receive"
+        else -> "?$trigState"
+    }
+
+    fun line(): String =
+        "nonce ${"%04x".format(nonce)} beacons $beacons peers $peers " +
+            "echoes $selfEchoes sends $sends receives $receives " +
+            "peak $peakSignal/$peakThreshold badcrc $beaconsBadCrc trig $stateName"
+
+    companion object {
+        const val SIZE = 20
+        const val TAG = 0xB2
+
+        /**
+         * 2: the v1 layout described a gate, a quiet-wait cap and a floor,
+         * none of which exist any more. Nothing ever emitted a v1 block.
+         */
+        const val VERSION = 2
+
+        fun parse(raw: ByteArray): BandTrig? {
+            if (raw.size < SIZE) return null
+            val b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
+            if ((b.get().toInt() and 0xFF) != TAG) return null
+            val version = b.get().toInt() and 0xFF
+            if (version < VERSION) return null
+            return BandTrig(
+                version = version,
+                nonce = b.short.toInt() and 0xFFFF,
+                beacons = b.short.toInt() and 0xFFFF,
+                peers = b.short.toInt() and 0xFFFF,
+                selfEchoes = b.short.toInt() and 0xFFFF,
+                sends = b.short.toInt() and 0xFFFF,
+                receives = b.short.toInt() and 0xFFFF,
+                peakSignal = b.short.toInt() and 0xFFFF,
+                peakNoise = b.short.toInt() and 0xFFFF,
+                beaconsBadCrc = b.get().toInt() and 0xFF,
+                trigState = b.get().toInt() and 0xFF,
             )
         }
     }

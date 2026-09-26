@@ -289,15 +289,16 @@ static void report_bench(void)
     b.version     = BLE_BENCH_VERSION;
     {
         /*
-         * Link v2: the same two sides of the same comparison the detector
-         * made, rather than a level and a remembered floor. The wire format
-         * and the phone's Body link page are untouched — `noise_floor` now
-         * carries the CFAR reference, which is what that column always meant.
+         * Link v2: the two sides of the comparison the detector actually
+         * made — CFAR signal against the guard reference, both from the same
+         * windows — and not a level against a remembered floor, which no
+         * longer exists anywhere in this design. Block version 2 is what
+         * tells the phone to label them that way.
          */
         uint32_t sig = 0, noi = 0;
         hal_rx_presence(s_hal, &sig, &noi);
-        b.level       = sat16(sig);
-        b.noise_floor = sat16(noi);
+        b.signal    = sat16(sig);
+        b.noise_ref = sat16(noi);
     }
     b.good        = sat16(s_sm.frames_rx_good - s_st.good_at_zero);
     b.bad         = sat16(s_sm.frames_rx_bad  - s_st.bad_at_zero);
@@ -319,6 +320,53 @@ static void report_bench(void)
     b.on_usb      = power_on_usb() ? 1u : 0u;
 
     ble_notify_telemetry(&b, sizeof b);
+}
+
+/*
+ * The trigger, by radio — the half of the diagnosis ble_bench_t cannot carry.
+ *
+ * ble_bench_t answers "what is the signal doing". It cannot answer "did the
+ * two bands hear each other", and under link v2 that is the whole question:
+ * READ peers AGAINST beacons. beacons is what this band transmitted, peers is
+ * what it decoded from the other one, and the asymmetry between the two pairs
+ * is what the step-7 bench was made of. self_echoes is the one v1 could not
+ * see at all.
+ *
+ * And the peak, because everything above is a counter but level is not. A
+ * beacon is on air for eleven milliseconds and this block goes out twice a
+ * second, so the instantaneous pair in report_bench() reports the empty room
+ * almost every time. hal_pico_take_peak() reports the loudest window in the
+ * whole interval, which is what makes a plot of it mean anything.
+ *
+ * THE COUNTERS ARE CUMULATIVE SINCE BOOT and `z` does not touch them: the
+ * reader differences two blocks and gets a rate over a window it chose, which
+ * is what the USB bench did by hand.
+ */
+static void report_trig(void)
+{
+    ble_trig_t t;
+    uint32_t peak_sig = 0, peak_noi = 0;
+
+    memset(&t, 0, sizeof t);
+    t.tag     = (uint8_t)BLE_TRIG_TAG;
+    t.version = BLE_TRIG_VERSION;
+
+    t.nonce           = trig_nonce(&s_sm.trig);
+    t.beacons         = sat16(s_sm.trig.beacons);
+    t.peers           = sat16(s_sm.trig.peers);
+    t.self_echoes     = sat16(s_sm.trig.self_echoes);
+    t.sends           = sat16(s_sm.trig.sends);
+    t.receives        = sat16(s_sm.trig.receives);
+
+    /* The only taking read on the band, hal_pico.h's one-caller rule. */
+    hal_pico_take_peak(&peak_sig, &peak_noi);
+    t.peak_level      = sat16(peak_sig);
+    t.peak_noise      = sat16(peak_noi);
+
+    t.beacons_bad_crc = sat8(s_sm.framer.beacons_bad_crc);
+    t.trig_state      = (uint8_t)s_sm.trig.state;
+
+    ble_notify_telemetry(&t, sizeof t);
 }
 
 /*
@@ -485,7 +533,10 @@ static void status_tick(btstack_timer_source_t *ts)
  */
 static void bench_tick(btstack_timer_source_t *ts)
 {
-    if (ble_telemetry_subscribed()) report_bench();
+    if (ble_telemetry_subscribed()) {
+        report_bench();
+        report_trig();
+    }
     btstack_run_loop_set_timer(ts, BENCH_TICK_MS);
     btstack_run_loop_add_timer(ts);
 }

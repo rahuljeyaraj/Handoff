@@ -141,25 +141,40 @@ _Static_assert(sizeof(ble_status_t) == 20, "status must fit one notify at the 23
  * and the handoff app never filled it, so it is free.
  *
  * A block is tagged because the score stream in tlm_ble.c also rides this
- * characteristic. A score block is 16 untagged bytes; anything starting with
- * BLE_BENCH_TAG is one of these. Read level AGAINST floor -- a healthy idle
- * detector sits with level near floor, and BOTH high is the poisoned floor
- * that handoff.c's print_stats() warns about.
+ * characteristic, as does ble_trig_t below. A score block is 16 untagged
+ * bytes; anything starting with BLE_BENCH_TAG is one of these.
+ *
+ * READ signal AGAINST noise_ref, AND KNOW WHAT THE PAIR IS NOW. Link v2
+ * step 5 deleted dsp/carrier.c and with it the remembered floor: there is no
+ * floor, no gate, no ratio and no min_delta anywhere in this design. The pair
+ * is CFAR (dsp/presence.h) — signal is max(E_A, E_B) on the two tone bins,
+ * noise_ref is the mean of the guard-bin boxcar, and the detector called it
+ * busy when signal > k * noise_ref with k = HANDOFF_CFAR_K_NUM/_K_DEN. Both
+ * sides are measured in the same windows through the same body, so "both
+ * high" is a loud room and not, as it was under v1, a poisoned floor.
+ *
+ * VERSION 2 IS THAT RENAME. The bytes did not move — the fields are the same
+ * two offsets carrying the same two measurements they carried on the day
+ * report_bench() was switched to hal_rx_presence(). What changed is that they
+ * were still NAMED for a mechanism that no longer exists, and a reader that
+ * labels this pair "level / floor" and draws a min_delta gate against it is
+ * reporting a comparison the band never made. A v1 band answers a v2 reader
+ * with a genuine floor, so the bump is what lets the reader refuse it.
  *
  * Versioned by offset like ble_status_t: append fields, never move them.
  */
 #define BLE_BENCH_TAG     0xB1u
-#define BLE_BENCH_VERSION 1
+#define BLE_BENCH_VERSION 2
 
 typedef struct {
     uint8_t  tag;           /* BLE_BENCH_TAG, so a score block cannot alias  */
     uint8_t  version;       /* BLE_BENCH_VERSION                             */
-    uint16_t level;         /* carrier level -- the signal                   */
-    uint16_t noise_floor;   /* carrier floor -- read level against THIS      */
+    uint16_t signal;        /* CFAR signal: max(E_A, E_B), as a score        */
+    uint16_t noise_ref;     /* CFAR reference: the guard boxcar's mean       */
     uint16_t good;          /* frames decoded since the last zero            */
     uint16_t bad;           /* CRC failures since the last zero              */
     uint16_t sent;          /* frames transmitted since the last zero        */
-    uint16_t syncs;         /* framer syncs; 0 with a high level is the tell  */
+    uint16_t syncs;         /* framer syncs; 0 with a high signal is the tell */
     uint8_t  present;       /* carrier_present()                             */
     uint8_t  link_state;    /* proto/link_sm.h state                         */
     uint8_t  complete;      /* handshakes completed, saturating at 255        */
@@ -175,7 +190,7 @@ _Static_assert(sizeof(ble_bench_t) == 20, "bench must fit one notify at the 23-b
 /*
  * WHY THERE IS A SECOND BLOCK. ble_bench_t answers "what is the signal doing".
  * It cannot answer "did the band hear anything", and on 25 Sep 2026 that was
- * the question the whole bench turned on: a phone plot of level and floor read
+ * the question the whole bench turned on: a phone plot of signal and reference read
  * as a flat line under the gate while 93D1 was in fact tripping its detector
  * about seven times a second and completing exchanges. The counters below were
  * the only thing that told the two apart, and they were reachable only over
@@ -184,7 +199,8 @@ _Static_assert(sizeof(ble_bench_t) == 20, "bench must fit one notify at the 23-b
  *
  * So the trigger's own counters leave by radio too, and with them the peak
  * level, which is what makes a plot of a 11 ms event sampled twice a second
- * mean anything at all. See carrier_take_peak().
+ * mean anything at all. See hal_pico_take_peak(), which is a TAKE: the peak
+ * is reset by the read, so report_trig() in apps/handoff is its one caller.
  *
  * EVERY COUNTER HERE IS CUMULATIVE SINCE BOOT, deliberately: the reader
  * differences two blocks and gets a rate over a window it chose, which is what

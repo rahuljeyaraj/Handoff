@@ -4,15 +4,33 @@ Handoff - body-link readings off two bands, by radio, through two phones.
 
 THE POINT. scripts/link2.py reads a band over USB, and design §13 forbids a USB
 tether to a mains-powered PC while anyone is touching an electrode. That is not
-only a safety rule. On 24 Sep 2026 a tethered run measured carrier level 144 and
-decoded ZERO frames, because both bands then share the PC's ground and that wire
-IS the return path under test - the reading was wrong, not just unsafe. See
+only a safety rule. On 24 Sep 2026 a tethered run measured a carrier and decoded
+ZERO frames, because both bands then share the PC's ground and that wire IS the
+return path under test - the reading was wrong, not just unsafe. See
 docs/link-debug-brief.md.
 
 So the bands stay floating on their cells and say nothing over USB. Each one
-pushes ble_bench_t to its own phone over BLE twice a second; the app logs one
-line per block; this reads both phones' logcat over adb. The phones are tethered
-to the PC, the bands are not, and the radio hop is the isolation.
+pushes ble_bench_t AND ble_trig_t to its own phone over BLE twice a second; the
+app logs one line per block; this reads both phones' logcat over adb. The phones
+are tethered to the PC, the bands are not, and the radio hop is the isolation.
+
+BOTH BLOCKS ARE LOGGED, and the second is the one that answers the question a
+two-band run is asking. The bench line is what the signal is doing:
+
+    signal  the louder tone bin, and noise the guard reference it was judged
+            against; thr is k*noise, the ONE test the detector applies. There
+            is no floor, no gate and no min_delta in link v2.
+
+The trig line is whether the two bands hear EACH OTHER:
+
+    beacons how many this band sent; peers how many it decoded from the other.
+            Read them as a pair, and compare A's pair with B's - the step-7
+            fault was an ASYMMETRY that no level would ever have shown.
+    peak    the loudest window since the previous block, over its own
+            threshold. This is the level reading that means something: a beacon
+            is on air 11 ms and the blocks arrive twice a second, so the bench
+            line's instantaneous signal is the empty room almost every time.
+    echoes  beacons that came back carrying this band's own nonce.
 
     python scripts/blelog.py --run 120 --log bench.log
 
@@ -23,7 +41,8 @@ by adb serial or by any unique tail of one:
 
 Every line is stamped with the seconds since the run started
 
-    <seconds>  A| level 48 floor 9 margin 39 present 1 good 447 ...
+    <seconds>  A| signal 48 noise 9 thr 150 present 1 good 447 ...
+    <seconds>  A| nonce 4f21 beacons 107 peers 20 echoes 0 ... peak 310/150 ...
 
 and a summary of the last block from each phone is printed at the end.
 
@@ -47,12 +66,16 @@ import sys
 import threading
 import time
 
-# Set by BandClient.kt's Log.i(TAG, "bench ..."). Filtering in adb rather than
-# here keeps the phone from spending USB bandwidth on the whole system log.
+# Set by BandClient.kt's Log.i(TAG, "bench ...") and Log.i(TAG, "trig ...").
+# Filtering in adb rather than here keeps the phone from spending USB bandwidth
+# on the whole system log.
 TAG = "BandClient"
 LOGCAT = ["logcat", "-T", "1", "-v", "brief", "%s:I" % TAG, "*:S"]
 
-BENCH = re.compile(r"\bbench (level .*)$")
+# Two blocks, one pattern. Anchored on the first field of each so a line that
+# merely mentions the word cannot match, which is what the old `bench (level
+# ...)` was doing for free and is worth keeping.
+BLOCK = re.compile(r"\b(?:bench (signal .*)|trig (nonce .*))$")
 
 
 def adb(*args: str) -> str:
@@ -96,6 +119,7 @@ class Phone:
         self.sink = sink
         self.raw = raw
         self.last = None
+        self.last_trig = None
         self.blocks = 0
         self.proc = subprocess.Popen(
             ["adb", "-s", serial, *LOGCAT],
@@ -108,11 +132,17 @@ class Phone:
     def _read(self) -> None:
         for line in self.proc.stdout:
             line = line.rstrip()
-            m = BENCH.search(line)
+            m = BLOCK.search(line)
             if m:
-                self.blocks += 1
-                self.last = m.group(1)
-                self.sink(self.label, m.group(1))
+                body = m.group(1) or m.group(2)
+                # Only the bench block counts as a block, so the rate printed
+                # at the end stays the rate it always was.
+                if m.group(1):
+                    self.blocks += 1
+                    self.last = body
+                else:
+                    self.last_trig = body
+                self.sink(self.label, body)
             elif self.raw and line:
                 self.sink(self.label, line)
 
@@ -190,6 +220,8 @@ def main() -> int:
                   "the bench block in it." % label)
         else:
             print("%s| %d blocks, last: %s" % (label, p.blocks, p.last))
+            if p.last_trig:
+                print("%s|              %s" % (label, p.last_trig))
             if " usb 1" in p.last:
                 print("%s| THE BAND WAS ON USB. This run is not a valid "
                       "body-coupled measurement." % label)
