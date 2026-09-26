@@ -572,9 +572,14 @@ void ble_forget_bonds(void)
 
 const char *ble_local_name(void) { return s_name; }
 
-bool ble_notify_status(const ble_status_t *st)
+void ble_status_cache(const ble_status_t *st)
 {
     s_status = *st;
+}
+
+bool ble_notify_status(const ble_status_t *st)
+{
+    ble_status_cache(st);
 
     if (s_con == HCI_CON_HANDLE_INVALID) return false;
     if (!s_sub_status) return false;
@@ -612,6 +617,11 @@ bool ble_encrypted(void) { return s_encrypted; }
 bool ble_telemetry_subscribed(void)
 {
     return s_con != HCI_CON_HANDLE_INVALID && s_sub_telemetry;
+}
+
+bool ble_status_subscribed(void)
+{
+    return s_con != HCI_CON_HANDLE_INVALID && s_sub_status;
 }
 
 uint16_t ble_att_mtu(void)      { return s_mtu; }

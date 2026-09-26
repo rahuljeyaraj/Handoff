@@ -153,11 +153,42 @@ static link_sm_t          s_sm;
 static link_cfg_t         s_cfg;
 static frag_tx_t          s_own;
 static bool               s_have_own;
-static bool               s_link_on;
+static bool               s_link_want = true;
 static bool               s_parked;        /* COMPLETE/ABORT, waiting to re-arm */
 static uint64_t           s_reidle_at;
 static uint32_t           s_reidle_us = REIDLE_DEFAULT_US;
 static bool               s_verbose = true;
+
+/*
+ * WHETHER THE LINK RUNS IS DERIVED, AND IT USED TO BE LATCHED AT BOOT.
+ *
+ * There were two flags: this one, and an s_link_on that main() set true if a
+ * card was stored at boot. Everything that armed the trigger asked for both.
+ * Provisioning set s_own_dirty and the re-split gave it the card — but the
+ * boot flag was the other half of every one of those conditions, and nothing
+ * outside main() and the `g` command ever set it. So:
+ *
+ *      band is reset for a new wearer (button, or the app)   card gone
+ *      band reboots — a charge, a replug, SW1               "link off until
+ *                                                            a card is stored"
+ *      the new wearer pairs and the app provisions           card back
+ *      ...and the trigger is never armed again
+ *
+ * A band in that state is not merely not transmitting: poll_link() drains the
+ * receive path into a sink, so it is deaf as well, and the wearer's side shows
+ * the ordinary idle background because s_sm.state is still LINK_IDLE. Two
+ * bands wiped and set up again therefore sit face to face, each looking ready,
+ * neither able to hear the other — which is what 26 Sep 2026 looked like from
+ * the phone: no handshake, and the body-link chart flat at the room floor on
+ * BOTH bands, because neither of them was ever going to shout.
+ *
+ * The fix is to stop storing the answer. "A card is stored" is a fact the
+ * store already holds, so it is asked rather than remembered, and what is left
+ * in a variable is only the thing nothing else can know: whether the operator
+ * turned the link off with `g`. A wiped band comes back the moment its new
+ * wearer provisions one, with no reboot and no console.
+ */
+static bool link_on(void) { return s_link_want && s_have_own; }
 
 /* written in the BTstack context, read by the main loop */
 static volatile bool      s_own_dirty;     /* the store changed: re-split   */
@@ -266,7 +297,35 @@ static btstack_timer_source_t s_bench_timer;
 #define BENCH_TICK_MS 167u
 #define BENCH_BLOCKS  3u
 
-static void report_status(void)
+/*
+ * THE STATUS BLOCK IS READ AS WELL AS NOTIFIED, AND THE READ IS THE IMPORTANT
+ * ONE. What the phone does with it is not display: BandService.sync() decides
+ * from this block whether to push the wearer's card at all, and it bails on
+ * a block whose ENCRYPTED flag is clear. So a stale block does not merely
+ * show the wrong battery -- it stops the band ever being given a card, and a
+ * band with no card cannot arm the trigger, which is a pair of bands that
+ * never beacon, never hear each other, and draw a flat line on the phone's
+ * body-link chart. That is the whole of the 26 Sep 2026 report, both halves.
+ *
+ * It was stale in two ways, both of them here rather than in the app:
+ *
+ *   AT BOOT it was the all-zero block ble_init() leaves behind, because the
+ *   only thing that wrote it was a notify guarded on a phone being connected.
+ *   Flags clear reads as "not encrypted, no card" -- so the phone that had
+ *   just connected declined to provision, and waited out the thirty-second
+ *   poll before it saw the truth. A phone that went away inside that window
+ *   left the band empty for good.
+ *
+ *   AT EVERY CONNECT, for the same reason one step later: encryption comes up
+ *   DURING the connect, a few hundred milliseconds before the app reads this,
+ *   and nothing refreshed the block in between.
+ *
+ * So the block is built into the copy a read answers with on every link tick,
+ * and the notify is what stays rare. cache_status() is that build; nothing
+ * about it can be deferred to "when somebody is listening", because the read
+ * arrives unannounced and ble.c answers it without waking this side at all.
+ */
+static void build_status(ble_status_t *st_out)
 {
     ble_status_t st;
     const uint8_t *blob = NULL;
@@ -280,7 +339,11 @@ static void report_status(void)
     if (store_get(&s_store, &blob, &len) == STORE_OK) st.flags |= BLE_ST_PROVISIONED;
     if (s_flash_ok)                                 st.flags |= BLE_ST_FLASH_OK;
     if (ble_telemetry_subscribed())                 st.flags |= BLE_ST_TLM_ON;
-    if (power_on_usb())                             st.flags |= BLE_ST_USB_POWER;
+    /* The CACHED reading, not a fresh one: power_on_usb() is an SPI round trip
+     * to the CYW43 under its own lock, and this function is now called on every
+     * link tick while no phone is connected. It is measured beside the VSYS it
+     * is drawn next to anyway, which is the pair sample_power() takes. */
+    if (s_on_usb)                                   st.flags |= BLE_ST_USB_POWER;
     if (store_haptic_on(&s_store))                  st.flags |= BLE_ST_HAPTIC_ON;
 
     st.own_blob_len = (uint16_t)len;
@@ -297,7 +360,26 @@ static void report_status(void)
     st.fw_minor = HANDOFF_FW_VERSION_MINOR;
     st.fw_patch = HANDOFF_FW_VERSION_PATCH;
 
+    *st_out = st;
+}
+
+/* Notify a subscriber, and refresh the readable copy on the way past. */
+static void report_status(void)
+{
+    ble_status_t st;
+
+    build_status(&st);
     ble_notify_status(&st);
+}
+
+/* The readable copy alone. Cheap enough for every tick, and it must be: see
+ * build_status() for what reads it and when. */
+static void cache_status(void)
+{
+    ble_status_t st;
+
+    build_status(&st);
+    ble_status_cache(&st);
 }
 
 static uint16_t sat16(uint32_t v) { return (uint16_t)(v > 0xFFFFu ? 0xFFFFu : v); }
@@ -591,9 +673,27 @@ static void on_control(uint8_t op, const uint8_t *arg, size_t len, void *ctx)
     }
 }
 
+/*
+ * THE BACKGROUND POLL, AND IT NO LONGER ASKS WHETHER A PHONE IS LISTENING.
+ *
+ * report_status() does two things: it notifies, and it leaves the block in
+ * ble.c as the value a READ answers with (ble_notify_status() caches before it
+ * checks the subscription). Only the notify needs a phone. Guarding both on
+ * ble_connected() meant the readable copy was refreshed only while a phone was
+ * already there — and the app reads it on connect, because that read is the
+ * baseline the home screen decides "the band has your card" from.
+ *
+ * So a band that had rebooted answered that read with the ALL-ZERO block
+ * ble_init() leaves behind: version valid, flags clear, vsys 0. The phone
+ * parsed it, believed it, and drew the slashed red card and an unknown battery
+ * for up to STATUS_TICK_MS — thirty seconds — while the card sat in flash the
+ * whole time. Reported 26 Sep 2026 as "no card on the home page, green card on
+ * the band page": the band page reads the card the PHONE holds, the home page
+ * reads the one the BAND reports, and only one of the two was stale.
+ */
 static void status_tick(btstack_timer_source_t *ts)
 {
-    if (ble_connected()) report_status();
+    report_status();
     btstack_run_loop_set_timer(ts, STATUS_TICK_MS);
     btstack_run_loop_add_timer(ts);
 }
@@ -644,7 +744,7 @@ static void send_fake_card(btstack_timer_source_t *ts)
  */
 static bool link_quiet(void)
 {
-    return s_sm.state == LINK_IDLE || s_parked || !s_link_on;
+    return s_sm.state == LINK_IDLE || s_parked || !link_on();
 }
 
 /*
@@ -705,9 +805,35 @@ static void link_tick(btstack_timer_source_t *ts)
         }
     }
 
+    /* A phone has just asked for status. It reads the block too, and the read
+     * is covered below, but a push costs nothing and is what the reconnect
+     * complaint was about: the app should not have to wait for either. */
+    {
+        static bool was_sub;
+        const bool sub = ble_status_subscribed();
+        if (sub && !was_sub) s_status_dirty = true;
+        was_sub = sub;
+    }
+
+    /*
+     * ONE OR THE OTHER, EVERY TICK.
+     *
+     * The dirty branch is unconditional now: the old `if (ble_connected())`
+     * cleared the flag and then dropped the update, so anything that changed
+     * while no phone was there — a handshake completing, the button resetting
+     * the band — was missing from the block the phone read when it came back.
+     *
+     * Otherwise the readable copy is rebuilt anyway, so it is never more than
+     * LINK_TICK_MS old whenever a read lands. That costs one pass over a
+     * 20-byte struct four times a second and sends nothing; notifying at that
+     * rate instead would take the ACL buffer the bench blocks need (see
+     * BENCH_TICK_MS, where exactly that dropped two blocks in three).
+     */
     if (s_status_dirty) {
         s_status_dirty = false;
-        if (ble_connected()) report_status();
+        report_status();
+    } else {
+        cache_status();
     }
 
     /* the wearer's side: what only this context can know */
@@ -751,12 +877,20 @@ static void link_cfg_pico(link_cfg_t *c)
 
 /* ---- own record ------------------------------------------------------- */
 
+/*
+ * The fragments are zeroed on the way in, not merely left behind, because the
+ * one caller that fails here is a band being reset for a new wearer: what
+ * would be left is the PREVIOUS wearer's name and number, split and ready to
+ * clock out. link_on() is what stops it going anywhere, and a card that cannot
+ * be sent is not the same thing as a card that is not there.
+ */
 static bool split_own(void)
 {
     const uint8_t *blob = NULL;
     size_t len = 0;
 
     s_have_own = false;
+    memset(&s_own, 0, sizeof s_own);
     if (store_get(&s_store, &blob, &len) != STORE_OK) return false;
     if (frag_split(blob, len, store_record_id(&s_store), &s_own) != FRAG_OK) {
         printf("handoff: stored record does not split into fragments\n");
@@ -943,7 +1077,7 @@ static void poll_link(uint64_t now)
             s_st.shouts_at_zero = s_st.frames_at_zero = s_st.good_at_zero = 0;
             s_st.bad_at_zero = s_st.turns_at_zero = 0;
             s_arm_sent = s_arm_good = s_arm_bad = s_arm_turns = 0;
-            if (s_link_on && s_have_own) arm(now);
+            if (link_on()) arm(now);
         } else {
             s_own_dirty = true;          /* mid-exchange: try again later */
         }
@@ -955,7 +1089,7 @@ static void poll_link(uint64_t now)
         s_sync_hit = false;
         t = s_sync_us;
         s_st.syncs++;
-        if (s_link_on && s_have_own) {
+        if (link_on()) {
             /* A send in flight ends here, not at the end its tx line gave. */
             if (hal_pico_tx_abort())
                 printf("cut %llu\n", (unsigned long long)hal_pico_tx_pad_idle_us());
@@ -971,7 +1105,7 @@ static void poll_link(uint64_t now)
     }
 #endif
 
-    if (!s_link_on || !s_have_own) {
+    if (!link_on()) {
         int32_t sink[64];
         while (hal_rx_chips(s_hal, sink, 64) == 64) {}
         return;
@@ -1155,7 +1289,7 @@ static void cmd_carrier(uint32_t khz)
                (unsigned long)khz);
         return;
     }
-    if (s_link_on && s_have_own) arm(hal_now_us(s_hal));
+    if (link_on()) arm(hal_now_us(s_hal));
     printf("    carrier %lu kHz\n", (unsigned long)khz);
 }
 
@@ -1209,7 +1343,8 @@ static void help(void)
            "  u         LED / motor trace %s;  u <event> inject one (u ? lists)\n"
            "  b <ms>    press the button for that long\n"
            "  p [mv]    measure VSYS at the next quiet tick, or feed the wearer side a value\n",
-           s_link_on ? "on" : "off", (unsigned long)(s_reidle_us / 1000u),
+           link_on() ? "on" : s_link_want ? "off: no card" : "off",
+           (unsigned long)(s_reidle_us / 1000u),
            (unsigned long)(s_cfg.contact_budget_us / 1000u),
            (unsigned)led_red_scale_now(),
            store_haptic_on(&s_store) ? "on" : "off",
@@ -1261,17 +1396,22 @@ static void dispatch(const char *line)
 
     switch (parse(line, &arg, &have_arg)) {
     case 0: return;
+    /*
+     * The operator's half of link_on(), and only that half: turning it on with
+     * no card stored is no longer an error to refuse but a state to sit in,
+     * because that is exactly what a band waiting to be provisioned is.
+     */
     case 'g':
-        s_link_on = !s_link_on;
-        if (s_link_on) {
-            if (!s_have_own) { printf("    no card stored: `w` first\n"); s_link_on = false; }
-            else arm(now);
+        s_link_want = !s_link_want;
+        if (link_on()) {
+            arm(now);
         } else {
             hal_pico_tx_abort();
             hal_tx_drive(s_hal, false);
             trig_stop(&s_sm.trig);
         }
-        printf("    link %s\n", s_link_on ? "on" : "off");
+        printf("    link %s\n", link_on() ? "on"
+                              : s_link_want ? "on, waiting for a card (`w`)" : "off");
         break;
     case 'y':
 #if HANDOFF_BENCH_SYNC
@@ -1325,8 +1465,9 @@ static void dispatch(const char *line)
      * is to hand out the roles by hand and see whether a frame decodes.
      */
     case 't':
-        if (!s_link_on || !s_have_own) {
-            printf("    link off or no card: `w` then `g` first\n");
+        if (!link_on()) {
+            printf("    %s\n", s_link_want ? "no card stored: `w` first"
+                                           : "link off: `g` first");
             break;
         }
         s_force_role = (have_arg && arg) ? 1 : 0;
@@ -1497,12 +1638,16 @@ int main(void)
     }
     print_banner();
 
-    if (s_have_own) {
-        s_link_on = true;
+    /*
+     * No flag is set here. The link is on because s_link_want starts true and
+     * a card is stored; a band with no card is on too, and arms itself the
+     * moment one is written — see link_on(), and the failure it is named after.
+     */
+    if (link_on()) {
         arm(hal_now_us(s_hal));
         printf("  link on: free-running the trigger. `h` for help.\n");
     } else {
-        printf("  link off until a card is stored.\n");
+        printf("  link on, and it arms itself as soon as a card is stored.\n");
     }
 
     next_hb = hal_now_us(s_hal) + HEARTBEAT_US;
@@ -1524,7 +1669,7 @@ int main(void)
                        "cut %lu stalls %lu load %u%% chips %lu sps %lu overruns %lu "
                        "vsys %u\n",
                        (unsigned long)elapsed_s(s_st.since), link_state_name(s_sm.state),
-                       s_link_on ? (s_parked ? "parked" : "on") : "off",
+                       link_on() ? (s_parked ? "parked" : "on") : "off",
                        (unsigned long)s_st.complete, (unsigned long)s_st.partial,
                        (unsigned long)s_st.abort,
                        (unsigned long)(s_sm.trig.beacons - s_st.shouts_at_zero),

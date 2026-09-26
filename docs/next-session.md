@@ -85,9 +85,12 @@ user says otherwise, this outranks everything below.
 - **Turn the phone's Bluetooth OFF.** 93D1 is bonded to the Android app; the
   app connects ~20 s after boot and sends BLE_CTRL_FORGET, wiping the card.
   `w` rewrites a bench card in seconds.
-- **`g` is a toggle**, and a refusal prints "no card stored" and THEN "link
-  off", which reads like a successful park. Read the true state with `h` — it
-  prints `link on / off (now ...)`.
+- **`g` is a toggle**, and it is now the OPERATOR's half only: the link is on
+  whenever a card is stored and `g` has not been used to turn it off, so a
+  wiped band arms itself the moment the app provisions one and `w` alone is
+  enough on the bench — a `g` after `w` turns it back OFF. Read the true state
+  with `h`: it prints `link on / off (now ...)`, and "off: no card" is the
+  wanted-on-but-empty state rather than a park.
 - **A board can sit silent because its link is parked.** Board two answered
   nothing for two runs and looked dead; it was simply `now off`.
 - **picotool's device selection goes AFTER the filename.**

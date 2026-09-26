@@ -386,6 +386,14 @@ bool ble_rx_vcard_busy(void);
 
 bool ble_notify_status(const ble_status_t *st);
 
+/*
+ * The same block, WITHOUT the notify: this is the value a READ of the status
+ * characteristic answers with, and the app reads it on every connect before
+ * any notify could have reached it. Kept separate because the notify is paced
+ * and this is not: the caller refreshes this as often as it likes.
+ */
+void     ble_status_cache(const ble_status_t *st);
+
 /* Decimated scores, design §13. Dropped rather than queued when the
  * controller is busy: a gap in a score stream is a gap in a plot, and a
  * backlog is a stall in the receive path. */
@@ -401,6 +409,11 @@ const char *ble_local_name(void);
 bool     ble_encrypted(void);
 bool     ble_telemetry_subscribed(void);
 bool     ble_rx_vcard_subscribed(void);
+/* True once the phone has asked for status notifications. The app subscribes
+ * and then READS, so the rising edge of this is the moment a push can reach it
+ * — which is what the band answers a reconnect with rather than waiting out
+ * its background poll. */
+bool     ble_status_subscribed(void);
 
 /* ---- the bond: one band, one phone ------------------------------------ */
 
