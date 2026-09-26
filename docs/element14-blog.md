@@ -303,18 +303,12 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 
 *The loop a handshake makes. The only thing that touches is the two hands.*
 
-* **The plate never touches skin.** It is half a capacitor, and reaches the body through an electric field, not through metal on skin.
-* **The room carries the signal back.** Nobody holds a second wire, so each band's outer face couples to the floor and the walls.
-* That is the weakest step in the loop, and the first version of the band did not have it. Fitting a second, outer electrode to both bands is what turned a link that worked for a few seconds and then died into one that runs all day: **1 good frame worn before, 447 after**, and the longest run of missing frames fell from *the link died and stayed dead* to three.
-* **Touch, not air.** The same two bands, the same 90 seconds, the same spacing as a pair of relaxed hands: **447 frames through the two people, 0 across the table with nobody near.** Whatever is happening, it is not RF leaking across the room.
-* **Battery only.** A band is never worn while it is plugged in. The full safety rules are in B.1.
-* **Most of the signal is lost** on purpose. A 100 kΩ resistor sits in series with the plate on the way out and another on the way in — two on every band. They are the biggest loss in the whole link, and they are what holds the current through a person down to a few tens of microamps.
-* **Lower is not better.** 10 kΩ was tried. It does drive the body harder, and the receiver's own measure of how clearly it heard each bit rose from 19 to 32 — but the share of frames arriving intact fell from 70 % to 44 %. Put back to 100 kΩ, and why it gets worse was never established.
-* **So, two amplifiers of ×11** make what is left big enough to read.
-* **No mixer, no oscillator.** The software asks one question of every 50 µs of sound: *how much of each of five pitches is there?* Anything at another pitch is never counted.
-* **180 and 200 kHz**, as high as the converter can see. That is where the pad is quietest: listening with nothing transmitting anywhere, the noise halves every time the pitch doubles — 225 at 20 kHz, 123 at 40 kHz, 62 at 100 kHz, 30 at 200 kHz.
-* **Never silent.** One tone or the other is always on the plate. That is the whole of the next section.
-* **One dead end, recorded so nobody repeats it.** The plate and the skin make a capacitor; add an inductor tuned to the carrier and the two resonate, for 20–30 dB of free gain and one cheap part. It does not work: a resonance only builds when little is lost along the way, and this link throws most of its signal away in the safety resistors on purpose. The same loss flattens the resonance before it can build.
+* **Rohit's band puts the tone out.** A pin on the Pico switches between two pitches, 180 and 200 kHz, and one of them is on the plate at all times. No radio, no aerial.
+* **His plate puts the tone onto his skin.** Without touching it: the plate is coated, so it is half a capacitor, and the tone crosses the last gap as an electric field.
+* **The wire is his arm, the handshake, her arm.** A person is a poor wire, so only a whisper of the tone comes out the other end.
+* **Her plate picks it up off her skin.** What arrives is tiny, so two amplifiers of ×11 make it big enough to read.
+* **Her band hears it.** Every 50 µs it scores both pitches and asks only which was louder. Three more bins, at 140, 160 and 220 kHz, carry nothing and measure the room in the same window.
+* **The room closes the loop.** Nobody holds a return wire, so each band's outer electrode couples to the floor and the walls.
 
 #### 5.5 Two tones, and three that nobody sends
 
