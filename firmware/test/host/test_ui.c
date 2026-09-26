@@ -398,14 +398,24 @@ void test_ui(void)
         HF_EQ_INT(ui_event_parse("battery-show-unknown"), (int)UI_EV_BATTERY_SHOW_UNKNOWN);
     }
 
-    hf_begin("ui: a hold threshold is one tap");
+    hf_begin("ui: a hold threshold is one tap and a purple the finger can see");
     {
         uint32_t on; int pulses;
+        ui_out_t o;
         ui_init(&u, 0);
         ui_event(&u, UI_EV_HOLD_REACHED, 0);
         motor_stats(&u, 0, 1000, &on, &pulses);
         HF_EQ_INT(pulses, 1); HF_EQ_INT(on, 100);
-        HF_EQ_INT(led_flashes(&u, 0, 1000), 0);
+        /* solid, not a flash: it is up the moment the tap is felt and stays
+         * up while the finger is still down */
+        HF_EQ_INT(led_flashes(&u, 0, 6000), 1);
+        ui_step(&u, 0, &o);    HF_CHECK(IS_PURPLE(o.led));
+        ui_step(&u, 4999, &o); HF_CHECK(IS_PURPLE(o.led));
+        ui_step(&u, 5001, &o); HF_CHECK(IS_OFF(o.led));
+        /* and letting go replaces it with the reset's four flashes */
+        ui_event(&u, UI_EV_BOND_CLEARED, 3000);
+        ui_step(&u, 3050, &o); HF_CHECK(IS_PURPLE(o.led));
+        ui_step(&u, 3150, &o); HF_CHECK(IS_OFF(o.led));
     }
 
     hf_begin("ui: a new foreground replaces the one playing");

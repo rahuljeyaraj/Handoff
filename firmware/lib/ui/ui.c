@@ -52,6 +52,15 @@ PAT(k_fg_batt_good,  0, { GREEN, 300 });
 PAT(k_fg_batt_mid,   0, { AMBER, 300 });
 PAT(k_fg_batt_low,   0, { RED, 300 });
 PAT(k_fg_batt_unknown, 0, { WHITE, 300 });   /* asked, and no reading to give */
+/*
+ * The 5 s mark, while the finger is still down. The tap alone said "you can
+ * let go now" to the wrist and nothing at all to the eye, so a wearer
+ * watching the band saw the first light only after releasing. Purple is the
+ * reset's colour, so the solid here and the four flashes on release read as
+ * one gesture: "let go and this happens". Five seconds because that is the
+ * hold itself, and a finger that outlasts it has already been told twice.
+ */
+PAT(k_fg_hold,       0, { PURPLE, 5000 });
 
 /* ---- the motor ------------------------------------------------------ */
 
@@ -254,6 +263,7 @@ void ui_event(ui_t *u, ui_event_t ev, uint32_t now)
     case UI_EV_BATTERY_SHOW_LOW:  fg(u, &k_fg_batt_low, now);  break;
     case UI_EV_BATTERY_SHOW_UNKNOWN: fg(u, &k_fg_batt_unknown, now); break;
     case UI_EV_HOLD_REACHED:
+        fg(u, &k_fg_hold, now);
         motor(u, &k_motor_tap, now);
         break;
 

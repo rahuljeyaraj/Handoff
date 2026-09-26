@@ -49,7 +49,7 @@
  *   identify (from the app)          white x3 fast                3 taps
  *   battery check (button)           green / amber / red 300 ms   -
  *   battery check, level unknown     white 300 ms                 -
- *   hold threshold reached (5 s)     -                            tap
+ *   hold threshold reached (5 s)     purple solid, up to 5 s      tap
  *
  * (h): masked by the app's vibrate setting. Everything else always plays.
  *
