@@ -35,6 +35,8 @@ Handoff is a band on the wrist. When two people wearing one shake hands, their c
 
 You let go, and the conversation can carry on next week. The handshake that closed it is the one that kept it.
 
+> Built for element14's **Make a Connection** contest, which asks for an electronics project that sends a message or signal. The message Handoff sends is a contact card, and the medium is two people shaking hands. So a connection is made between the bands, and a deeper one between the people wearing them.
+
 ### 2 The gallery
 
 That is the idea. Here is the thing itself, before the rest of the post takes it apart.
@@ -366,7 +368,7 @@ The rebuild is one sentence: **stop measuring against a remembered number, and m
 
 Three steps: weigh the pitches, read each bit, find where a frame starts.
 
-##### 5.6.1 Weighing the pitches
+##### 6.6.1 Weighing the pitches
 
 ![What the Goertzel filter replaces](element14-blog/10-goertzel.png)
 *Figure 6.5. What the Goertzel filter replaces. Dashed: the parts the band does not have.*
@@ -397,7 +399,7 @@ There are two usual ways to hear a tone (Figure 6.5).
 * **Any length.** A standard FFT wants 16 or 32 samples. At 32, these tones would fall between two answers and smear across both. 25 samples hold exactly nine and ten cycles of them, so each sits dead on one.
 * **Cheap.** All five, plus the decision, cost about a fifth of one core, measured in the real firmware, with Bluetooth running on the other core.
 
-##### 5.6.2 Reading each bit
+##### 6.6.2 Reading each bit
 
 ![Which tone is louder](element14-blog/27-which-tone.png)
 *Figure 6.6. The same four bits, through a firm grip and a light one. The key is the square wave the pin sends; the rows under it are what survives two bodies and the band's filters. The gap between the two pitches is drawn far wider than it is: they are really 180 and 200 kHz, a tenth apart.*
@@ -408,7 +410,7 @@ There are two usual ways to hear a tone (Figure 6.5).
 * **The imbalance cancels.** Every bit carries one chip of each tone, so if one tone always arrives a tenth stronger, both halves of every bit carry that tenth. The band measures the imbalance anyway, on every frame, and reports it, but nothing corrects for it, because nothing needs to.
 * **The cost is half the speed:** 2,000 bits a second.
 
-##### 5.6.3 Finding where a frame starts
+##### 6.6.3 Finding where a frame starts
 
 A card does not fit in one go, so it goes in frames. Figure 6.7 is one frame; section 6.7 is how the card is cut up.
 
@@ -455,7 +457,7 @@ A card does not fit in one go, so it goes in frames. Figure 6.7 is one frame; se
 Nothing tells the band a hand has closed. Three parts: why waiting cannot work,
 what the band does instead, and who speaks once the hands meet.
 
-##### 5.8.1 Waiting does not work
+##### 6.8.1 Waiting does not work
 
 ![Being heard is the touch](element14-blog/05-being-heard.png)
 *Figure 6.11. Being heard is the touch.*
@@ -465,7 +467,7 @@ what the band does instead, and who speaks once the hands meet.
 * **If every band waits to hear someone, no band ever speaks.**
 * **Being heard is the touch.** Hearing another band is itself the proof, because there was no path until the hands met.
 
-##### 5.8.2 So every band keeps beaconing
+##### 6.8.2 So every band keeps beaconing
 
 ![The rendezvous](element14-blog/28-beacon.png)
 *Figure 6.12. One band's cycle, drawn to scale in time, and what happens when a hand closes on another wrist.*
@@ -479,7 +481,7 @@ what the band does instead, and who speaks once the hands meet.
 * **How long it listens on average was worked out, not chosen:** listen too little and the beacons clash more often, listen too long and the hands part before the two bands have met. It works out at about three beacons' worth.
 * **Two bands that drew the same nonce** both read it as their own, both stand down, and both draw again. It costs one cycle.
 
-##### 5.8.3 The one that heard, sends
+##### 6.8.3 The one that heard, sends
 
 ![The hearer sends](element14-blog/06-hearer-sends.png)
 *Figure 6.13. Figure 6.12 zoomed out: the one that heard sends first, then one frame each, in turn.*
@@ -491,7 +493,7 @@ what the band does instead, and who speaks once the hands meet.
 * **One frame each, then swap.** Not a whole card each. They alternate frame by frame, so a touch that ends early still leaves both ends with a name and a number.
 * **One pad, one direction at a time.** Each band waits out the other end's recovery before it starts, so the far end is certainly listening.
 
-### 7 What the next one does better
+### 7 The sequel
 
 The pair works, and one handshake carries both cards. This is where it stands today, and what I would put into the next pair.
 
