@@ -481,7 +481,7 @@ The pair works, and one handshake carries both cards. This is where it stands to
 
 #### 6.3 The board
 
-* **It was designed in a day and a half,** because that is all the time there was. The board works. The next one needs more thought and more research behind every choice on it.
+* **It was designed in two days,** because that is all the time there was. The board works. The next one needs more thought and more research behind every choice on it.
 * **The button wants to be a right angle part.** The one fitted points straight up and the case needs it out of the side, so it was bent over and glued to the board. A right angle switch in the footprint settles it.
 * **A surface mount RGB behind a diffuser is the cleaner answer.** The 5 mm through hole LED eats space inside the box, and a small part under a printed diffuser looks tidier from the outside.
 * **The motor was meant to sit on the wall of the case,** so that the whole box buzzes against the wrist. The cheap coin motor's wires were short and stiff, and could not be used to hold it there, so it went onto double sided tape on the PCB instead. A surface mount motor soldered to the board answers the wires and the mounting together.
@@ -552,22 +552,27 @@ A connection was made.
 This is my first sponsored project. [PCBWay](https://www.pcbway.com/) manufactured the PCBs and shipped them to me. I only had to source the components.
 
 ![The boards as they arrived](element14-blog/13-boards.jpg)
-*The boards as they arrived.*
+*A bare board as it arrived, both sides.*
 
-**It started with their email.** PCBWay wrote on 10 September offering to sponsor a project. The board didn't exist yet, and the deadline was 16 days away. I designed it in two days and placed the order on Saturday
+**It started with their email.** PCBWay wrote on 10 September offering to sponsor a project. The board didn't exist yet, and the Make a Connection contest deadline was 16 days away. I designed the board in two days and placed the order on Saturday.
 
 **Their engineers were super helpful and prompt.**
 
 * **The finish.** I had picked leaded HASL on the order form but asked for lead-free in the notes. Tori caught the mismatch that same Saturday and asked which one I meant.
 * **The antenna.** Under the Pico's antenna there is a patch with no copper on either side. That's deliberate. To a fab it looks like a slot someone forgot to draw. Sophia asked me instead of guessing. Then she sent back the exact files they had received so I could check them against mine. It was settled the same morning.
 
-**Speed.** Ordered on 12 September. All questions closed by Monday the 14th. Shipped by DHL on the 15th, and at my door on [date].
+**Speed.** The order went in on Saturday 12 September. Every question was closed by the next working day, Monday the 14th. Shipped by DHL on the 15th, and at my door on the 23rd. It would have been earlier: a glitch in the DHL portal would not let me upload my KYC, so customs clearance sat waiting. The 24 hour lead time and the fast shipping are what got this project finished inside the contest deadline.
 
-**Quality.** []
+**Quality.** I gave these pads a hard time. Surface mount and through hole, soldered and desoldered again and again, a vacuum pump and solder wick over the same joints many times. Not one pad lifted. On the breakout boards I usually buy, a pad comes away after two or three rework sessions. These took everything I did to them and still look like new.
+
+![Both bands on the box](element14-blog/29-bands-on-box.jpg)
+*The pair, finished, on the box they came in.*
 
 **Serene**, in their marketing team, made the whole thing easy, from the first email to the order going through.
 
-Thank you to PCBWay, and to Serene, Tori and Sophia, for backing my project. If you want to build a pair, appendix B has the board files ready to upload to PCBWay.
+Thank you to PCBWay, and to Serene, Tori and Sophia, for backing my project.
+
+If you want to build a pair yourself, appendix B has the board files ready to upload to PCBWay.
 
 ---
 
