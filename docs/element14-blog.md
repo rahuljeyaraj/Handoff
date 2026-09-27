@@ -37,7 +37,7 @@ You let go, and the conversation can carry on next week. The handshake that clos
 
 ---
 
-### See it first
+### 2 The gallery
 
 That is the idea. Here is the thing itself, before the rest of the post takes it apart.
 
@@ -46,22 +46,22 @@ That is the idea. Here is the thing itself, before the rest of the post takes it
 <!-- TODO: replace PASTE-YOUTUBE-LINK-HERE with the YouTube URL -->
 
 ![A finished band](element14-blog/31-band-outside.jpg)
-*A finished band on its strap. The lid, then the side with the power switch and the light, then the end with the single button.*
+*Figure 2.1. A finished band on its strap. The lid, then the side with the power switch and the light, then the end with the single button.*
 
 ![A section through the band](element14-blog/34-cross-section.png)
-*The same band in section. The skin plate at the bottom is the one that meets the wrist, and the whole of this post is about getting a signal from that plate, through a person, into the plate on someone else's band.*
+*Figure 2.2. The same band in section. The skin plate at the bottom is the one that meets the wrist, and the whole of this post is about getting a signal from that plate, through a person, into the plate on someone else's band.*
 
 ![A band taken apart](element14-blog/33-band-apart.jpg)
-*Opened up. Left: the Pico lifted out of its socket, leaving the band's own board with the amplifier, the motor, the switch, the button and the light on it. Right: the board out as well, turned over, and the cell in its pocket.*
+*Figure 2.3. Opened up. Left: the Pico lifted out of its socket, leaving the band's own board with the amplifier, the motor, the switch, the button and the light on it. Right: the board out as well, turned over, and the cell in its pocket.*
 
 ![The two plates](element14-blog/32-band-plates.jpg)
-*There are two plates, not one. Left: the skin plate, taped over and recessed into the back, with the band's label beside it. Right: the same band opened, and the second plate inside the lid. Section 5.4 is why the second one matters.*
+*Figure 2.4. There are two plates, not one. Left: the skin plate, taped over and recessed into the back, with the band's label beside it. Right: the same band opened, and the second plate inside the lid. Section 6.4 is why the second one matters.*
 
 *Want to build a pair? Everything you need is in the appendices at the end: the parts list in appendix A, the build in appendix B.*
 
 ---
 
-### 2 The setup
+### 3 The setup
 
 The registration desk at the expo. The queue moved quickly, and then it was his turn. The woman behind the desk looked up with a warm smile, as if she had been expecting him.
 
@@ -81,7 +81,7 @@ He looked at her, then at the band. "Just from the handshake."
 
 "Just from the handshake." She was clearly enjoying his surprise. "I know. Everyone does that face."
 
-#### 2.1 Pairing with the phone
+#### 3.1 Pairing with the phone
 
 "Hang on, this one came back from an earlier session, let me reset it for you."
 
@@ -96,7 +96,7 @@ He turned it over in his hands. No screen. Nothing to type on. He looked up.
 "Yes, there's an app." A little surprised, she pointed at the sign beside her: two hands clasped in a handshake, and the word *Handoff* under it. "It's on the store, just search Handoff. Same logo."
 
 ![The Handoff logo](element14-blog/13-logo.png)
-*Figure 2.1. The Handoff logo.*
+*Figure 3.1. The Handoff logo.*
 
 He found it and installed it. The queue behind him, mercifully, was short.
 
@@ -107,9 +107,9 @@ He held the band in one hand and the phone in the other. The phone gave a small 
 "That's it. Paired. It's yours now."
 
 ![Pairing with the phone](element14-blog/14-pairing.png)
-*Figure 2.2. Pairing with the phone.*
+*Figure 3.2. Pairing with the phone.*
 
-#### 2.2 Your contact card
+#### 3.2 Your contact card
 
 "Next you set up your contact card in it."
 
@@ -130,11 +130,11 @@ He put it on. Left wrist, out of habit, and glanced at her.
 He moved it across and looked at the phone. An empty page. `No handshakes yet`.
 
 ![Your contact card](element14-blog/15-your-card.png)
-*Figure 2.3. Your contact card.*
+*Figure 3.3. Your contact card.*
 
-### 3 The handshake
+### 4 The handshake
 
-#### 3.1 First contact
+#### 4.1 First contact
 
 "So you're saying I just shake hands. How do I know it's actually worked?"
 
@@ -149,7 +149,7 @@ It was an ordinary handshake: warm, firm, a second long. The band on his wrist f
 Her name was there. `Savithri Raghavan`. He tapped it. `Met today, 9:14 am`, and under it her number and her email.
 
 ![First contact](element14-blog/16-first-contact.png)
-*Figure 3.1. First contact.*
+*Figure 4.1. First contact.*
 
 "And you've got me?"
 
@@ -167,7 +167,7 @@ She giggled.
 
 He thanked her and walked on towards the expo floor, still putting the puzzle together in his head.
 
-#### 3.2 Keeping track
+#### 4.2 Keeping track
 
 The morning went by in a blur.
 
@@ -180,31 +180,31 @@ He had fallen into a routine without noticing. Walk away from the stall. Open th
 Fifteen seconds, and on to the next stall.
 
 ![Keeping track](element14-blog/17-keeping-track.png)
-*Figure 3.2. Keeping track.*
+*Figure 4.2. Keeping track.*
 
 By design, the Handoff app never polluted his phone contacts. They all stayed in the app, where they belonged. And the three or four who mattered, a hiring manager, a supplier, a student whose project he wanted to follow, he tapped `Save to phone contacts`, and they were in his phone book like anyone else. One press. No copying numbers.
 
 Late in the morning he went back to the front desk to ask where the afternoon sessions were, and Savithri shook his hand again on his way out. He checked the app, half expecting a second Savithri. There wasn't one. The entry he had already renamed to `Savithri Raghavan (front desk)` had simply moved to the top of the list, note and all. The app matches people by their number and email, not their name. Shake the same hand twice and you get one person, not two.
 
 ![Met again](element14-blog/22-met-again.png)
-*Figure 3.3. Met again.*
+*Figure 4.3. Met again.*
 
-#### 3.3 What the band was telling him
+#### 4.3 What the band was telling him
 
 By the afternoon he had stopped looking at it. The band had a small vocabulary and he had picked up all of it without trying: white while the hands were together, green when a name had landed, and nothing at all the rest of the time.
 
-Everything it can say is in Figure 3.4, running at the speed it really says it.
+Everything it can say is in Figure 4.4, running at the speed it really says it.
 
 ![Every light the band can show](element14-blog/30-status-light.gif)
-*Figure 3.4. Every light the band can show, and every buzz, at its real speed. The first group is what it shows on its own, the second is what it does when something happens, and the third is the button's answer about the charge. Arcs beside a bead mean the motor is running. The one-shots are replayed on a loop here so they can be seen; the timing inside each flash is the band's own.*
+*Figure 4.4. Every light the band can show, and every buzz, at its real speed. The first group is what it shows on its own, the second is what it does when something happens, and the third is the button's answer about the charge. Arcs beside a bead mean the motor is running. The one-shots are replayed on a loop here so they can be seen; the timing inside each flash is the band's own.*
 
-### 4 The companion app
+### 5 The companion app
 
 He found the coffee lounge at two, got a hot cup, and took a chair in the corner. The first quiet ten minutes he had had since breakfast.
 
 Time to look at the thing properly.
 
-#### 4.1 Home page
+#### 5.1 Home page
 
 The UI was simple. A band info card at the top of the page, showing the band's name, `Handoff band 93D1`, with `Connected` under it. On the right, a small green card icon showing that his card was saved on it, and a battery with three green bars.
 
@@ -218,14 +218,14 @@ Four buttons along the top, beside the Handoff wordmark:
 * `Settings`.
 
 ![Home page](element14-blog/18-home.png)
-*Figure 4.1. Home page.*
+*Figure 5.1. Home page.*
 
-#### 4.2 Band info page
+#### 5.2 Band info page
 
 He pressed the band info card. It took him to a page of its own.
 
 ![Band info page](element14-blog/19-band.png)
-*Figure 4.2. Band info page.*
+*Figure 5.2. Band info page.*
 
 * `Your contact card`, his own contact details.
 * `Battery`. It read `Full`.
@@ -239,7 +239,7 @@ Useful at home, he thought, when it had slipped down the side of the sofa. Here,
 
 At the bottom, `Disconnect`. Under it, in red, `Forget this band`. He left both alone.
 
-#### 4.3 Card page
+#### 5.3 Card page
 
 He tapped `Your contact card`. There it was, as he had typed it that morning, with a small tick under his name: `On Handoff band 93D1`. Two icons in the top bar, a pencil to edit and a bin to delete the card.
 
@@ -258,9 +258,9 @@ Now the people who shook his hand would get a number labelled `IRQ`. If they kne
 `Save`. The band blinked green, twice, and the icon on the band info page went green again.
 
 ![Card page](element14-blog/20-card.png)
-*Figure 4.3. Card page.*
+*Figure 5.3. Card page.*
 
-#### 4.4 Settings page
+#### 5.4 Settings page
 
 Settings was two short groups.
 
@@ -271,13 +271,13 @@ The app has no internet permission at all. Every contact he had collected lived 
 He opened `Theme` and picked `Dark`. The lounge was dim and the white page was a lantern.
 
 ![Settings page](element14-blog/21-settings.png)
-*Figure 4.4. Settings page.*
+*Figure 5.4. Settings page.*
 
 He sat back. The whole app had taken five minutes to walk through, and there had been nothing in it he needed to look up.
 
-### 5 The how
+### 6 The how
 
-#### 5.1 Plate on the back
+#### 6.1 Plate on the back
 
 The coffee was half gone and the morning's question was still open. He took the band off and turned it over.
 
@@ -291,17 +291,17 @@ Capacitive body-coupled communication.
 
 He put the band back on, and finished the coffee. He knew *what* it was now. The next question was *how*.
 
-#### 5.2 What's inside
+#### 6.2 What's inside
 
-He had met most of it already, from the outside (Figure 5.1).
+He had met most of it already, from the outside (Figure 6.1).
 
 ![What's inside a band](element14-blog/09-inside.png)
-*Figure 5.1. One band, around its Pico. Purple feeds the Pico, orange is driven by it, and the plate is both. Grey is not part of the band. The second, outer electrode is left out of the drawing; it is in Figure 5.3.*
+*Figure 6.1. One band, around its Pico. Purple feeds the Pico, orange is driven by it, and the plate is both. Grey is not part of the band. The second, outer electrode is left out of the drawing; it is in Figure 6.3.*
 
 * **One plate, both directions.** The tones go out through it, and the other band's tones come in through it.
-* **A second plate on the outer face**, wired to the board's ground. Nobody holds a return wire, so this one couples to the room instead (5.4).
-* **Two amplifiers** between the plate and the Pico, because what arrives is tiny (5.4).
-* **The rest is for the wearer:** the button Savithri held for five seconds, the light that blinked, the buzz on his wrist. Figure 3.4 has every one of them.
+* **A second plate on the outer face**, wired to the board's ground. Nobody holds a return wire, so this one couples to the room instead (6.4).
+* **Two amplifiers** between the plate and the Pico, because what arrives is tiny (6.4).
+* **The rest is for the wearer:** the button Savithri held for five seconds, the light that blinked, the buzz on his wrist. Figure 4.4 has every one of them.
 
 **Why a Pico 2 W?**
 
@@ -310,17 +310,17 @@ He had met most of it already, from the outside (Figure 5.1).
 * **Two cores.** One weighs five pitches in what arrives, twenty thousand times a second, all the time. The other runs the handshake and Bluetooth.
 * **Bluetooth on board.** The phone link needs no second chip.
 * **A buck-boost converter on board.** A Li-ion cell starts above 3.3 V and ends below it. The Pico takes anything from 1.8 to 5.5 V and makes its own 3.3 V, so the battery needs no regulator.
-* **It runs at 144 MHz**, not the 150 it boots at. Both tones have to come out as a whole, even number of clock cycles (800 and 720), and 144 MHz is the nearest clock that does it for both (5.5).
+* **It runs at 144 MHz**, not the 150 it boots at. Both tones have to come out as a whole, even number of clock cycles (800 and 720), and 144 MHz is the nearest clock that does it for both (6.5).
 * **Small.** 21 × 51 mm, and it plugs into a socket on the band's board.
 
 Appendix A has the parts, appendix B every step to build it.
 
-#### 5.3 One card's journey
+#### 6.3 One card's journey
 
 ![One card's journey](element14-blog/01-layers.png)
-*Figure 5.2. Rohit's card on its way to Savithri. Hers makes the same trip the other way, at the same time. Click to enlarge.*
+*Figure 6.2. Rohit's card on its way to Savithri. Hers makes the same trip the other way, at the same time. Click to enlarge.*
 
-* Follow the numbers in Figure 5.2, 1 to 22.
+* Follow the numbers in Figure 6.2, 1 to 22.
 * **Blue**, at the desk: Rohit's phone gives his card to his band.
 * **Red**, the handshake: his band sends it through the two of them, into hers.
 * **Green**, a moment later: her band passes it to her phone.
@@ -336,12 +336,12 @@ Everything in red comes from three facts:
 2. A handshake is about a second long.
 3. Nobody announces it.
 
-#### 5.4 The wire is a person
+#### 6.4 The wire is a person
 
-The wire is somebody, so it must be safe. And it is a terrible wire, so little gets through (Figure 5.3).
+The wire is somebody, so it must be safe. And it is a terrible wire, so little gets through (Figure 6.3).
 
 ![The loop a handshake makes](element14-blog/02-the-loop.png)
-*Figure 5.3. The loop a handshake makes. The only thing that touches is the two hands.*
+*Figure 6.3. The loop a handshake makes. The only thing that touches is the two hands.*
 
 * **Rohit's band puts the tone out.** A pin on the Pico switches between two pitches, 180 and 200 kHz, and one of them is on the plate at all times. No radio, no aerial.
 * **His plate puts the tone onto his skin.** Without touching it: the plate is coated, so it is half a capacitor, and the tone crosses the last gap as an electric field.
@@ -350,14 +350,14 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **Her band hears it.** Every 50 µs it scores both pitches and asks only which was louder. Three more bins, at 140, 160 and 220 kHz, carry nothing and measure the room alongside them.
 * **The room closes the loop.** Nobody holds a return wire, so each band's outer electrode couples to the floor and the walls.
 
-#### 5.5 Two tones, and three that nobody sends
+#### 6.5 Two tones, and three that nobody sends
 
 The first version of this radio switched one tone on and off. Every question the receiver could ask then began *"is this louder than usual?"*, and *usual* is a number you have to remember. Appendix C is what that cost.
 
-The rebuild is one sentence: **stop measuring against a remembered number, and measure against another measurement, one the band's own transmitter cannot reach.** (Figure 5.4)
+The rebuild is one sentence: **stop measuring against a remembered number, and measure against another measurement, one the band's own transmitter cannot reach.** (Figure 6.4)
 
 ![Five bins](element14-blog/26-five-bins.png)
-*Figure 5.4. What the band weighs: the two tones every 50 µs, the three room pitches every fourth. One tone is on the plate at a time, and here it is A.*
+*Figure 6.4. What the band weighs: the two tones every 50 µs, the three room pitches every fourth. One tone is on the plate at a time, and here it is A.*
 
 * **Two tones, not one.** 180 kHz and 200 kHz. Every 50 µs the band scores both and asks which is louder. That answer is one step of the message. A dry hand or a loose grip makes both quieter together, so the comparison still comes out right.
 * **Three pitches nobody ever sends.** 140, 160 and 220 kHz, scored through the same amplifier and the same body as the tones. They are not a message. They are a live reading of how noisy the room is.
@@ -366,16 +366,16 @@ The rebuild is one sentence: **stop measuring against a remembered number, and m
 * **The margin is computed, not tuned.** It comes from a sentence, *I will accept one moment a minute where the band thinks someone is there and nobody is*, and the arithmetic follows. Nobody turned a knob until the bench looked happy.
 * **Two tones are never off.** With one tone, half the message is silence and carries nothing. With two, every step is a tone at the same peak voltage, so each bit arrives with about twice the energy, and nothing in the amplifier changed.
 
-#### 5.6 From tones to bits
+#### 6.6 From tones to bits
 
 Three steps: weigh the pitches, read each bit, find where a frame starts.
 
 ##### 5.6.1 Weighing the pitches
 
 ![What the Goertzel filter replaces](element14-blog/10-goertzel.png)
-*Figure 5.5. What the Goertzel filter replaces. Dashed: the parts the band does not have.*
+*Figure 6.5. What the Goertzel filter replaces. Dashed: the parts the band does not have.*
 
-There are two usual ways to hear a tone (Figure 5.5).
+There are two usual ways to hear a tone (Figure 6.5).
 
 * **The full receiver** shifts it down with an oscillator and a mixer, then filters and amplifies it again.
 * **It needs two mixers**, I and Q. The two bands run on separate clocks, so a tone arrives at any phase, and one mixer's output fades with the phase.
@@ -404,9 +404,9 @@ There are two usual ways to hear a tone (Figure 5.5).
 ##### 5.6.2 Reading each bit
 
 ![Which tone is louder](element14-blog/27-which-tone.png)
-*Figure 5.6. The same four bits, through a firm grip and a light one. The key is the square wave the pin sends; the rows under it are what survives two bodies and the band's filters. The gap between the two pitches is drawn far wider than it is: they are really 180 and 200 kHz, a tenth apart.*
+*Figure 6.6. The same four bits, through a firm grip and a light one. The key is the square wave the pin sends; the rows under it are what survives two bodies and the band's filters. The gap between the two pitches is drawn far wider than it is: they are really 180 and 200 kHz, a tenth apart.*
 
-* **Each bit is two chips.** 180 kHz then 200 kHz is a 0; 200 kHz then 180 kHz is a 1. This is Manchester coding (Figure 5.6).
+* **Each bit is two chips.** 180 kHz then 200 kHz is a 0; 200 kHz then 180 kHz is a 1. This is Manchester coding (Figure 6.6).
 * **How much arrives changes** with grip and posture. It does not matter: the receiver never asks how loud, only which of the two was louder.
 * **Every bit changes in the middle**, so the receiver never loses count.
 * **The imbalance cancels.** Every bit carries one chip of each tone, so if one tone always arrives a tenth stronger, both halves of every bit carry that tenth. The band measures the imbalance anyway, on every frame, and reports it, but nothing corrects for it, because nothing needs to.
@@ -414,32 +414,32 @@ There are two usual ways to hear a tone (Figure 5.5).
 
 ##### 5.6.3 Finding where a frame starts
 
-A card does not fit in one go, so it goes in frames. Figure 5.7 is one frame; section 5.7 is how the card is cut up.
+A card does not fit in one go, so it goes in frames. Figure 6.7 is one frame; section 6.7 is how the card is cut up.
 
 ![One frame](element14-blog/12-frame.png)
-*Figure 5.7. One frame, 156 ms. Each part keeps its colour in all three rows.*
+*Figure 6.7. One frame, 156 ms. Each part keeps its colour in all three rows.*
 
 * **The start is a landmark, not a count.** Some of the preamble is lost while the receiver wakes up, so it never counts chips. It looks for the one 00, then checks the seven chips after it.
 * **Why the marker reads differently in the two rows.** 11110000 is the marker's eight *bits*. On the plate every bit is two chips, so those eight go out as sixteen, and the one place the alternation breaks is where the four 1s turn into the four 0s. That break is the 00, and the seven chips after it are what the receiver checks.
 * **How strict that check is, is also computed.** From another sentence, *one false start per 24 hours of listening*, the receiver works out how clean the run in front of it has to be: 28 transitions out of 30.
 * **No length field.** A length can itself arrive damaged. Every frame is the same size, and the header says how many frames make the card.
 
-#### 5.7 The card is too big
+#### 6.7 The card is too big
 
-* A vCard is nearly half common parts: `BEGIN:VCARD`, `TEL;TYPE=CELL`, `END:VCARD` (Figure 5.8).
+* A vCard is nearly half common parts: `BEGIN:VCARD`, `TEL;TYPE=CELL`, `END:VCARD` (Figure 6.8).
 * The link is slow. Sent as text, Rohit's card alone takes the whole second. Savithri's never gets a turn.
 
 ![The same card, as text and packed](element14-blog/03-packed.png)
-*Figure 5.8. A card like Rohit's, as text and packed.*
+*Figure 6.8. A card like Rohit's, as text and packed.*
 
-* **Packed (Figure 5.2, box 7):** labels become one-byte tags, digits go two to a byte, common email domains become one byte. 169 bytes becomes 79, and both cards fit.
+* **Packed (Figure 6.2, box 7):** labels become one-byte tags, digits go two to a byte, common email domains become one byte. 169 bytes becomes 79, and both cards fit.
 * **Packed once, at the desk.** The band stores only the packed card, so a handshake has nothing left to do but send.
-* **Savithri's band rebuilds it** (Figure 5.2, box 18) into a proper vCard before her phone sees it.
+* **Savithri's band rebuilds it** (Figure 6.2, box 18) into a proper vCard before her phone sees it.
 
 ![Cut by importance](element14-blog/04-frames.png)
-*Figure 5.9. Sent most important first. Nothing is ever asked for twice.*
+*Figure 6.9. Sent most important first. Nothing is ever asked for twice.*
 
-* **Most important first:** name and number, then email, then the rest (Figure 5.9).
+* **Most important first:** name and number, then email, then the rest (Figure 6.9).
 * **Never half a field.** Every frame reads on its own, so a number never arrives with the wrong label.
 * **No asking again.** There is no time. A damaged frame fails its checksum and is dropped.
 * **Whatever arrived goes to the phone.** If the hands part after frame 1, Savithri still gets his name and number. Without frame 1 she gets nothing.
@@ -447,14 +447,14 @@ A card does not fit in one go, so it goes in frames. Figure 5.7 is one frame; se
 **And one thing that looked right and was not.** The plan was to send frame 1 every other time (1, 2, 1, 3, 1, 2), spending half the airtime on the part that matters most.
 
 ![Saying it twice](element14-blog/08-saying-it-twice.png)
-*Figure 5.10. What the channel carries in a one-second handshake. The two bands take turns, three frames each.*
+*Figure 6.10. What the channel carries in a one-second handshake. The two bands take turns, three frames each.*
 
-* A frame takes 156 ms. About six fit in a one-second handshake, shared between the two bands (Figure 5.10).
+* A frame takes 156 ms. About six fit in a one-second handshake, shared between the two bands (Figure 6.10).
 * Every repeat of frame 1 is a frame the other band already has. The frame it still needs never goes.
 * Simulated over one-second handshakes: frame 1 every other time gives a complete card **0 %** of the time. Each frame once, in turn: both cards complete **every time**.
 * **Fix: plain round robin.** 1, 2, 3, then round again. A brief touch still gets a name and a number, because round robin sends frame 1 first anyway. The order was what kept that promise; the repeating never did.
 
-#### 5.8 Nothing says go
+#### 6.8 Nothing says go
 
 Nothing tells the band a hand has closed. Three parts: why waiting cannot work,
 what the band does instead, and who speaks once the hands meet.
@@ -462,19 +462,19 @@ what the band does instead, and who speaks once the hands meet.
 ##### 5.8.1 Waiting does not work
 
 ![Being heard is the touch](element14-blog/05-being-heard.png)
-*Figure 5.11. Being heard is the touch.*
+*Figure 6.11. Being heard is the touch.*
 
 * **No button, no accelerometer, no touch sensor.**
-* **Quiet means nothing.** There is no channel until the hands meet, so an empty room and a hand in a hand sound exactly the same (Figure 5.11).
+* **Quiet means nothing.** There is no channel until the hands meet, so an empty room and a hand in a hand sound exactly the same (Figure 6.11).
 * **If every band waits to hear someone, no band ever speaks.**
 * **Being heard is the touch.** Hearing another band is itself the proof, because there was no path until the hands met.
 
 ##### 5.8.2 So every band keeps beaconing
 
 ![The rendezvous](element14-blog/28-beacon.png)
-*Figure 5.12. One band's cycle, drawn to scale in time, and what happens when a hand closes on another wrist.*
+*Figure 6.12. One band's cycle, drawn to scale in time, and what happens when a hand closes on another wrist.*
 
-* **Every band runs the same loop, all day:** beacon, then listen, then beacon again (Figure 5.12).
+* **Every band runs the same loop, all day:** beacon, then listen, then beacon again (Figure 6.12).
 * **The beacon is a short frame** carrying a nonce, a number drawn at random and used once, under a checksum.
 * **It never beacons over someone else.** The listening clock only runs while the channel is quiet, so a band that can hear anything at all remains silent.
 * **Is that a peer?** The checksum passed, and noise almost never passes a checksum.
@@ -486,33 +486,33 @@ what the band does instead, and who speaks once the hands meet.
 ##### 5.8.3 The one that heard, sends
 
 ![The hearer sends](element14-blog/06-hearer-sends.png)
-*Figure 5.13. Figure 5.12 zoomed out: the one that heard sends first, then one frame each, in turn.*
+*Figure 6.13. Figure 6.12 zoomed out: the one that heard sends first, then one frame each, in turn.*
 
-* **A band is deaf while it beacons, and for a moment after.** So a band that managed to read a beacon had not started one of its own (Figure 5.13).
+* **A band is deaf while it beacons, and for a moment after.** So a band that managed to read a beacon had not started one of its own (Figure 6.13).
 * **At most one band can ever read the other.** There is nothing to elect, and no tie to break.
-* **The reader goes first** (box 9 of Figure 5.2). It is the only one that knows a handshake has started.
+* **The reader goes first** (box 9 of Figure 6.2). It is the only one that knows a handshake has started.
 * **The beaconer receives.** As far as it knows it spoke into an empty room, and its ears are already open when the frame arrives.
 * **One frame each, then swap.** Not a whole card each. They alternate frame by frame, so a touch that ends early still leaves both ends with a name and a number.
 * **One pad, one direction at a time.** Each band waits out the other end's recovery before it starts, so the far end is certainly listening.
 
-### 6 What the next one does better
+### 7 What the next one does better
 
 The pair works, and one handshake carries both cards. This is where it stands today, and what I would put into the next pair.
 
-#### 6.1 The handshake
+#### 7.1 The handshake
 
 * **The band goes on the hand that shakes.** Worn on the other wrist, the card does not get through. I expected either wrist to work, and nothing in the design says otherwise. It simply turned out that way, and both wrists is a thing to win back.
 * **A held clasp is what carries a card.** Both hands wrapped round, skin against skin, held until the LED flashes white and then goes green. The way the hands sit is what matters. The next pair should get the same result out of an ordinary shake.
 * **Touch should be the only path.** Two bands brought within about 10 cm of each other complete a handshake with nobody holding either of them. That is not what I wanted: only the hand I shook should get my card. Further apart, on the bench, nothing gets through, so this is a near field leak.
 * **The tones sit at the top of what this chip can read.** The Pico's converter samples at 500 kHz, which puts the ceiling at 200 kHz. I want to experiment with higher frequencies, and that needs a hardware update.
 
-#### 6.2 The physical layer, rebuilt twice and open to a third
+#### 7.2 The physical layer, rebuilt twice and open to a third
 
 * **The first one switched a single tone on and off,** and taught me that off is never really off. Appendix C is that story.
 * **The second sends two tones and asks only which is louder.** Worn, it is about twice as good as the first.
 * **There are industry standards to learn from.** I am a beginner in this domain, and each version here answered the previous one's worst bug. Before writing a third, the right move is to study what industry already does for a channel like this and reuse it, instead of reinventing the wheel.
 
-#### 6.3 The board
+#### 7.3 The board
 
 * **It was designed in two days,** because that is all the time there was. The board works. The next one needs more thought and more research behind every choice on it.
 * **The button wants to be a right angle part.** The one fitted points straight up and the case needs it out of the side, so it was bent over and glued to the board. A right angle switch in the footprint settles it.
@@ -520,14 +520,14 @@ The pair works, and one handshake carries both cards. This is where it stands to
 * **The motor was meant to sit on the wall of the case,** so that the whole box buzzes against the wrist. The cheap coin motor's wires were short and stiff, and could not be used to hold it there, so it went onto double sided tape on the PCB instead. A surface mount motor soldered to the board answers the wires and the mounting together.
 * **One port should program and charge.** Today the Pico's port programs, and the cell is charged on a separate TP4056 module, plugged into the board through a 2 pin JST-XH port and left outside the case. The charger belongs on the board.
 
-#### 6.4 Power and size
+#### 7.4 Power and size
 
 * **There is a lot of sleep to win.** Both cores run flat out all day, one weighing five pitches twenty thousand times a second, the other on Bluetooth. Nothing is gated and nothing is clocked down when there is no hand anywhere near.
 * **Battery life is the number to measure first.** I have not measured the current draw once, and on a 500 mAh cell a full show day is a guess. Measure it, then let the listening duty cycle set the life.
 * **Watch sized is the target.** Today it is 45 × 65 × 25 mm on a 22 mm strap, which reads as a prototype strapped to an arm. To wear one into a meetup it has to be smaller.
 * **Most of that volume is the Pico, and it is there for one reason.** PIO makes the tones and leaves the processor free. Move the tone and its reading into parts of their own, and a much smaller module does the rest, something like a Seeed XIAO ESP32S3, with the board shrinking around it.
 
-#### 6.5 The app, and what to add to it
+#### 7.5 The app, and what to add to it
 
 * **A pocketful of cards.** A band hands each card to the phone as it arrives. The next one keeps a whole day of them on the wrist, so the phone can stay in a bag all afternoon.
 * **The band's own clock.** The meet time on a card today is when the card reached the phone, not when the hands met. If the phone was not connected at the time, the meet time is wrong. Give the band the time when it connects, and it can stamp the handshake itself.
@@ -535,7 +535,7 @@ The pair works, and one handshake carries both cards. This is where it stands to
 * **An iPhone app.** The app today is Android only. The same app is needed for iPhone.
 * **A reminder, two days later.** The app knows when you met. A quiet reminder to message the person, before the meeting is forgotten.
 
-### 7 The end
+### 8 The end
 
 The taxi pulled onto the flyover, and Rohit let his head fall back against the seat. He had made it. Just.
 
@@ -749,7 +749,7 @@ Step P of the bring-up guide. This is the part that decides whether the band wor
 
 <!-- TODO image 24-plate.jpg (Figure B.2): the bottom half open, seen from the side or in a cutaway: the taped skin plate on the outside against the wrist, then the board, then the cell, then the outer electrode facing up and away from the arm. The stacking order is the one thing in this appendix that words do badly. -->
 
-**There are two electrodes, not one.** The skin plate is the signal. The outer one is the return path, and it is the difference between a link that dies after a few seconds and one that runs all day (5.4).
+**There are two electrodes, not one.** The skin plate is the signal. The outer one is the return path, and it is the difference between a link that dies after a few seconds and one that runs all day (6.4).
 
 * **Solder the free end of the plate wire** to the copper side of one 25 × 25 mm square. The other end is already in the board's `PAD` hole: it went in during bring-up, as the bench electrode, and the plate is what it grows into.
 * **Cover that copper completely** with one layer of clear packing tape, round the edges. Thinner tape couples better. This is the insulation the safety rules turn on.
@@ -790,7 +790,7 @@ Nothing in the build sets a frequency, a threshold or a role. The tones, the clo
 
 #### B.9 Pair and set up
 
-The same steps Rohit took at the desk in chapter 2, once per band. Figure 3.4 is what each light means.
+The same steps Rohit took at the desk in chapter 3, once per band. Figure 4.4 is what each light means.
 
 * **Switch the band on.** A slow blue pulse means it is waiting for a phone.
 * **In the app, tap `Pair a band`** and scan the label, or type the four digits. Android asks you to confirm one device.
@@ -828,7 +828,7 @@ Then, for real:
 
 ### Appendix C: The first radio, and what it taught
 
-The bands in chapter 5 are the second design. The first one worked, exchanged real cards through real people, and was then deleted. It is written down here because its mistakes are ones anybody building this would make, and because the reasoning that replaced it only makes sense against what it replaced.
+The bands in chapter 6 are the second design. The first one worked, exchanged real cards through real people, and was then deleted. It is written down here because its mistakes are ones anybody building this would make, and because the reasoning that replaced it only makes sense against what it replaced.
 
 #### C.1 One tone, switched on and off
 
