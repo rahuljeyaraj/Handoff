@@ -94,3 +94,6 @@ _autosave-*
 # Band labels (python tools/band_label.py XXXX regenerates one in a second)
 /band-*.png
 /band-*.svg
+
+# Bench logs (serial captures from a session, not project files)
+*.log
