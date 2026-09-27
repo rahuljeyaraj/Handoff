@@ -61,7 +61,7 @@ That is the idea. Here is the thing itself, before the rest of the post takes it
 *Figure 2.5. The whole circuit, on one sheet. A Pico 2 W does everything digital, top left. The block in the middle is the part this post is really about: one pin drives the skin plate, and the same plate feeds an amplifier that lifts what comes back off the other person. The rest is a cell and a switch, the light, the motor and the button.*
 
 ![The board, both sides](element14-blog/36-layout.png)
-*Figure 2.6. The board, 40 by 62 mm, two layers. Left: the top, where the Pico sits on two header strips, with the amplifier beside it and the plugs around the edge. Right: the same board seen from underneath, which carries the rest of the small parts and a row of solder jumpers. Every jumper ships open, so the board can be brought up one stage at a time. Chapter 9 is where these came from.*
+*Figure 2.6. The board, 40 by 62 mm, two layers. Left: the top, where the Pico sits on two header strips, with the amplifier beside it and the plugs around the edge. Right: the same board seen from underneath, which carries the rest of the small parts and a row of solder jumpers. Every jumper ships open, so the board can be brought up one stage at a time.*
 
 *Want to build a pair? Everything you need is in the appendices at the end: the parts list in appendix A, the build in appendix B.*
 
