@@ -33,8 +33,6 @@
  *   ring stopped    the standalone read below, which is read_vsys as it was.
  *                   Correct when nothing else owns the converter: the bench
  *                   apps, and boot before the ring starts.
- *
- * The full argument is docs/vsys-in-the-ring.md.
  */
 #include "power.h"
 

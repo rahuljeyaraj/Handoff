@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
  * an email is a failed handshake, not a contact (design decisions §4a): it is
  * reported, kept for diagnostics, and never becomes a list entry.
  *
- * ONE BAND, ONE PHONE (docs/band-ownership-brief.md). The band keeps one
+ * ONE BAND, ONE PHONE. The band keeps one
  * bond and pairs with nobody else until it is reset — by its button, or by
  * this app's *Forget this band* ([forgetBand]). The reverse also holds: when
  * the band stops honouring this phone's key, because it was reset for a new

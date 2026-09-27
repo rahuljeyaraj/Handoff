@@ -75,7 +75,7 @@ uint32_t adc_ring_noise_floor(int32_t *mean_code);
  * block counter and sample clock run through the measurement — only AINSEL
  * moves, the way noise_floor() moves it to the temperature sensor. Stopping
  * the ring instead would reset the sample clock that hal_pico's own-send
- * cutting is placed on (docs/vsys-in-the-ring.md, §2.2).
+ * cutting is placed on.
  *
  * Requested from core 0; serviced by whoever drains the ring (core 1 on the
  * product image): adc_ring_aux_poll() once per loop picks the request up

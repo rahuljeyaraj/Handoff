@@ -6,8 +6,7 @@ THE POINT. scripts/link2.py reads a band over USB, and design §13 forbids a USB
 tether to a mains-powered PC while anyone is touching an electrode. That is not
 only a safety rule. On 24 Sep 2026 a tethered run measured a carrier and decoded
 ZERO frames, because both bands then share the PC's ground and that wire IS the
-return path under test - the reading was wrong, not just unsafe. See
-docs/link-debug-brief.md.
+return path under test - the reading was wrong, not just unsafe.
 
 So the bands stay floating on their cells and say nothing over USB. Each one
 pushes ble_bench_t AND ble_trig_t to its own phone over BLE twice a second; the

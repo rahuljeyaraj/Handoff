@@ -186,7 +186,7 @@ void test_link(void)
     }
 
     /*
-     * simple-trigger-spec §4.5 and §4.4 together. Two silent receive turns send
+     * Two silent receive turns send
      * the exchange back through the trigger rather than through an election
      * redraw, and the half-built record has to survive that trip — it is still
      * that person's card, and architecture §8.4's whole argument is that half a

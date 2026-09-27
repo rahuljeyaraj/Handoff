@@ -135,8 +135,7 @@ static void cmd_vsys(void)
      * SPI clock line is the divider's only path to the pin — then claim
      * the pad, throw the settling conversions away (the divider is ~66 kOhm, so
      * the first reads come in low), and average. The driver restores GP29
-     * on its next transaction; docs/vsys-in-the-ring.md 2.3 says not to
-     * restore it by hand. */
+     * on its next transaction; do not restore it by hand. */
     if (!s_cyw43) {
         printf("    vsys unavailable: the CYW43 did not start, and GP29 "
                "reads nothing without it\n");

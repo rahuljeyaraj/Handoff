@@ -22,8 +22,7 @@
  *                  previous wearer left (handoff.c) and posts BOND_CLEARED
  *
  * Nothing happens at any shorter hold. A 2 s "dev mode" toggle used to live
- * between the two and was removed with the ownership model
- * (docs/band-ownership-brief.md §5).
+ * between the two and was removed with the ownership model.
  *
  * GP15 is also where M14's bench sync pulse lived. The two cannot share a
  * pin — on the product board a press during a driven-high pulse shorts the

@@ -51,7 +51,7 @@
  * subscribed) is HELD — the LED says so — and handed over when one
  * subscribes.
  *
- * ONE BAND, ONE PHONE (docs/band-ownership-brief.md). The band has no owner
+ * ONE BAND, ONE PHONE. The band has no owner
  * or exactly one; ble.c gates pairing on it. reset_for_new_wearer() — the
  * 5 s hold, or BLE_CTRL_RESET from the owner's app — wipes everything the
  * previous wearer left and puts the band back to no owner.
@@ -562,7 +562,7 @@ static void on_my_vcard(const char *text, size_t len, void *ctx)
 }
 
 /*
- * Reset for a new wearer (docs/band-ownership-brief.md §2). From the button
+ * Reset for a new wearer. From the button
  * or from the owner's app, and the same either way: everything the previous
  * wearer left goes — the bond, the card, a received card still being held
  * for a phone that never came, and the vibrate preference (store_forget

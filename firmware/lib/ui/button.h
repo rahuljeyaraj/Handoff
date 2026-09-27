@@ -15,7 +15,7 @@
  * a REACHED event at that instant: that is the motor's tap telling the
  * finger "you can let go now" — without it there is no way to know when 5 s
  * has passed. There is no shorter hold: a 2 s "dev mode" toggle used to live
- * here and was removed with the ownership model (docs/band-ownership-brief).
+ * here and was removed with the ownership model.
  *
  * Debounce is in firmware (no cap on the board): a level has to hold for
  * BUTTON_DEBOUNCE_MS before it counts. Feed the raw level as often as you

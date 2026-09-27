@@ -389,7 +389,7 @@ On contact, each wristband waits a random 0–5 ms and then listens. If a carrie
 >
 > There is no election and no backoff. The firmware needs a *contact trigger* regardless — this document gives the board no button and no touch sensor, so the only thing that can tell a wristband a handshake has started is hearing a transmission — and once that trigger exists, it has already named a sender. Each band shouts a short flat carrier and then listens continuously; a band is deaf only during its own shout, so of any two shouts only the later one can be heard, and the band that hears a shout is the one that sends. Both-send and both-listen are unreachable rather than improbable, so there is nothing left for a draw to arbitrate.
 >
-> `HANDOFF_BACKOFF_MAX_US` and `lib/proto/elect.c` are deleted. See firmware-architecture §7.6, §13.3 and `docs/simple-trigger-spec.md`.
+> `HANDOFF_BACKOFF_MAX_US` and `lib/proto/elect.c` are deleted. See firmware-architecture §7.6 and §13.3.
 >
 > The rejection of burned-in priority IDs below is unaffected and still stands.
 

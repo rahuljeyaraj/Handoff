@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-The QR label for the underside of a band (android-app-decisions.md §2a).
+The QR label for the underside of a band.
 
 The label carries the band's identity as the radio advertises it: the four
 hex digits after "Handoff band " in its BLE name, which ble.c derives from the

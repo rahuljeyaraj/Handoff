@@ -68,8 +68,8 @@ struct halh_node {
 
     /* Injected randomness for the trigger's listen draw. When forced_len is
      * non-zero these values are handed out in order and then repeat, so two
-     * bands can be given identical windows and the degenerate case of
-     * simple-trigger-spec §4.1 becomes exact rather than rare. */
+     * bands can be given identical windows and the degenerate case
+     * becomes exact rather than rare. */
     uint32_t      forced[8];
     uint8_t       forced_len;
     uint8_t       forced_pos;

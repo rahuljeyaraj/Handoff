@@ -52,9 +52,7 @@ Flash the band with `handoff.uf2` first — see the root
 | [`ui/screens/`](app/src/main/java/com/handoff/band/ui/screens/) | Contacts (home), detail, edit, Settings, Band, Your card, Setup, Advanced |
 | [`ui/Nav.kt`](app/src/main/java/com/handoff/band/ui/Nav.kt) | the screen set and what each screen is wired to |
 
-The design behind the screens, and every decision it records, is in
-[`docs/android-app-decisions.md`](../docs/android-app-decisions.md). Artboards
-are in [`design/android-redesign/`](../design/android-redesign/).
+Artboards for the screens are in [`design/android-redesign/`](../design/android-redesign/).
 
 ## Pairing
 

@@ -1,6 +1,5 @@
 # Generates docs/element14-blog/12-frame.svg and .png
-# One frame on the body link, redrawn from m1-walkthrough/07-frame.svg (its
-# parts A, B and C; D, the slicer, is left out). Colours here mean the part of
+# One frame on the body link: its parts A, B and C (D, the slicer, is left out). Colours here mean the part of
 # the frame, the same in all three rows, at the user's request: preamble blue,
 # marker purple, header green, card amber, checksum red.
 #

@@ -78,8 +78,7 @@ typedef enum {
     BLE_CTRL_LINK         = 0x0B,  /* u8: 0 = link off, 1 = on        (bench) */
     BLE_CTRL_RESET        = 0x09   /* no args: reset for a new wearer — bond, card,
                                       held card, preferences; the band then drops
-                                      the link. The app's "Forget this band"
-                                      (docs/band-ownership-brief.md §3). */
+                                      the link. The app's "Forget this band". */
 } ble_ctrl_op_t;
 
 /* ---- status ----------------------------------------------------------- */
@@ -134,7 +133,7 @@ _Static_assert(sizeof(ble_status_t) == 20, "status must fit one notify at the 23
  * why it is not merely a safety rule: tethered, both bands share the PC ground
  * and that wire IS the return path under test, so chip energy read 1530 and
  * carrier level 144 while ZERO frames decoded. The readings were not just
- * unsafe, they were wrong. See docs/link-debug-brief.md.
+ * unsafe, they were wrong.
  *
  * WHY TELEMETRY AND NOT STATUS. ble_status_t is full: 20 bytes is one notify
  * at the 23-byte ATT floor and its own comment says a version 3 needs a
@@ -418,7 +417,7 @@ bool     ble_status_subscribed(void);
 /* ---- the bond: one band, one phone ------------------------------------ */
 
 /*
- * A band has no owner or exactly one (docs/band-ownership-brief.md §1).
+ * A band has no owner or exactly one.
  * Both states persist in flash; advertising is open in both, so the owner
  * can find the band and a bystander can use the bench-only characteristics.
  * What is gated is PAIRING: with no bond stored any phone may pair; with

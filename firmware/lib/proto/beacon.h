@@ -1,6 +1,6 @@
 /*
  * Handoff — the contact trigger. What takes a band out of LINK_IDLE.
- * docs/link-v2-design.md §7, docs/link-v2-brief.md §8. Link v2 step 7.
+ * docs/link-v2-design.md §7. Link v2 step 7.
  *
  * The filename still says "beacon" to limit churn; the module is the trigger.
  *

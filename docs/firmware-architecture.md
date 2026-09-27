@@ -1,9 +1,8 @@
 # Handoff — Firmware Architecture
 
-Rev 1.0. Companion to [body-coupled-handshake-design.md](body-coupled-handshake-design.md)
-and [development-plan.md](development-plan.md).
+Rev 1.0. Companion to [body-coupled-handshake-design.md](body-coupled-handshake-design.md).
 
-The design document specifies the link. The development plan specifies the order.
+The design document specifies the link.
 This document specifies **the shape of the code** — every module, every seam and
 every interface, including ones nothing uses yet.
 
@@ -310,8 +309,7 @@ half-built record and the contact budget — with a bounded retry count.
 ### 7.6 What takes a band out of `IDLE`
 
 `lib/proto/beacon.c` — the filename is historical; the module is the trigger.
-The specification is `docs/simple-trigger-spec.md`, with diagrams in
-`docs/simple-trigger/`. This section is the summary and the divergence record.
+This section is the specification, the summary and the divergence record.
 
 An earlier draft of §7.1 said `IDLE` exits on "carrier detected, or host says
 go", which is not a mechanism: if every band waits to hear a carrier, no band
@@ -899,10 +897,10 @@ implemented it wrong.
 states, and the beacon's wake-role hint. Design §9.6 specified it and §7.3 used
 to describe it. §7.6's trigger replaces it: the sender is decided by which band
 could physically hear the other's shout, which is a property of the timing
-rather than a draw, so there is no tie to break and nothing to redraw. The full
-specification is `docs/simple-trigger-spec.md`.
+rather than a draw, so there is no tie to break and nothing to redraw.
 
-**Three claims in that spec were arithmetic and are now measured.** The spec was
+**Three claims in the trigger's original spec were arithmetic and are now
+measured.** The spec was
 explicit that they were estimates and should not be inherited as facts:
 
 | claim | was | measured |
