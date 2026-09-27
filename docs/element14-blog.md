@@ -4,6 +4,30 @@
 
 *The PCBs for this project were sponsored by [PCBWay](https://www.pcbway.com/). More about them towards the end.*
 
+---
+
+### See it first
+
+Two people wearing a Handoff band shake hands. Their contact details cross between them, through the handshake itself, and land in each other's phones. No cards, no scanning, no app to open.
+
+**[Watch the demo](PASTE-YOUTUBE-LINK-HERE)**
+
+<!-- TODO: replace PASTE-YOUTUBE-LINK-HERE with the YouTube URL -->
+
+![A finished band](element14-blog/31-band-outside.jpg)
+*A finished band on its strap. The lid, then the side with the power switch and the light, then the end with the single button.*
+
+![A section through the band](element14-blog/34-cross-section.png)
+*The same band in section. The skin plate at the bottom is the one that meets the wrist, and the whole of this post is about getting a signal from that plate, through a person, into the plate on someone else's band.*
+
+![A band taken apart](element14-blog/33-band-apart.jpg)
+*Opened up. Left: the Pico lifted out of its socket, leaving the band's own board with the amplifier, the motor, the switch, the button and the light on it. Right: the board out as well, turned over, and the cell in its pocket.*
+
+![The two plates](element14-blog/32-band-plates.jpg)
+*There are two plates, not one. Left: the skin plate, taped over and recessed into the back, with the band's label beside it. Right: the same band opened, and the second plate inside the lid. Section 5.4 is why the second one matters.*
+
+---
+
 ### 1 The idea
 
 History remembers the first message sent on every new technology.
@@ -678,10 +702,7 @@ Full rules: `docs/body-coupled-handshake-design.md`, section 13.
 
 Appendix A, in full. Two things there are easy to get wrong and expensive to discover late: the **cell's plug** must be 2.50 mm JST-XH, and the **diodes** must be the Tech Public PMEG3020ER-TP in SOD-123FL, not the Nexperia part of nearly the same name in a different package.
 
-![A band taken apart](element14-blog/33-band-apart.jpg)
-*What the parts add up to. Left: the Pico lifted out of its socket, leaving the band's own board, with the amplifier, the motor, the switch, the button and the LED on it. Right: the board lifted out too, turned over, and the cell sitting in its pocket in the bottom half.*
-
-<!-- TODO image 23-parts.jpg: everything in appendix A, laid out on the bench for one band, so a builder can check their own pile against it. -->
+<!-- TODO image 23-parts.jpg (Figure B.1): everything in appendix A, laid out on the bench for one band: the bare board, the Pico, the headers, the tape of 0603s, the LED, the motor, the cell, the TP4056, the two copper squares, the two printed halves and the strap. This is the picture a builder checks their own pile against. -->
 
 #### B.3 Set up the PC
 
@@ -726,8 +747,7 @@ The bench work ends at step 11, with the band running on its own cell and both d
 
 Step P of the bring-up guide. This is the part that decides whether the band works on a wrist rather than on a bench.
 
-![The two plates](element14-blog/32-band-plates.jpg)
-*The two electrodes. Left: the skin plate, taped over and sitting in a recess on the outside of the bottom half, with the band's label beside it. Right: the same band opened, the outer electrode taped inside the top half with its single wire to board ground. The board and the cell sit between the two.*
+<!-- TODO image 24-plate.jpg (Figure B.2): the bottom half open, seen from the side or in a cutaway: the taped skin plate on the outside against the wrist, then the board, then the cell, then the outer electrode facing up and away from the arm. The stacking order is the one thing in this appendix that words do badly. -->
 
 **There are two electrodes, not one.** The skin plate is the signal. The outer one is the return path, and it is the difference between a link that dies after a few seconds and one that runs all day (5.4).
 
@@ -779,10 +799,7 @@ The same steps Rohit took at the desk in chapter 2, once per band. Figure 3.4 is
 
 #### B.10 The first handshake
 
-![A finished band](element14-blog/31-band-outside.jpg)
-*A finished band, closed and on its strap. The lid, then the side with the power switch and the light, then the end with the button Savithri held for five seconds.*
-
-<!-- TODO image 25-band.jpg: the same band worn on a wrist, label showing. -->
+<!-- TODO image 25-band.jpg (Figure B.3): a finished band worn on a wrist, strap on, label showing. The first photograph of the actual thing in the post; everything before this is drawings and bare boards. -->
 
 **Prove the pair on the bench first**, which needs nobody but you: both bands on USB with a console each, held back to back so the two taped plates touch, and a `done` line appears on both. That shows both bands are alive and can complete an exchange. It does not prove coupling, because two bands on one laptop already share a ground. The wrist is what proves coupling.
 
