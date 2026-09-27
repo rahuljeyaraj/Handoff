@@ -35,8 +35,6 @@ Handoff is a band on the wrist. When two people wearing one shake hands, their c
 
 You let go, and the conversation can carry on next week. The handshake that closed it is the one that kept it.
 
----
-
 ### 2 The gallery
 
 That is the idea. Here is the thing itself, before the rest of the post takes it apart.
@@ -58,8 +56,6 @@ That is the idea. Here is the thing itself, before the rest of the post takes it
 *Figure 2.4. There are two plates, not one. Left: the skin plate, taped over and recessed into the back, with the band's label beside it. Right: the same band opened, and the second plate inside the lid. Section 6.4 is why the second one matters.*
 
 *Want to build a pair? Everything you need is in the appendices at the end: the parts list in appendix A, the build in appendix B.*
-
----
 
 ### 3 The setup
 
@@ -578,14 +574,12 @@ His kind of people.
 
 A connection was made.
 
----
-
-### The boards, from PCBWay
+### 9 The boards, from PCBWay
 
 This is my first sponsored project. [PCBWay](https://www.pcbway.com/) manufactured the PCBs and shipped them to me. I only had to source the components.
 
 ![The boards as they arrived](element14-blog/13-boards.jpg)
-*A bare board as it arrived, both sides.*
+*Figure 9.1. A bare board as it arrived, both sides.*
 
 **It started with their email.** PCBWay wrote on 10 September offering to sponsor a project. The board didn't exist yet, and the Make a Connection contest deadline was 16 days away. I designed the board in two days and placed the order on Saturday.
 
@@ -599,7 +593,7 @@ This is my first sponsored project. [PCBWay](https://www.pcbway.com/) manufactur
 **Quality.** I gave these pads a hard time. Surface mount and through hole, soldered and desoldered again and again, a vacuum pump and solder wick over the same joints many times. Not one pad lifted. On the breakout boards I usually buy, a pad comes away after two or three rework sessions. These took everything I did to them and still look like new.
 
 ![Both bands on the box](element14-blog/29-bands-on-box.jpg)
-*The pair, finished, on the box they came in.*
+*Figure 9.2. The pair, finished, on the box they came in.*
 
 **Serene**, in their marketing team, made the whole thing easy, from the first email to the order going through.
 
