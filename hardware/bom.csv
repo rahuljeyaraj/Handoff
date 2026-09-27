@@ -1,5 +1,5 @@
 "Reference","Qty","Value","Package","Footprint","Description","DNP"
-"BT1","1","KP384455 3.7V 1500mAh","Off-board, on a JST-XH pigtail","","Li-ion cell, off-board, on a JST-XH pigtail",""
+"BT1","1","502030 3.7V 500mAh","Off-board, on a JST-XH pigtail","","Li-ion cell, off-board, on a JST-XH pigtail",""
 "C1,C2","2","330pF C0G","0603","Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder","Anti-alias, 321 kHz with R9,Interstage DC block",""
 "C3","1","100nF","0603","Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder","U2 decoupling, across pins 8 and 4",""
 "C4,C5","2","10uF 25V","0603","Capacitor_SMD:C_0603_1608Metric_Pad1.08x0.95mm_HandSolder","U2 bulk decoupling against the Pico SMPS, X5R 0603,VREF hold-up, X5R 0603",""

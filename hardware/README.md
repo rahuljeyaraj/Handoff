@@ -81,7 +81,7 @@ without changing the footprint.
 | J5 | JST-XH 2.54 straight 2-pin male (charger — **one more 2-pin header than before**) | through-hole | — | 1 |
 | J2 | JST-XH 2.54 straight 2-pin male (electrodes) | through-hole | — | 1 |
 | J3 | JST-XH 2.54 straight 4-pin male (LED), or the LED soldered straight in | through-hole | — | 1 |
-| BT1 | KP384455 Li-ion 3.7 V 1500 mAh | off-board, on a JST-XH pigtail | — | 1 |
+| BT1 | 502030 Li-ion 3.7 V 500 mAh | off-board, on a JST-XH pigtail | — | 1 |
 
 Copper only, nothing to buy: 8 solder jumpers JP1–JP8, 8 test pads TP1–TP8, and
 4 mounting holes H1–H4 (M3 clearance, 3.4 mm, unplated, each with a 6 mm boss

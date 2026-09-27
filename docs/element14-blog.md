@@ -462,15 +462,45 @@ what the band does instead, and who speaks once the hands meet.
 * **One frame each, then swap.** Not a whole card each. They alternate frame by frame, so a touch that ends early still leaves both ends with a name and a number.
 * **One pad, one direction at a time.** Each band waits out the other end's recovery before it starts, so the far end is certainly listening.
 
-### 6 What comes next
+### 6 What the next one does better
 
-The pair works. This is what I want the next pair to do.
+The pair works, and one handshake carries both cards. This is where it stands today, and what I would put into the next pair.
+
+#### 6.1 The handshake
+
+* **The band goes on the hand that shakes.** Worn on the other wrist, the card does not get through. I expected either wrist to work, and nothing in the design says otherwise. It simply turned out that way, and both wrists is a thing to win back.
+* **A held clasp is what carries a card.** Both hands wrapped round, skin against skin, held until the LED flashes white and then goes green. The way the hands sit is what matters. The next pair should get the same result out of an ordinary shake.
+* **Touch should be the only path.** Two bands brought within about 10 cm of each other complete a handshake with nobody holding either of them. That is not what I wanted: only the hand I shook should get my card. Further apart, on the bench, nothing gets through, so this is a near field leak.
+* **The tones sit at the top of what this chip can read.** The Pico's converter samples at 500 kHz, which puts the ceiling at 200 kHz. I want to experiment with higher frequencies, and that needs a hardware update.
+
+#### 6.2 The physical layer, rebuilt twice and open to a third
+
+* **The first one switched a single tone on and off,** and taught me that off is never really off. Appendix C is that story.
+* **The second sends two tones and asks only which is louder.** Worn, it is about twice as good as the first.
+* **There are industry standards to learn from.** I am a beginner in this domain, and each version here answered the previous one's worst bug. Before writing a third, the right move is to study what industry already does for a channel like this and reuse it, instead of reinventing the wheel.
+
+#### 6.3 The board
+
+* **It was designed in a day and a half,** because that is all the time there was. The board works. The next one needs more thought and more research behind every choice on it.
+* **The button wants to be a right angle part.** The one fitted points straight up and the case needs it out of the side, so it was bent over and glued to the board. A right angle switch in the footprint settles it.
+* **A surface mount RGB behind a diffuser is the cleaner answer.** The 5 mm through hole LED eats space inside the box, and a small part under a printed diffuser looks tidier from the outside.
+* **The motor was meant to sit on the wall of the case,** so that the whole box buzzes against the wrist. The cheap coin motor's wires were short and stiff, and could not be used to hold it there, so it went onto double sided tape on the PCB instead. A surface mount motor soldered to the board answers the wires and the mounting together.
+* **One port should program and charge.** Today the Pico's port programs, and the cell is charged on a separate TP4056 module, plugged into the board through a 2 pin JST-XH port and left outside the case. The charger belongs on the board.
+
+#### 6.4 Power and size
+
+* **There is a lot of sleep to win.** Both cores run flat out all day, one weighing five pitches twenty thousand times a second, the other on Bluetooth. Nothing is gated and nothing is clocked down when there is no hand anywhere near.
+* **Battery life is the number to measure first.** I have not measured the current draw once, and on a 500 mAh cell a full show day is a guess. Measure it, then let the listening duty cycle set the life.
+* **Watch sized is the target.** Today it is 45 × 65 × 25 mm on a 22 mm strap, which reads as a prototype strapped to an arm. To wear one into a meetup it has to be smaller.
+* **Most of that volume is the Pico, and it is there for one reason.** PIO makes the tones and leaves the processor free. Move the tone and its reading into parts of their own, and a much smaller module does the rest, something like a Seeed XIAO ESP32S3, with the board shrinking around it.
+
+#### 6.5 The app, and what to add to it
 
 * **A pocketful of cards.** A band hands each card to the phone as it arrives. The next one keeps a whole day of them on the wrist, so the phone can stay in a bag all afternoon.
-* **The band's own clock.** `Met today, 9:14 am` is the time the phone heard about it. Tell the band the time when it connects, and the card carries the moment of the handshake instead.
+* **The band's own clock.** The meet time on a card today is when the card reached the phone, not when the hands met. If the phone was not connected at the time, the meet time is wrong. Give the band the time when it connects, and it can stamp the handshake itself.
 * **Two cards.** A work card and a personal card, switched on the wrist with a long press, the LED saying which one is live.
-* **An iPhone app.** The band speaks ordinary Bluetooth, so nothing on the band is in the way. Somebody has to write it.
-* **A nudge, two days later.** The app knows when you met. The message you meant to send is the part that turns a handshake into a contact.
+* **An iPhone app.** The app today is Android only. The same app is needed for iPhone.
+* **A reminder, two days later.** The app knows when you met. A quiet reminder to message the person, before the meeting is forgotten.
 
 ### 7 The end
 
@@ -588,7 +618,7 @@ The supplier codes are [robu.in](https://robu.in/) and MakerBazar, because that 
 |---|---|---|
 | RGB LED, 5 mm, **common cathode** | its four legs are already in J3's hole order, so nothing crosses | 1 |
 | Coin vibration motor, 10 mm, 3 V | leads solder into J6 | 1 |
-| Li-ion cell, 1S 3.7 V, ~1500 mAh | on a **2.50 mm JST-XH** plug, not the 2.00 mm JST-PH most cells ship with. It has to lie in a 45 × 65 mm box beside the board; the one used here is 38 × 44 × 5.5 mm | 1 |
+| Li-ion cell, 1S 3.7 V, ~500 mAh | on a **2.50 mm JST-XH** plug, not the 2.00 mm JST-PH most cells ship with. It has to lie in a 45 × 65 mm box beside the board; the one used here is a 502030 cell, 30 × 20 × 5 mm | 1 |
 | TP4056 charger module | stays outside the box | 1 |
 | Single-sided copper-clad board | two 25 × 25 mm squares: the skin plate and the outer electrode | - |
 | Clear packing tape | the insulation over the skin plate. Thinner couples better | - |
