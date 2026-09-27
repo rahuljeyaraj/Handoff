@@ -1,32 +1,6 @@
 **Handoff: shake hands, share contacts**
 
-*Want to build a pair? Everything you need is in the appendices at the end: the parts list in appendix A, the build in appendix B.*
-
 *The PCBs for this project were sponsored by [PCBWay](https://www.pcbway.com/). More about them towards the end.*
-
----
-
-### See it first
-
-Two people wearing a Handoff band shake hands. Their contact details cross between them, through the handshake itself, and land in each other's phones. No cards, no scanning, no app to open.
-
-**[Watch the demo](PASTE-YOUTUBE-LINK-HERE)**
-
-<!-- TODO: replace PASTE-YOUTUBE-LINK-HERE with the YouTube URL -->
-
-![A finished band](element14-blog/31-band-outside.jpg)
-*A finished band on its strap. The lid, then the side with the power switch and the light, then the end with the single button.*
-
-![A section through the band](element14-blog/34-cross-section.png)
-*The same band in section. The skin plate at the bottom is the one that meets the wrist, and the whole of this post is about getting a signal from that plate, through a person, into the plate on someone else's band.*
-
-![A band taken apart](element14-blog/33-band-apart.jpg)
-*Opened up. Left: the Pico lifted out of its socket, leaving the band's own board with the amplifier, the motor, the switch, the button and the light on it. Right: the board out as well, turned over, and the cell in its pocket.*
-
-![The two plates](element14-blog/32-band-plates.jpg)
-*There are two plates, not one. Left: the skin plate, taped over and recessed into the back, with the band's label beside it. Right: the same band opened, and the second plate inside the lid. Section 5.4 is why the second one matters.*
-
----
 
 ### 1 The idea
 
@@ -60,6 +34,32 @@ And that's the whole idea.
 Handoff is a band on the wrist. When two people wearing one shake hands, their contact details cross between them and land in each other's phones. They travel through the handshake itself, through the two of you.
 
 You let go, and the conversation can carry on next week. The handshake that closed it is the one that kept it.
+
+---
+
+### See it first
+
+That is the idea. Here is the thing itself, before the rest of the post takes it apart.
+
+**[Watch the demo](PASTE-YOUTUBE-LINK-HERE)**
+
+<!-- TODO: replace PASTE-YOUTUBE-LINK-HERE with the YouTube URL -->
+
+![A finished band](element14-blog/31-band-outside.jpg)
+*A finished band on its strap. The lid, then the side with the power switch and the light, then the end with the single button.*
+
+![A section through the band](element14-blog/34-cross-section.png)
+*The same band in section. The skin plate at the bottom is the one that meets the wrist, and the whole of this post is about getting a signal from that plate, through a person, into the plate on someone else's band.*
+
+![A band taken apart](element14-blog/33-band-apart.jpg)
+*Opened up. Left: the Pico lifted out of its socket, leaving the band's own board with the amplifier, the motor, the switch, the button and the light on it. Right: the board out as well, turned over, and the cell in its pocket.*
+
+![The two plates](element14-blog/32-band-plates.jpg)
+*There are two plates, not one. Left: the skin plate, taped over and recessed into the back, with the band's label beside it. Right: the same band opened, and the second plate inside the lid. Section 5.4 is why the second one matters.*
+
+*Want to build a pair? Everything you need is in the appendices at the end: the parts list in appendix A, the build in appendix B.*
+
+---
 
 ### 2 The setup
 
