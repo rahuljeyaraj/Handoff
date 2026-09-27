@@ -165,6 +165,15 @@ Late in the morning he went back to the front desk to ask where the afternoon se
 ![Met again](element14-blog/22-met-again.png)
 *Figure 3.3. Met again.*
 
+#### 3.3 What the band was telling him
+
+By the afternoon he had stopped looking at it. The band had a small vocabulary and he had picked up all of it without trying: white while the hands were together, green when a name had landed, and nothing at all the rest of the time.
+
+Everything it can say is in Figure 3.4, running at the speed it really says it.
+
+![Every light the band can show](element14-blog/30-status-light.gif)
+*Figure 3.4. Every light the band can show, and every buzz, at its real speed. The first group is what it shows on its own, the second is what it does when something happens, and the third is the button's answer about the charge. Arcs beside a bead mean the motor is running. The one-shots are replayed on a loop here so they can be seen; the timing inside each flash is the band's own.*
+
 ### 4 The companion app
 
 He found the coffee lounge at two, got a hot cup, and took a chair in the corner. The first quiet ten minutes he had had since breakfast.
@@ -268,7 +277,7 @@ He had met most of it already, from the outside (Figure 5.1).
 * **One plate, both directions.** The tones go out through it, and the other band's tones come in through it.
 * **A second plate on the outer face**, wired to the board's ground. Nobody holds a return wire, so this one couples to the room instead (5.4).
 * **Two amplifiers** between the plate and the Pico, because what arrives is tiny (5.4).
-* **The rest is for the wearer:** the button Savithri held for five seconds, the light that blinked, the buzz on his wrist.
+* **The rest is for the wearer:** the button Savithri held for five seconds, the light that blinked, the buzz on his wrist. Figure 3.4 has every one of them.
 
 **Why a Pico 2 W?**
 
@@ -757,7 +766,7 @@ Nothing in the build sets a frequency, a threshold or a role. The tones, the clo
 
 #### B.9 Pair and set up
 
-The same steps Rohit took at the desk in chapter 2, once per band.
+The same steps Rohit took at the desk in chapter 2, once per band. Figure 3.4 is what each light means.
 
 * **Switch the band on.** A slow blue pulse means it is waiting for a phone.
 * **In the app, tap `Pair a band`** and scan the label, or type the four digits. Android asks you to confirm one device.
