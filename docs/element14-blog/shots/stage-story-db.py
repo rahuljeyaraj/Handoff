@@ -1,6 +1,6 @@
 """Stage the blog story's people into a COPY of the app's contacts database.
 
-    python stage-story-db.py <backup dir> <out dir> <mode>
+    python stage-story-db.py <backup dir> <out dir> <mode> [YYYY-MM-DD]
 
 <backup dir> holds handoff.db (+ -wal, -shm) pulled from the phone. The copy in
 <out dir> is a single handoff.db (WAL folded in) ready to push back. The backup
@@ -9,7 +9,10 @@ open the backup itself with sqlite: closing it folds the WAL in and deletes
 -wal and -shm (harmless, but the restore is then the one file).
 
 Fictional people and organisations, +91 98765 xxxxx numbers, example.* mail.
-Times are 19 Sep 2026, IST, as chapters 3 and 4 tell them. Modes:
+Times are 19 Sep 2026, IST, as chapters 3 and 4 tell them. Pass a date as the
+fourth argument to put the same clock times on another day: the screenshots
+want the story on the day they are taken, or the app files everyone under
+"Earlier" with a date instead of "Today" and a time. Modes:
   empty    - no handshakes (end of 2.2, "No handshakes yet")
   first    - Savithri alone, met 09:14 (3.1)
   before11 - the busy morning up to 10:58; Savithri already renamed
@@ -23,6 +26,7 @@ import os, re, shutil, sqlite3, sys
 from datetime import datetime, timedelta, timezone
 
 IST = timezone(timedelta(hours=5, minutes=30))
+DAY = (2026, 9, 19)   # the story's date; override with the fourth argument
 US = "\x1f"   # Phones.encode: LABEL US custom-label US number
 
 # (time, first, last, number, email, org, title, note)
@@ -71,7 +75,8 @@ MORNING = [p for p in PEOPLE if p[0] < "11:00"]
 
 def ms(hhmm):
     h, m = map(int, hhmm.split(":"))
-    return int(datetime(2026, 9, 19, h, m, tzinfo=IST).timestamp() * 1000)
+    y, mo, d = DAY
+    return int(datetime(y, mo, d, h, m, tzinfo=IST).timestamp() * 1000)
 
 
 def rows(mode):
@@ -95,7 +100,10 @@ def rows(mode):
     return out
 
 
-def main(src, dst, mode):
+def main(src, dst, mode, day=None):
+    if day is not None:
+        global DAY
+        DAY = tuple(int(x) for x in day.split("-"))
     shutil.rmtree(dst, ignore_errors=True)
     shutil.copytree(src, dst)
     p = os.path.join(dst, "handoff.db")
@@ -128,4 +136,4 @@ def main(src, dst, mode):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    main(*sys.argv[1:5])
