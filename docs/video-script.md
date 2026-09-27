@@ -177,3 +177,36 @@ Notes:
 * The typing in scene 5 is worth speeding up on screen, with the voice at normal speed over it.
 * Scene 9 is the same phone changing its own card. Do not name the people, or it reads as if somebody swapped bodies.
 * Scene 13 needs somewhere to send people. Put the blog post link and the repository link on screen while it is read, because the voice does not spell out a URL.
+
+---
+
+## YouTube title and description
+
+### Title
+
+Handoff: shake hands, share contacts
+
+### Description
+
+You meet someone worth keeping. Then out come the business cards, or the badge
+QR code the organiser printed too small, or "how do you spell that on LinkedIn?"
+
+Handoff is a band you wear on your wrist. When two people wearing one shake
+hands, their contact details cross between them and land in each other's phones.
+The data travels through the handshake itself, through the two of you. No cards,
+no app to open, no code to scan.
+
+This video pairs two bands to two phones, fills in a contact card on each, shakes
+hands, and shows both cards land. Then it opens a band up: a printed case on a
+watch strap, a Raspberry Pi Pico 2 W in a socket, the band's own board with the
+amplifier and the motor, the cell, and the insulated metal plate that rests
+against the skin.
+
+Source, board files and parts list
+https://github.com/rahuljeyaraj/Handoff
+
+The PCBs for this project were sponsored by PCBWay: https://www.pcbway.com/
+
+Built for the element14 Community design challenge: Make A Connection
+
+#electronics #diy #raspberrypipico #pcb #wearables #maker
