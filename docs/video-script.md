@@ -56,9 +56,11 @@ Name. Number. Email. Where they work, and what they do there.
 
 The card goes onto their own band and stays there. The band flashes green twice and buzzes once to say it has it.
 
-## Scene 6: waiting
+## Scene 6: a last look
 
-Back on the home page. The band is connected. The battery is good. And nobody has been met yet.
+Back on the home page. Open the band, and then your card. This is exactly what the band is holding.
+
+Back out. The green card icon says the card saved and the battery status is good.
 
 Bands on. The back of the band rests against the skin of the wrist.
 
@@ -70,17 +72,19 @@ Now watch.
 
 They shake hands.
 
-Both bands go green. That is it. Done.
+Both bands go green.
 
-The cards crossed through two bodies. No Bluetooth between the bands. No wifi. No network. The two people, touching, are the wire.
+Each card crossed two bodies, reached the other band, and went on to the phone.
 
 ## Scene 8: what lands on the phone
 
 And there they are.
 
-Who they are, where they work, and the minute they met.
+Who they are, where they work, and when you met.
 
-Add a note, while you still remember why they mattered. Then save it straight into the phone's contacts, where every other number you own already lives.
+Edit the name, and add a note so you remember them later.
+
+And if you want, save them straight into the phone's contacts.
 
 ## Scene 9: your card can change
 
@@ -96,29 +100,35 @@ No cards. No typing. No hunting for a QR code.
 
 ## Scene 11: the band, up close
 
-So what is in one of these?
+Now let us see the bands up close.
 
-A printed case on a watch strap. A switch on one end. One button on the other. No screen, and nothing to read.
+A printed case on a watch strap. A switch and RGB LED on one side. One button on the other.
 
 Turn it over.
 
-That label is the code the phone asked for. And this, under the tape, is a small copper plate. It sits against the skin of your wrist, and it is the whole trick.
+The QR code. And the insulated metal plate. It sits against the skin of your wrist.
 
 Open it up.
 
-The cell lives in the lid. Under it, a Raspberry Pi Pico 2 W, in a socket, so it lifts straight out.
+In the lid, you have the ground plate.
 
-And under that, the band's own board. An amplifier, a light, a little motor, and the two plates. That is the entire machine.
+Under it, a Raspberry Pi Pico 2 W, in a socket, so it lifts straight out.
 
-Two of them, because one band on its own is useless. A handshake needs a pair.
+And under that, the band's own board. An amplifier, a small vibrating motor, and the connector that charges the cell.
+
+The cell sits under the P C B, and the wire from the metal plate runs up to it.
+
+That is the entire machine.
 
 ## Scene 12: the boards
 
 Those boards were made by PCBWay, who sponsored this project.
 
-I sent the files on a Saturday. Their engineers came back with two questions before anything was cut, instead of guessing, and both were closed by Monday. The boards were at my door eleven days after I ordered them.
+I sent the files on a Saturday. Their engineers came back with two questions before a single board was made, instead of guessing, and both were closed by Monday. The boards were shipped the very next day.
 
-That is a good part of the reason this was finished in time. Thank you, PCBWay.
+And the boards took a beating from me. Every one of these joints was soldered and desoldered again and again, with a vacuum pump and solder wick over the same pads. Not one pad lifted.
+
+Their twenty four hour lead time and their fast shipping are why this project finished in time. Thank you, PCBWay.
 
 ## Scene 13: end note
 
@@ -150,15 +160,15 @@ You shake hands. And the handshake keeps itself.
 
 Where the lines in scene 11 land in `opening.mp4`:
 
-* "So what is in one of these?" at 0:00, the closed band on the strap
+* "Now let us see the bands up close." at 0:00, the closed band on the strap
 * "Turn it over." at 0:04, as it comes off the table
-* "That label is the code the phone asked for" at 0:12
-* "And this, under the tape" at 0:14, the gold tape over the plate
+* "The QR code." at 0:12
+* "And the insulated metal plate" at 0:14, the gold tape over the plate
 * "Open it up." at 0:18
-* "The cell lives in the lid" at 0:22
+* "In the lid, you have the ground plate." at 0:22
 * "so it lifts straight out" at 0:34, as the Pico comes out
 * "And under that, the band's own board" at 0:50
-* "Two of them" at 1:06, both bands open side by side
+* "That is the entire machine." at 1:06, both bands open side by side
 
 Notes:
 
