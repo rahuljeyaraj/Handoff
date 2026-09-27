@@ -295,7 +295,7 @@ Appendix A has the parts, appendix B every step to build it.
 * Grey is Bluetooth. It works, so it is left alone.
 * Red had to be designed from nothing. Two boxes to come back to:
   * **Box 7** throws away what every card has in common, and **box 18** puts it back. Why?
-  * **Box 9** read a name that was not its own. Whose, and why does that settle who speaks?
+  * **Box 9** read a nonce that was not its own. Whose, and why does that settle who speaks?
 
 Everything in red comes from three facts:
 
@@ -423,34 +423,44 @@ A card does not fit in one go, so it goes in frames. Figure 5.7 is one frame; se
 
 #### 5.8 Nothing says go
 
+Nothing tells the band a hand has closed. Three parts: why waiting cannot work,
+what the band does instead, and who speaks once the hands meet.
+
+##### 5.8.1 Waiting does not work
+
 ![Being heard is the touch](element14-blog/05-being-heard.png)
 *Figure 5.11. Being heard is the touch.*
 
-* The band has no button for this, no accelerometer, no touch sensor.
-* **Listening first fails.** Before the hands meet, the other band cannot be heard at all, so quiet means nothing.
-* If every band waits to hear someone, no band ever speaks.
-* **Being heard is the touch.** There is no channel until the hands meet. Hearing another band means they have (Figure 5.11).
-* **Any touch counts.** A hug, a pat on the back or hands brushing in a queue swaps cards too. That is fine: a card lands only in the app, never in the phone book, and one tap deletes it.
+* **No button, no accelerometer, no touch sensor.**
+* **Quiet means nothing.** There is no channel until the hands meet, so an empty room and a hand in a hand sound exactly the same (Figure 5.11).
+* **If every band waits to hear someone, no band ever speaks.**
+* **Being heard is the touch.** Hearing another band is itself the proof, because there was no path until the hands met.
 
-So every band talks to nobody, all day, and waits to be overheard (Figure 5.12).
+##### 5.8.2 So every band keeps beaconing
 
 ![The rendezvous](element14-blog/28-beacon.png)
 *Figure 5.12. One band's cycle, drawn to scale in time, and what happens when a hand closes on another wrist.*
 
-* **The beacon is a frame, not a shout.** 28 ms, carrying a 16-bit name drawn at random, under a checksum.
-* **"Is that a peer?"** The checksum passed. That is one wrong answer in 65,536, by construction, not a threshold somebody chose.
-* **"Is that me?"** The name is mine. A band hears its own beacon come back through its own amplifier, and the name is what tells it so.
-* **"Who sends?"** Whoever read the other one. A band is deaf while it beacons and for 5 ms after, so a band that managed to read a beacon had not started its own, and it stops beaconing, so the other end has nothing to read. **At most one band can ever read the other.** There is nothing left to elect.
-* **The cycle length is not a preference either.** Two beacons can only collide if they overlap, and the expected time to rendezvous falls out as a curve with one lowest point: a cycle four beacons long. The listen is then what is left over, and it is drawn fresh every cycle so that two bands which collided once do not collide for ever.
-* **Two bands that drew the same name** both read the other as their own echo, both stand down, and both draw a new name. That is one contact in 65,536, and it costs one cycle.
-* **A band alone on a bench: 774 beacons, 0 sends, 0 self-triggers.** The version this replaced elected itself sender on 60 shouts out of 60.
+* **Every band runs the same loop, all day:** beacon, then listen, then beacon again (Figure 5.12).
+* **The beacon is a short frame** carrying a nonce, a number drawn at random and used once, under a checksum.
+* **It never beacons over someone else.** The listening clock only runs while the channel is quiet, so a band that can hear anything at all remains silent.
+* **Is that a peer?** The checksum passed, and noise almost never passes a checksum.
+* **Is that me?** A band shuts its ears while it beacons, but an echo of its own beacon can still reach it a moment later. The nonce is what tells the two apart.
+* **The listening period is drawn fresh every cycle.** On a fixed rhythm, two bands whose beacons clash would clash for ever.
+* **How long it listens on average was worked out, not chosen:** listen too little and the beacons clash more often, listen too long and the hands part before the two bands have met. It works out at about three beacons' worth.
+* **Two bands that drew the same nonce** both read it as their own, both stand down, and both draw again. It costs one cycle.
+
+##### 5.8.3 The one that heard, sends
 
 ![The hearer sends](element14-blog/06-hearer-sends.png)
-*Figure 5.13. The hearer sends. 09:14 at the front desk.*
+*Figure 5.13. Figure 5.12 zoomed out: the one that heard sends first, then one frame each, in turn.*
 
-* **The reader sends** (Figure 5.13, and box 9 of Figure 5.2). Only the band that read a beacon knows a handshake has started, so it is the one that acts.
-* **The beaconer receives.** As far as it knows it spoke into an empty room, and it is listening when the card arrives.
-* **One pad, one direction.** The band taking its turn waits out the other end's recovery, so the far end is certainly listening before it starts.
+* **A band is deaf while it beacons, and for a moment after.** So a band that managed to read a beacon had not started one of its own (Figure 5.13).
+* **At most one band can ever read the other.** There is nothing to elect, and no tie to break.
+* **The reader goes first** (box 9 of Figure 5.2). It is the only one that knows a handshake has started.
+* **The beaconer receives.** As far as it knows it spoke into an empty room, and its ears are already open when the frame arrives.
+* **One frame each, then swap.** Not a whole card each. They alternate frame by frame, so a touch that ends early still leaves both ends with a name and a number.
+* **One pad, one direction at a time.** Each band waits out the other end's recovery before it starts, so the far end is certainly listening.
 
 ### 6 Why the first radio was thrown away
 
@@ -847,12 +857,12 @@ This one was caught by working through the circuit, before the amplifier was bui
 * Three redesigns of the floor were written. Each was a real improvement. None of them worked, because a floor is what a featureless tone forces on you: the fault was one layer down from where the fixing was happening.
 * Deleting the file was cheaper than the fourth attempt. `carrier.c` has no successor: the three noise pitches in 5.5 are not a better floor, they are a measurement taken at the same instant as the signal.
 
-#### C.4 The rendezvous, before it had a name in it
+#### C.4 The rendezvous, before it had a nonce in it
 
 * A band announced itself with a flat 10 ms tone, then recovered, then listened for a random time, then went round again.
 * *Is that a peer?* It outlasted 9 ms. *Is that me?* My ears were shut, probably. *Who sends?* Whoever heard first.
 * Four bugs came out of that in one afternoon: a band hearing its own shout; any carrier at all read as a peer; a preamble sent into a peer that was still deaf; and a receive turn walking away mid-frame as the floor climbed underneath it.
-* **The idea underneath it was right and is unchanged.** Being heard is the touch; the hearer sends; the shouter receives. Figures 5.11 to 5.13 are still that argument. What changed is that the shout became a frame with a name in it, so all three questions became arithmetic instead of timing.
+* **The idea underneath it was right and is unchanged.** Being heard is the touch; the hearer sends; the shouter receives. Figures 5.11 to 5.13 are still that argument. What changed is that the shout became a frame with a nonce in it, so all three questions became arithmetic instead of timing.
 
 #### C.5 The one that was never built
 
