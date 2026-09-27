@@ -307,29 +307,31 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 * **His plate puts the tone onto his skin.** Without touching it: the plate is coated, so it is half a capacitor, and the tone crosses the last gap as an electric field.
 * **The wire is his arm, the handshake, her arm.** A person is a poor wire, so only a whisper of the tone comes out the other end.
 * **Her plate picks it up off her skin.** What arrives is tiny, so two amplifiers of ×11 make it big enough to read.
-* **Her band hears it.** Every 50 µs it scores both pitches and asks only which was louder. Three more bins, at 140, 160 and 220 kHz, carry nothing and measure the room in the same window.
+* **Her band hears it.** Every 50 µs it scores both pitches and asks only which was louder. Three more bins, at 140, 160 and 220 kHz, carry nothing and measure the room alongside them.
 * **The room closes the loop.** Nobody holds a return wire, so each band's outer electrode couples to the floor and the walls.
 
 #### 5.5 Two tones, and three that nobody sends
 
 The first version of this radio switched one tone on and off. Every question the receiver could ask then began *"is this louder than usual?"* — and *usual* is a number you have to remember. Chapter 6 is what that cost.
 
-The rebuild is one sentence: **stop measuring against a remembered number, and measure against another measurement taken in the same instant.**
+The rebuild is one sentence: **stop measuring against a remembered number, and measure against another measurement — one the band's own transmitter cannot reach.**
 
 ![Five bins](element14-blog/26-five-bins.png)
 
-*What the band weighs, every 50 µs, with nothing remembered between them. One tone is on the plate at a time, and here it is A.*
+*What the band weighs: the two tones every 50 µs, the three room pitches every fourth. One tone is on the plate at a time, and here it is A.*
 
 * **Two tones, not one.** 180 kHz and 200 kHz. Every 50 µs the band scores both and asks which is louder — that answer is one step of the message. A dry hand or a loose grip makes both quieter together, so the comparison still comes out right.
-* **Three pitches nobody ever sends.** 140, 160 and 220 kHz, scored in the same 50 µs, through the same amplifier and the same body. They are not a message. They are a live reading of how noisy the room is at that instant.
-* **The middle one, not the average.** One stray signal landing on one of the three cannot move the middle of three. Standard radar practice, not an invention.
-* ***Is anybody there?* becomes one comparison.** Is the tone louder than that middle reading, by a set margin? Nothing is remembered from one moment to the next, so there is no level left to drift.
+* **Three pitches nobody ever sends.** 140, 160 and 220 kHz, scored through the same amplifier and the same body as the tones. They are not a message. They are a live reading of how noisy the room is.
+* **The middle of the three, not their average.** One stray signal landing on one of them cannot move the middle of three. Standard radar practice, not an invention.
+* ***Is anybody there?* becomes one comparison.** Is the tone louder than that middle reading, by a set margin? The reading is an average, kept fresh over the length of one preamble, and averaging is safe here because nothing the band sends can land on those three pitches. The first radio averaged the tone's own pitch instead, and a long tone pulled the average up to meet it until the receiver went deaf. Chapter 6.
 * **The margin is computed, not tuned.** It comes from a sentence — *I will accept one moment a minute where the band thinks someone is there and nobody is* — and the arithmetic follows. Nobody turned a knob until the bench looked happy.
 * **Two tones are never off.** With one tone, half the message is silence and carries nothing. With two, every step is a tone at the same peak voltage, so each bit arrives with about twice the energy — and nothing in the amplifier changed.
 
 #### 5.6 From tones to bits
 
-Three steps: weigh the pitches, read each bit, find where the card starts.
+Three steps: weigh the pitches, read each bit, find where a frame starts.
+
+##### 5.6.1 Weighing the pitches
 
 ![What the Goertzel filter replaces](element14-blog/10-goertzel.png)
 
@@ -340,11 +342,11 @@ There are two usual ways to hear a tone.
 * **The full receiver** shifts it down with an oscillator and a mixer, then filters and amplifies it again.
 * **It needs two mixers**, I and Q. The two bands run on separate clocks, so a tone arrives at any phase, and one mixer's output fades with the phase.
 * **The simple receiver** is a diode and a capacitor, an envelope detector. Or a tone-decoder chip such as the LM567.
-* **The band does all of it in software.** The converter samples the tones themselves, 500,000 times a second. A **Goertzel filter** turns every 25 samples into one number: how much of that pitch is there, at any phase. The band runs five of them.
+* **The band does all of it in software.** The converter samples the tones themselves, 500,000 times a second. A **Goertzel filter** turns every 25 samples into one number: how much of that pitch is there, at any phase. The band runs five of them: the two tones every window, and the three room pitches every fourth window.
 
 **Better than the full receiver:**
 
-* **Four parts gone**, about half the analogue circuit.
+* **Five parts gone:** the oscillator, two mixers, the filter and the second amplifier.
 * **No mixer offset** drifting under the reading.
 * **Five channels for the price of the parts of none.** Adding the three noise pitches added no hardware at all.
 
@@ -361,21 +363,28 @@ There are two usual ways to hear a tone.
 * **Any length.** A standard FFT wants 16 or 32 samples. At 32, these tones would fall between two answers and smear across both. 25 samples hold exactly nine and ten cycles of them, so each sits dead on one.
 * **Cheap.** All five, plus the decision, cost about a fifth of one core — measured in the real firmware, with Bluetooth running on the other core.
 
+##### 5.6.2 Reading each bit
+
 ![Which tone is louder](element14-blog/27-which-tone.png)
 
-*The same four bits, through a firm grip and a light one. The two tones look alike on purpose: they are neighbours, a tenth apart in pitch.*
+*The same four bits, through a firm grip and a light one. The key is the square wave the pin sends; the rows under it are what survives two bodies and the band's filters. The gap between the two pitches is drawn far wider than it is: they are really 180 and 200 kHz, a tenth apart.*
 
-* **Each bit is two chips.** Tone B then tone A is a 1, the other way about is a 0. This is Manchester coding.
+* **Each bit is two chips.** 180 kHz then 200 kHz is a 0; 200 kHz then 180 kHz is a 1. This is Manchester coding.
 * **How much arrives changes** with grip and posture. It does not matter: the receiver never asks how loud, only which of the two was louder.
 * **Every bit changes in the middle**, so the receiver never loses count.
 * **The imbalance cancels.** Every bit carries one chip of each tone, so if one tone always arrives a tenth stronger, both halves of every bit carry that tenth. The band measures the imbalance anyway, on every frame, and reports it — but nothing corrects for it, because nothing needs to.
 * **The cost is half the speed:** 2,000 bits a second.
+
+##### 5.6.3 Finding where a frame starts
+
+A card does not fit in one go, so it goes in frames. The figure below is one frame; 5.7 is how the card is cut up.
 
 ![One frame](element14-blog/12-frame.png)
 
 *One frame, 156 ms. Each part keeps its colour in all three rows.*
 
 * **The start is a landmark, not a count.** Some of the preamble is lost while the receiver wakes up, so it never counts chips. It looks for the one 00, then checks the seven chips after it.
+* **Why the marker reads differently in the two rows.** 11110000 is the marker's eight *bits*. On the plate every bit is two chips, so those eight go out as sixteen — and the one place the alternation breaks is where the four 1s turn into the four 0s. That break is the 00, and the seven chips after it are what the receiver checks.
 * **How strict that check is, is also computed.** From another sentence — *one false start per 24 hours of listening* — the receiver works out how clean the run in front of it has to be: 28 transitions out of 30.
 * **No length field.** A length can itself arrive damaged. Every frame is the same size, and the header says how many frames make the card.
 

@@ -2,7 +2,8 @@
 # What the Goertzel filter replaces. Top row: the full receiver, which shifts
 # the tone down with an oscillator and mixers, then filters and amplifies it
 # again (design §4.3). Middle row: the simple receiver, a diode envelope
-# detector (or an LM567). Bottom row: the band's, where the converter samples the
+# detector; the LM567 is not drawn, because its output is a pin rather than
+# something a converter samples. Bottom row: the band's, where the converter samples the
 # tone itself and a Goertzel filter in software measures it. The parts the band
 # does not have are dashed. Colours follow figure 09: purple feeds the Pico,
 # teal is the Pico (the converter and the software in it).
@@ -20,20 +21,20 @@ ROWS = [
     ("The full receiver",
      [AMPS + (False,),
       ("Oscillator, mixers", "Shift the tone down. Two, as the clocks are not in step.", GONE, True),
-      ("Filter", "Keeps only the shifted tone.", GONE, True),
-      ("Amplifier", "Boosts it again.", GONE, True),
-      ("Converter", "Samples the slow, shifted result.", PICO_C, False)]),
+      ("Filter, amplifier", "Keeps only the shifted tone, then boosts it again.", GONE, True),
+      ("Converter", "Samples the slow, shifted result.", PICO_C, False),
+      None]),
     ("The simple receiver",
      [AMPS + (False,),
-      ("Diode, capacitor", "How loud, every pitch at once. Or an LM567: yes or no.", GONE, True),
+      ("Diode, capacitor", "How loud, and every pitch at once.", GONE, True),
       None,
       ("Converter", "Samples the loudness.", PICO_C, False),
       None]),
-    ("The band's receiver: five pitches, five numbers",
+    ("The band's receiver: the pitches, in software",
      [AMPS + (False,),
       None, None,
       ("Converter", "Fast enough to sample the tone itself.", PICO_C, False),
-      ("Five Goertzel filters", "In software. Every 50 µs: how much of each of five pitches?", PICO_C, False)]),
+      ("Five Goertzel filters", "In software. The two tones every 50 µs, the room's three every fourth.", PICO_C, False)]),
 ]
 
 W, M, SG, BG = 1600, 36, 34, 50

@@ -15,15 +15,15 @@ from figlib import Fig, need, solve, tw, INK, BLUE, GREEN, RED, GREY
 PURPLE = ("#f1ebf8", "#6a3d9a", "#6a3d9a")
 AMBER = ("#fdf3e1", "#a86b00", "#a86b00")
 
-HEADS = ["The five parts, in the order they are sent",
-         "Where the card starts: the only 00 in the run",
+HEADS = ["The five parts of a frame, in the order they are sent",
+         "Where the frame starts: those same bits, as chips",
          "What the receiver does"]
 
 PARTS = [("Preamble", "32 chips: the two tones, turn and turn about", BLUE, 1.0),
-         ("Marker", "11110000", PURPLE, 0.9),
+         ("Marker", "Eight bits: 11110000", PURPLE, 0.9),
          ("Header", "Which frame, of how many, whose card", GREEN, 1.15),
-         ("Card", "32 bytes, always. A short part is padded.", AMBER, 1.5),
-         ("Checksum", "Covers the header and the card", RED, 1.15)]
+         ("A piece of the card", "32 bytes, always. A short piece is padded.", AMBER, 1.5),
+         ("Checksum", "Covers the header and the piece", RED, 1.15)]
 
 # row 2: the chips, as (digit, style, kind). kind: "" plain, "gap" for the
 # dots, "key" for the 00, "chk" for the seven checked, "hdr" for the header.
