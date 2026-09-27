@@ -319,7 +319,7 @@ The wire is somebody, so it must be safe. And it is a terrible wire, so little g
 
 #### 5.5 Two tones, and three that nobody sends
 
-The first version of this radio switched one tone on and off. Every question the receiver could ask then began *"is this louder than usual?"*, and *usual* is a number you have to remember. Chapter 6 is what that cost.
+The first version of this radio switched one tone on and off. Every question the receiver could ask then began *"is this louder than usual?"*, and *usual* is a number you have to remember. Appendix C is what that cost.
 
 The rebuild is one sentence: **stop measuring against a remembered number, and measure against another measurement, one the band's own transmitter cannot reach.** (Figure 5.4)
 
@@ -329,7 +329,7 @@ The rebuild is one sentence: **stop measuring against a remembered number, and m
 * **Two tones, not one.** 180 kHz and 200 kHz. Every 50 µs the band scores both and asks which is louder. That answer is one step of the message. A dry hand or a loose grip makes both quieter together, so the comparison still comes out right.
 * **Three pitches nobody ever sends.** 140, 160 and 220 kHz, scored through the same amplifier and the same body as the tones. They are not a message. They are a live reading of how noisy the room is.
 * **The middle of the three, not their average.** One stray signal landing on one of them cannot move the middle of three. Standard radar practice, not an invention.
-* ***Is anybody there?* becomes one comparison.** Is the tone louder than that middle reading, by a set margin? The reading is an average, kept fresh over the length of one preamble, and averaging is safe here because nothing the band sends can land on those three pitches. The first radio averaged the tone's own pitch instead, and a long tone pulled the average up to meet it until the receiver went deaf. Chapter 6.
+* ***Is anybody there?* becomes one comparison.** Is the tone louder than that middle reading, by a set margin? The reading is an average, kept fresh over the length of one preamble, and averaging is safe here because nothing the band sends can land on those three pitches. The first radio averaged the tone's own pitch instead, and a long tone pulled the average up to meet it until the receiver went deaf. Appendix C.
 * **The margin is computed, not tuned.** It comes from a sentence, *I will accept one moment a minute where the band thinks someone is there and nobody is*, and the arithmetic follows. Nobody turned a knob until the bench looked happy.
 * **Two tones are never off.** With one tone, half the message is silence and carries nothing. With two, every step is a tone at the same peak voltage, so each bit arrives with about twice the energy, and nothing in the amplifier changed.
 
@@ -462,62 +462,7 @@ what the band does instead, and who speaks once the hands meet.
 * **One frame each, then swap.** Not a whole card each. They alternate frame by frame, so a touch that ends early still leaves both ends with a name and a number.
 * **One pad, one direction at a time.** Each band waits out the other end's recovery before it starts, so the far end is certainly listening.
 
-### 6 Why the first radio was thrown away
-
-The bands worked before any of chapter 5 was written. Then they started going deaf, and three rounds of fixes all landed one layer above the fault. In the end the radio was rebuilt from the physical layer up, in eight steps, each one a bench measurement that had to pass before the next was written. This is why.
-
-#### 6.1 One tone carries no information but its own loudness
-
-* The first radio switched a single 200 kHz tone on and off.
-* A flat tone says nothing except *something is here*. So the only question the receiver can ask is **"is there more energy than usual?"**
-* To ask that, it has to know what *usual* is. So it kept a running average of the quiet, a floor, and called the channel busy at three times the floor, or the floor plus 24, whichever was larger.
-
-![The floor, and what replaced it](element14-blog/29-the-floor.png)
-*Figure 6.1. Left: the last measurement before the rebuild. Right: two real captures from the new receiver.*
-
-* **The floor only ever climbed.** A detector that has gone deaf hears a frame as quiet and averages it in, which raises the floor, which makes it deafer.
-* Measured, on one of the two boards: the tone arriving at 133-150, the floor at 61-83, the gate therefore at 228. Deaf, and with no way back (Figure 6.1).
-* Three separate fixes were written for it. All three helped. None of them fixed it, because the fault was not in the averaging. It was in asking a question that needs a remembered number at all.
-* **And 24 is an amplitude.** Twenty-four counts of a converter, on a link whose amplitude changes with grip, posture, and which of the two boards you picked up. It cannot be right twice.
-
-#### 6.2 A trigger with no content
-
-* The same flatness ran through the rendezvous. A band announced itself with a 10 ms tone, and everything about that tone had to be judged by timing.
-* *Was that a peer, or a burst of noise off the room?* It lasted longer than 9 ms.
-* *Was that my own tone coming back?* My ears were shut when I sent it. Probably.
-* *Who speaks first?* Whoever heard the other one first: a race with no tiebreak.
-* One afternoon produced four bugs out of that scheme, and the worst is the one that says it all: **a band alone on a bench elected itself sender on 60 shouts out of 60**, because its own tone decaying in its own amplifier is indistinguishable from someone else's arriving.
-
-#### 6.3 The rule that replaced them
-
-Every number in the link now has to be one of four things, or it does not go in.
-
-| Kind | Example |
-|---|---|
-| **Physical** | the converter runs at 500 ksps |
-| **Structural** | a byte is 8 bits; the preamble is 32 chips |
-| **Derived** | the chip rate, computed from the two above |
-| **A stated requirement** | one false alarm a minute; one false start a day |
-
-Not allowed: anything whose value came from watching a bench and turning a knob. Nearly twenty of the old radio's numbers failed that test and went.
-
-#### 6.4 What it bought, and what it cost
-
-Two bands, worn on a wrist, floating on their own cells, one person, the same test both times:
-
-| | The first radio | The rebuild |
-|---|---|---|
-| Good frames | 447 | **1015** |
-| Frames that failed | 29.6 % | **16.3 %** |
-| Longest run of missing frames | **3** | 18 |
-
-* **The frame error rate halved.** That was the number that mattered: a frame count can be beaten by running longer, an error rate cannot.
-* **And it got cheaper as it got better.** On the bench, with Bluetooth running on the other core, the two bands complete the same number of handshakes in the same time for **21 % of the listening core against 35 %**, because three subsystems went away rather than being fixed: the floor, the slicer that turned loudness into ones and zeros, and the election that decided who spoke.
-* **One number went the wrong way**, and it is in the table because it did: the longest run of consecutive missing frames went from 3 to 18, about three seconds of nothing. The rebuild is better on average and lumpier.
-
-The first radio, in full, is in appendix C. It is kept because its mistakes are the ones anybody building this would make.
-
-### 7 What comes next
+### 6 What comes next
 
 The pair works. This is what I want the next pair to do.
 
@@ -527,7 +472,7 @@ The pair works. This is what I want the next pair to do.
 * **An iPhone app.** The band speaks ordinary Bluetooth, so nothing on the band is in the way. Somebody has to write it.
 * **A nudge, two days later.** The app knows when you met. The message you meant to send is the part that turns a handshake into a contact.
 
-### 8 The end
+### 7 The end
 
 The taxi pulled onto the flyover, and Rohit let his head fall back against the seat. He had made it. Just.
 
@@ -764,7 +709,7 @@ At boot the LED flashes white and the motor taps once. Then the band tells you i
 * Or write the four digits on the band with a marker. The app takes them typed.
 * **Two bands, two codes.** Label both before they get mixed up.
 
-Nothing in the build sets a frequency, a threshold or a role. The tones, the clock, the noise gate and the hunt are all either fixed by the hardware or computed from the requirements in 6.3 when the firmware is built.
+Nothing in the build sets a frequency, a threshold or a role. The tones, the clock, the noise gate and the hunt are all either fixed by the hardware or computed from the requirements when the firmware is built.
 
 #### B.8 Install the app
 
@@ -817,8 +762,6 @@ Then, for real:
 
 The bands in chapter 5 are the second design. The first one worked, exchanged real cards through real people, and was then deleted. It is written down here because its mistakes are ones anybody building this would make, and because the reasoning that replaced it only makes sense against what it replaced.
 
-Chapter 6 is the short version: why it went. This is what it was.
-
 #### C.1 One tone, switched on and off
 
 * A single 200 kHz square wave on the pad. Gated on for a mark, off for a space. On-off keying.
@@ -829,7 +772,7 @@ Chapter 6 is the short version: why it went. This is what it was.
 *Figure C.1. The same four bits, through a firm grip and a light one, under the first radio.*
 
 * **Comparing the two halves was already right.** A fixed threshold reads the firm grip and misses the light one; the louder half is the same answer for any grip (Figure C.1). That idea carried straight over; only what is in the two halves changed.
-* **What did not carry over is everything else.** Presence, rendezvous, and the preamble hunt all had to judge a single stream of loudness against a remembered level, because with one tone there is nothing else to compare it to (6.1).
+* **What did not carry over is everything else.** Presence, rendezvous, and the preamble hunt all had to judge a single stream of loudness against a remembered level, because with one tone there is nothing else to compare it to (C.3).
 
 #### C.2 Off is not low
 
@@ -853,7 +796,7 @@ This one was caught by working through the circuit, before the amplifier was bui
 #### C.3 The floor, and the three fixes that did not fix it
 
 * Presence was *level against a tracked floor*: busy at three times the floor, or the floor plus 24 counts, whichever was larger.
-* The floor climbed until it was more than half the signal it was supposed to be measuring, and then the detector was deaf (6.1).
+* The floor climbed until it was more than half the signal it was supposed to be measuring, and then the detector was deaf.
 * Three redesigns of the floor were written. Each was a real improvement. None of them worked, because a floor is what a featureless tone forces on you: the fault was one layer down from where the fixing was happening.
 * Deleting the file was cheaper than the fourth attempt. `carrier.c` has no successor: the three noise pitches in 5.5 are not a better floor, they are a measurement taken at the same instant as the signal.
 
